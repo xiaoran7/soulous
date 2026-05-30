@@ -25,7 +25,8 @@ export type AmbientKind = 'rain' | 'waves' | 'whitenoise' | 'wind' | 'forest' | 
  * @property tags        情绪/地点标签，用于将来筛选
  * @property gradient    CSS 背景（渐变兜底），无图片时直接使用
  * @property accent      场景主色（用于按钮/滑块高亮，营造场景一致性）
- * @property image       可选：真实场景大图路径（/studyroom/xxx.jpg）
+ * @property image       可选：真实场景大图路径（/studyroom/xxx.jpg）；GIF 动图也走这里
+ * @property video        可选：动态背景视频（mp4/webm，自定义上传的动图素材），优先级高于 image
  * @property ambient     内置合成环境音类型
  * @property ambientFile 可选：真实环境音循环文件路径（优先级高于合成）
  */
@@ -37,6 +38,7 @@ export interface StudyScene {
   gradient: string;
   accent: string;
   image?: string;
+  video?: string;
   ambient: AmbientKind;
   ambientFile?: string;
 }
@@ -142,6 +144,20 @@ export const SCENES: StudyScene[] = [
     ambientFile: '/studyroom/audio/rain.mp3',
   },
 ];
+
+/** 【可选环境音类型】用于自定义场景时挑选合成环境音 */
+export const AMBIENT_KINDS: { kind: AmbientKind; label: string }[] = [
+  { kind: 'rain', label: '雨声' },
+  { kind: 'waves', label: '海浪' },
+  { kind: 'wind', label: '风声' },
+  { kind: 'forest', label: '林间' },
+  { kind: 'whitenoise', label: '白噪音' },
+  { kind: 'silent', label: '安静' },
+];
+
+/** 【自定义场景默认渐变兜底】图片加载前/失败时的暗色底 */
+export const CUSTOM_SCENE_GRADIENT =
+  'radial-gradient(110% 100% at 50% 10%, #4a4a52 0%, #2c2c33 45%, #16161a 80%, #0a0a0c 100%)';
 
 /** 【默认场景 ID】首次进入自习室时选中 */
 export const DEFAULT_SCENE_ID = 'morning-window';

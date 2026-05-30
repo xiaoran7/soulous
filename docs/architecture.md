@@ -15,7 +15,7 @@ nginx（端口 80/443）
   └── /*, /assets/**       → React SPA (dist/)
 ```
 
-- **frontend**：React 19 + Vite + TypeScript，SPA，页面路由：工作台 / 任务 / 课表 / 复盘 / 专注 / AI 拆解 / 宠物 / 统计 / 管理后台。
+- **frontend**：React 19 + Vite + TypeScript，SPA，页面路由：工作台 / 任务 / 课表 / 复盘 / 自习室 / AI 拆解 / 宠物 / 统计 / 管理后台。
 - **backend**：Spring Boot 3 + Java 21 + JPA + Spring Security，提供业务 REST API；feature-package 拆分（`com.soulous.{admin,auth,focus,goal,task,pet,...}`）。
 - **DB**：默认 H2 文件库（`backend/data/soulous.mv.db`），可切 MySQL。**Flyway 管理迁移**（h2 / mysql 各一套，`db/migration/{vendor}/V*.sql`）。
 

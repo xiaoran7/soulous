@@ -2097,6 +2097,11 @@ textarea.code, .textarea.code { font-family: var(--mono); font-size: 12.5px; }
 }
 .scene-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-2); }
 .scene-card-active { outline-color: var(--ink); }
+.scene-card-video {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: cover; z-index: 0;
+}
+.scene-card-top, .scene-card-body { position: relative; z-index: 1; }
 .scene-card-top { display: flex; align-items: center; justify-content: space-between; }
 .scene-card-icon, .scene-card-ambient {
   display: inline-flex; align-items: center; justify-content: center;
@@ -2170,11 +2175,32 @@ textarea.code, .textarea.code { font-family: var(--mono); font-size: 12.5px; }
   animation: immersiveFade 0.6s ease;
 }
 @keyframes immersiveFade { from { opacity: 0; } to { opacity: 1; } }
+
+/* 动态背景（自定义动图/视频）：视频铺底，半透明渐变压暗，内容浮于其上 */
+.immersive-video-bg {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: cover; z-index: 0;
+}
+.immersive-video-dim {
+  position: absolute; inset: 0; z-index: 1;
+  background: linear-gradient(180deg, rgba(8,6,4,0.25) 0%, rgba(8,6,4,0.5) 100%);
+}
+.immersive-top, .immersive-center, .immersive-bottom { position: relative; z-index: 2; }
+
 .immersive-top {
   display: flex; align-items: center; gap: 8px;
   padding: 20px 24px;
   font-size: 13px; letter-spacing: 0.02em;
 }
+.immersive-fs-btn {
+  margin-left: auto;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 14px; border-radius: var(--r-pill);
+  border: 1px solid rgba(255,255,255,0.28); background: rgba(0,0,0,0.28);
+  color: #fff; font-size: 12px; font-weight: 500; cursor: pointer;
+  backdrop-filter: blur(6px); transition: background 0.15s ease;
+}
+.immersive-fs-btn:hover { background: rgba(0,0,0,0.5); }
 .immersive-scene-name { display: inline-flex; align-items: center; gap: 7px; font-weight: 600; text-shadow: 0 1px 6px rgba(0,0,0,0.5); }
 .immersive-status { opacity: 0.8; font-family: var(--mono); font-size: 11px; }
 
@@ -2239,27 +2265,83 @@ textarea.code, .textarea.code { font-family: var(--mono); font-size: 12.5px; }
 .im-btn-ghost { background: transparent; border-color: rgba(255,255,255,0.2); opacity: 0.8; }
 .immersive-error { text-align: center; color: #ffb3a8; font-size: 13px; margin: 0; }
 
-.immersive-pet {
-  position: absolute; left: 20px; bottom: 116px;
-  display: flex; align-items: center; gap: 10px;
-  padding: 8px 14px 8px 8px;
-  background: rgba(0,0,0,0.32); backdrop-filter: blur(8px);
-  border: 1px solid rgba(255,255,255,0.16); border-radius: var(--r-pill);
-  max-width: 280px;
-}
-.immersive-pet-avatar {
-  width: 34px; height: 34px; border-radius: 50%; overflow: hidden; flex-shrink: 0;
-  background: rgba(255,255,255,0.18); display: flex; align-items: center; justify-content: center;
-  font-family: var(--serif); font-size: 14px; color: #fff;
-}
-.immersive-pet-avatar img { width: 100%; height: 100%; object-fit: cover; }
-.immersive-pet-text { font-size: 13px; color: rgba(255,255,255,0.92); line-height: 1.4; }
-
 @media (max-width: 880px) {
   .studyroom-cols { grid-template-columns: 1fr; }
   .immersive-audio { grid-template-columns: 1fr; }
-  .immersive-pet { bottom: auto; top: 16px; right: 16px; left: auto; }
 }
+
+/* ===== 沉浸全屏：隐藏顶栏，侧边栏变抽屉 ===== */
+.app-shell.immersive { grid-template-columns: 1fr; }
+.app-shell.immersive .topbar { display: none; }
+.app-shell.immersive > main { padding: 0; }
+.app-shell.immersive > main > * { max-width: none; margin: 0; }
+.app-shell.immersive .sidebar {
+  position: fixed; top: 0; left: 0; bottom: 0; width: 232px; z-index: 60;
+  transform: translateX(-100%); transition: transform 0.28s ease;
+  box-shadow: var(--shadow-3); overflow-y: auto;
+}
+.app-shell.immersive.nav-open .sidebar { transform: none; }
+.app-shell.immersive .immersive-room { min-height: 100vh; border-radius: 0; }
+.app-shell.immersive .immersive-top { padding-left: 66px; }
+
+.nav-drawer-handle {
+  position: fixed; top: 14px; left: 14px; z-index: 70;
+  width: 40px; height: 40px; border-radius: 50%;
+  background: rgba(0,0,0,0.34); color: #fff; border: 1px solid rgba(255,255,255,0.22);
+  display: flex; align-items: center; justify-content: center;
+  backdrop-filter: blur(6px); cursor: pointer;
+}
+.nav-drawer-handle:hover { background: rgba(0,0,0,0.52); }
+.nav-drawer-backdrop { position: fixed; inset: 0; z-index: 55; background: rgba(0,0,0,0.4); }
+
+/* ===== 正计时时钟 ===== */
+.immersive-clock { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.immersive-clock.is-running .immersive-time { animation: clockBreath 4s ease-in-out infinite; }
+@keyframes clockBreath { 0%, 100% { opacity: 1; } 50% { opacity: 0.82; } }
+.immersive-time {
+  font-family: var(--serif); font-size: 84px; font-weight: 400; letter-spacing: -0.02em;
+  text-shadow: 0 2px 20px rgba(0,0,0,0.45); font-variant-numeric: tabular-nums; line-height: 1;
+}
+.immersive-sub { font-family: var(--mono); font-size: 11px; letter-spacing: 0.16em; opacity: 0.8; }
+
+/* ===== 自定义场景卡 / 添加 ===== */
+.scene-card-add {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+  background: var(--shell); border: 1px dashed var(--line); color: var(--ink-3); font-size: 13px;
+}
+.scene-card-add:hover { border-color: var(--ink-4); color: var(--ink); transform: translateY(-2px); }
+.scene-card-del {
+  position: absolute; bottom: 10px; right: 10px;
+  width: 24px; height: 24px; border-radius: 50%;
+  background: rgba(0,0,0,0.42); color: #fff; display: flex; align-items: center; justify-content: center;
+}
+.scene-card-del:hover { background: rgba(200,60,40,0.85); }
+.scene-card-form {
+  height: auto; min-height: 132px; background: var(--paper); border: 1px solid var(--line);
+  color: var(--ink); padding: 12px; cursor: default; gap: 8px; box-shadow: var(--shadow-1);
+}
+.scene-card-form:hover { transform: none; box-shadow: var(--shadow-1); }
+.scene-form-head { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--ink-3); }
+.scene-form-head button { color: var(--ink-3); display: flex; }
+.scene-form-input, .scene-form-file {
+  font-size: 12px; padding: 6px 9px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--bg-elev); color: var(--ink); width: 100%;
+}
+.scene-form-file { cursor: pointer; text-align: center; color: var(--ink-2); overflow: hidden; white-space: nowrap; }
+.scene-form-save {
+  padding: 8px; border-radius: 8px; border: none; background: var(--ink); color: var(--bg);
+  font-size: 12px; cursor: pointer; margin-top: auto;
+}
+.scene-form-save:disabled { opacity: 0.5; cursor: default; }
+
+/* ===== 曲目芯片：自定义删除 + 添加 ===== */
+.sr-track-chip-wrap { position: relative; display: inline-flex; align-items: center; gap: 2px; }
+.sr-track-del {
+  width: 16px; height: 16px; border-radius: 50%; border: none;
+  background: var(--line); color: var(--ink-3); display: flex; align-items: center; justify-content: center; cursor: pointer;
+}
+.sr-track-del:hover { background: var(--danger-bg); color: var(--danger); }
+.sr-track-add { display: inline-flex; align-items: center; gap: 4px; border-style: dashed !important; cursor: pointer; }
 
 .chart-legend {
   display: flex;

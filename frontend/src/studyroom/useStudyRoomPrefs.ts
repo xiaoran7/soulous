@@ -28,6 +28,8 @@ export interface StudyRoomPrefs {
   musicEnabled: boolean;
   /** 当前背景音乐曲目 ID */
   musicTrackId: string;
+  /** 当前背景音（环境音）来源 ID：'scene' 表示跟随场景，其余为自定义上传的环境音 ID */
+  ambientTrackId: string;
   /** 是否开启环境音 */
   ambientEnabled: boolean;
   /** 今日目标文案 */
@@ -51,6 +53,7 @@ function defaults(): StudyRoomPrefs {
     ambientVolume: 0.6,
     musicEnabled: true,
     musicTrackId: DEFAULT_MUSIC_ID,
+    ambientTrackId: 'scene',
     ambientEnabled: true,
     goal: '',
     goalDate: today(),
