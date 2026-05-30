@@ -1,0 +1,348 @@
+# 【中文：Spring Boot 应用配置】
+spring:
+  application:
+    # 【中文：应用名称，用于服务发现、日志标识等】
+    name: soulous-backend
+  jackson:
+    # 【中文：Jackson 序列化/反序列化可见性配置】
+    visibility:
+      # 【中文：允许通过字段直接访问（不强制 getter），适用于 private 字段映射】
+      field: any
+      # 【中文：禁用 getter 方法的自动发现，避免冗余序列化】
+      getter: none
+      # 【中文：禁用 is-getter 方法的自动发现】
+      is-getter: none
+  datasource:
+    # 【中文：数据源配置 —— 默认使用 H2 嵌入式数据库，文件模式存储在 ./data/soulous】
+    # 【中文：MODE=MySQL 兼容 MySQL 语法；DATABASE_TO_LOWER=TRUE 表名转小写；AUTO_SERVER=TRUE 允许多进程访问同一数据库文件】
+    url: jdbc:h2:file:./data/soulous;MODE=MySQL;DATABASE_TO_LOWER=TRUE;AUTO_SERVER=TRUE
+    # 【中文：H2 默认用户名 sa（超级管理员）】
+    username: sa
+    # 【中文：H2 默认无密码】
+    password:
+    # 【中文：H2 数据库驱动类】
+    driver-class-name: org.h2.Driver
+  h2:
+    console:
+      # 【中文：启用 H2 Web 控制台，开发调试用，生产环境应关闭】
+      enabled: true
+      # 【中文：H2 控制台访问路径】
+      path: /h2-console
+  jpa:
+    hibernate:
+      # 【中文：Hibernate DDL 自动策略。update = 自动更新表结构但不删除列/表；
+      #   生产环境应设为 validate（仅校验），由 Flyway 接管 schema 变更】
+      ddl-auto: ${SOULOUS_JPA_DDL_AUTO:update}
+      # 【中文：关闭 Open Session in View 模式，避免在视图层延迟加载导致 N+1 查询和事务泄漏】
+    open-in-view: false
+    properties:
+      hibernate:
+        # 【中文：格式化 SQL 输出，开发调试时便于阅读日志中的 SQL 语句】
+        format_sql: true
+  flyway:
+    # 【中文：Flyway 数据库迁移总开关，可通过环境变量关闭（如 CI 环境）】
+    enabled: ${SOULOUS_FLYWAY_ENABLED:true}
+    # vendor-aware: picks classpath:db/migration/h2 or .../mysql automatically
+    # 【中文：根据数据库方言自动选择迁移脚本目录（h2 或 mysql）】
+    locations: classpath:db/migration/{vendor}
+    # Existing databases (created by ddl-auto=update before Flyway was introduced) auto-baseline
+    # at V1, so V1__baseline.sql is skipped for them and only V2+ runs. Fresh DBs run V1 first.
+    # 【中文：对已存在的数据库自动设置基线版本为 V1，跳过基线脚本，仅执行 V2+ 迁移】
+    baseline-on-migrate: true
+    baseline-version: 1
+    # 【中文：基线描述信息，记录在 flyway_schema_history 表中】
+    baseline-description: Pre-Flyway schema established by Hibernate ddl-auto=update
+    # 【中文：迁移前校验脚本 checksum，防止脚本被篡改】
+    validate-on-migrate: true
+  servlet:
+    multipart:
+      # 【中文：单个文件上传大小上限，需与存储层配置一致】
+      max-file-size: ${SOULOUS_UPLOAD_MAX_FILE:20MB}
+      # 【中文：整个请求体大小上限（略大于 max-file-size 以容纳表单字段）】
+      max-request-size: ${SOULOUS_UPLOAD_MAX_REQUEST:22MB}
+  mvc:
+    # Default 30s is too short for SSE LLM-token streams which can stretch
+    # to a minute or more on cold caches; raise to 5min so Spring doesn't
+    # kill the request with AsyncRequestTimeoutException mid-stream.
+    # 【中文：异步请求超时时间。默认 30s 对 SSE 流式 LLM 响应太短（冷缓存时可达 1 分钟以上），
+    #   设为 5 分钟避免 Spring 在流式传输中途抛出 AsyncRequestTimeoutException】
+    async:
+      request-timeout: ${SOULOUS_MVC_ASYNC_TIMEOUT_MS:300000}
+
+# 【中文：服务器配置】
+server:
+  # 【中文：服务端口号】
+  port: 8080
+
+# 【中文：Soulous 业务自定义配置】
+soulous:
+  rate-limit:
+    # 应用层限流总开关。默认开启；通过 SOULOUS_RATE_LIMIT_ENABLED=false 可全局关闭（开发/集成测试用）
+    enabled: ${SOULOUS_RATE_LIMIT_ENABLED:true}
+  # 【中文：用户上传文件的本地存储目录】
+  upload-dir: ./uploads
+  # 【中文：CORS 允许的前端源地址，开发环境默认指向 Vite 开发服务器】
+  cors-origin: http://localhost:5173
+  jwt:
+    # 【中文：JWT 签名密钥。开发环境使用默认值，生产必须通过环境变量设置（至少 32 字节）】
+    secret: ${SOULOUS_JWT_SECRET:soulous-default-dev-secret-please-change-in-production-32bytes}
+    # Access token TTL — short-lived because refresh tokens (below) handle longevity.
+    # SOULOUS_JWT_ACCESS_TTL_SECONDS overrides; default 1 hour.
+    # 【中文：Access Token 有效期（秒）。短期令牌，过期后用 Refresh Token 换取新令牌，默认 1 小时】
+    access-ttl-seconds: ${SOULOUS_JWT_ACCESS_TTL_SECONDS:3600}
+    # Refresh token TTL — stored server-side in refresh_token table, revocable.
+    # 【中文：Refresh Token 有效期（天）。存储在服务端数据库，可被撤销，默认 30 天】
+    refresh-ttl-days: ${SOULOUS_JWT_REFRESH_TTL_DAYS:30}
+    # Legacy alias retained for ops that pinned ttl-seconds via env. JwtService falls
+    # back to this only if access-ttl-seconds is unset.
+    # 【中文：旧版令牌有效期配置（秒），仅为向后兼容保留。JwtService 仅在 access-ttl-seconds 未设置时回退到此值】
+    ttl-seconds: ${SOULOUS_JWT_TTL_SECONDS:3600}
+  cookie:
+    # 【中文：Cookie 是否仅通过 HTTPS 传输。开发环境为 false，生产必须为 true】
+    secure: ${SOULOUS_COOKIE_SECURE:false}
+  captcha:
+    # 关掉只在自动化测试 / 本地脚本调用时使用；生产保持 true
+    # 【中文：验证码开关。关闭后跳过验证码校验（仅用于自动化测试/本地脚本），生产保持开启】
+    enabled: ${SOULOUS_CAPTCHA_ENABLED:true}
+    # 【中文：验证码有效期（秒），过期后需重新获取】
+    ttl-seconds: 120
+  llm:
+    # —— 单 provider 模式（向后兼容）——
+    # provider: mock | anthropic | openai (openai 兼容 DeepSeek/Moonshot/通义/Ollama 等)
+    # 【中文：LLM 提供商。mock = 模拟响应（无网络，单测用）；anthropic = Claude；openai = OpenAI 兼容接口（含 DeepSeek/Moonshot/通义/Ollama 等）】
+    provider: ${SOULOUS_LLM_PROVIDER:mock}
+    # 【中文：LLM API 密钥】
+    api-key: ${SOULOUS_LLM_API_KEY:}
+    # 【中文：LLM 模型名称（如 gpt-4o、claude-haiku-4-5-20251001、deepseek-chat 等）】
+    model: ${SOULOUS_LLM_MODEL:}
+    # 【中文：LLM API 基础 URL（用于自定义端点或本地 Ollama 等）】
+    base-url: ${SOULOUS_LLM_BASE_URL:}
+    # 阻塞调用总超时（秒）。DeepSeek 复杂 prompt 经常 30-60s，所以默认抬到 90s。
+    # 流式调用（postMessageStream）内部另有更大的 cap，不受此值限制。
+    # 【中文：阻塞式 LLM 调用总超时（秒）。DeepSeek 等复杂 prompt 响应较慢，默认 90 秒。流式调用有独立的更大超时限制】
+    timeout-seconds: ${SOULOUS_LLM_TIMEOUT_SECONDS:90}
+    cache:
+      # 【中文：LLM 响应缓存开关，相同 prompt 命中缓存可减少 API 调用】
+      enabled: true
+      # 【中文：缓存最大条目数】
+      max: 256
+      # 【中文：缓存条目 TTL（秒），过期后重新调用 LLM】
+      ttl-seconds: 300
+    # —— 多 provider 模式（可选）——
+    # 一旦 providers.* 非空，上面的 provider/api-key/... 即被忽略；用 default-provider 指定默认。
+    # 各业务调用方可通过 llmService.complete("ollama", system, user) 路由到指定 provider。
+    # 【中文：多 provider 模式（可选）。配置 providers.* 后，上方单 provider 配置将被忽略。
+    #   通过 default-provider 指定默认提供商，业务方可按名称路由到指定 provider。】
+    # default-provider: deepseek
+    # providers:
+    #   deepseek:
+    #     type: openai
+    #     base-url: https://api.deepseek.com
+    #     api-key: ${SOULOUS_DEEPSEEK_KEY:}
+    #     model: deepseek-chat
+    #   ollama:
+    #     type: openai
+    #     base-url: http://localhost:11434/v1
+    #     model: qwen2.5:7b
+    #   claude:
+    #     type: anthropic
+    #     api-key: ${SOULOUS_ANTHROPIC_KEY:}
+    #     model: claude-haiku-4-5-20251001
+  # 生产首次启动用：username 必填会确保该用户存在且角色为 ADMIN；
+  # 用户不存在时 password 必填且需通过 PasswordPolicy；用户已存在时只升级角色，不改密码
+  # 【中文：引导管理员配置 —— 生产环境首次启动时自动创建/升级管理员账户。
+  #   username 必填，确保该用户存在且角色为 ADMIN；
+  #   用户不存在时 password 必填且需通过密码策略校验；用户已存在时只升级角色，不改密码】
+  bootstrap-admin:
+    # 【中文：引导管理员的用户名】
+    username: ${SOULOUS_BOOTSTRAP_ADMIN_USERNAME:}
+    # 【中文：引导管理员的密码（仅新用户创建时需要）】
+    password: ${SOULOUS_BOOTSTRAP_ADMIN_PASSWORD:}
+    # 【中文：引导管理员的昵称（可选）】
+    nickname: ${SOULOUS_BOOTSTRAP_ADMIN_NICKNAME:}
+  storage:
+    # backend: local | s3 (s3 涵盖 AWS S3 / Cloudflare R2 / 阿里云 OSS / MinIO 等 S3-compatible)
+    # 【中文：文件存储后端。local = 本地文件系统；s3 = S3 兼容存储（AWS S3 / Cloudflare R2 / 阿里云 OSS / MinIO 等）】
+    backend: ${SOULOUS_STORAGE_BACKEND:local}
+    # 单张凭证图片大小上限（MB）。需与 spring.servlet.multipart.max-file-size 一致或更小
+    # 【中文：单张上传文件大小上限（MB），需与 spring.servlet.multipart.max-file-size 保持一致或更小】
+    max-file-mb: ${SOULOUS_STORAGE_MAX_FILE_MB:20}
+    gc:
+      # 启用孤儿文件回收（每天 03:00 跑）
+      # 【中文：孤儿文件回收（GC）开关 —— 每天定时清理数据库中已删除但存储中仍存在的文件】
+      enabled: ${SOULOUS_STORAGE_GC_ENABLED:true}
+      # 默认 dry-run：只打 log 不真删。观察一段时间确认无误后置为 false
+      # 【中文：试运行模式 —— 仅记录日志不实际删除文件。确认无误后设为 false 开启真实清理】
+      dry-run: ${SOULOUS_STORAGE_GC_DRY_RUN:true}
+      # 多久之前的文件视为可回收候选
+      # 【中文：文件最小存活时间（小时），仅清理超过此时长的孤儿文件】
+      min-age-hours: ${SOULOUS_STORAGE_GC_MIN_AGE_HOURS:24}
+      # 【中文：GC 定时任务 cron 表达式，默认每天凌晨 3 点执行】
+      cron: ${SOULOUS_STORAGE_GC_CRON:0 0 3 * * *}
+    s3:
+      # 【中文：S3 兼容服务端点 URL（如 MinIO 或 Cloudflare R2 自定义域名）】
+      endpoint: ${SOULOUS_S3_ENDPOINT:}
+      # 【中文：S3 区域（如 us-east-1、ap-east-1 等）】
+      region: ${SOULOUS_S3_REGION:us-east-1}
+      # 【中文：S3 存储桶名称】
+      bucket: ${SOULOUS_S3_BUCKET:}
+      # 【中文：S3 访问密钥 ID】
+      access-key: ${SOULOUS_S3_ACCESS_KEY:}
+      # 【中文：S3 秘密访问密钥】
+      secret-key: ${SOULOUS_S3_SECRET_KEY:}
+      # 【中文：是否使用路径风格访问（如 http://endpoint/bucket/key），MinIO 等自建服务通常需要开启】
+      path-style-access: ${SOULOUS_S3_PATH_STYLE:true}
+  moderation:
+    # 内容审核总开关。默认关闭 — 生产部署通过 SOULOUS_MODERATION_ENABLED=true 启用
+    # 启用后：用户输入 BLOCK → HTTP 422；AI 输出 BLOCK → 回复被替换为安全兜底文案
+    # 【中文：内容审核总开关。默认关闭，生产通过环境变量启用。
+    #   启用后：用户输入被 BLOCK 时返回 HTTP 422；AI 输出被 BLOCK 时替换为安全兜底回复】
+    enabled: ${SOULOUS_MODERATION_ENABLED:false}
+    # 是否审核 LLM 输出（除了用户输入）
+    # 【中文：是否同时审核 LLM 输出内容（除了用户输入）。开启后 AI 回复也会经过安全检查】
+    moderate-output: ${SOULOUS_MODERATION_OUTPUT:true}
+    # 用哪个已注册的 LLM provider 做审核调用（空 = 用默认 provider）
+    # 建议指向廉价/快速模型以降低延迟和成本
+    # 【中文：审核使用的 LLM provider 名称（空则用默认 provider）。建议使用廉价/快速模型以降低延迟和成本】
+    provider: ${SOULOUS_MODERATION_PROVIDER:}
+    # 风险分 ≥ block-threshold → 直接拦截
+    # 【中文：风险分阈值 —— 风险分 ≥ 此值时直接拦截（BLOCK），拒绝请求/替换输出】
+    block-threshold: 80
+    # 风险分 ≥ flag-threshold 且 < block-threshold → 标记但放行
+    # 【中文：标记阈值 —— 风险分 ≥ 此值且 < block-threshold 时标记为可疑（FLAG）但放行，记录日志供后续审查】
+    flag-threshold: 50
+    # 审核 prompt 中包含的最近对话轮数
+    # 【中文：审核上下文窗口 —— 审核 prompt 中包含的最近对话轮数，用于检测上下文升级攻击】
+    context-window: 6
+    # 是否将审核结果持久化到数据库（FLAG 和 BLOCK）
+    # 【中文：审核日志持久化开关 —— 是否将 FLAG 和 BLOCK 结果写入 moderation_log 表】
+    log-enabled: true
+    # 正则快速拦截规则（匹配即 BLOCK，不走 LLM）
+    # 【中文：正则快速拦截规则列表 —— 匹配到的输入直接 BLOCK，不走 LLM 审核，降低延迟和成本】
+    # fast-block-patterns:
+    #   - "(?i)ignore.*instructions"
+    #   - "(?i)system\\s*prompt"
+  embedding:
+    # 用哪个 provider 取 embedding。mock = 确定性哈希伪向量（无网络，单测用）；
+    # ollama = 本地 /v1/embeddings；openai = OpenAI-兼容 API。
+    # 【中文：Embedding 提供商。mock = 确定性哈希伪向量（无网络，单元测试用）；
+    #   ollama = 本地 Ollama /v1/embeddings 接口；openai = OpenAI 兼容 API（含其他兼容服务）】
+    provider: ${SOULOUS_EMBEDDING_PROVIDER:mock}
+    # 【中文：Embedding API 基础 URL（ollama/openai 模式需要）】
+    base-url: ${SOULOUS_EMBEDDING_BASE_URL:}
+    # 【中文：Embedding API 密钥（openai 模式需要）】
+    api-key: ${SOULOUS_EMBEDDING_API_KEY:}
+    # 【中文：Embedding 模型名称，默认 nomic-embed-text（Ollama 本地模型）】
+    model: ${SOULOUS_EMBEDDING_MODEL:nomic-embed-text}
+    # 必须与模型实际输出维度一致（nomic-embed-text=768, text-embedding-3-small=1536）
+    # 【中文：向量维度，必须与模型实际输出维度一致。nomic-embed-text=768, text-embedding-3-small=1536】
+    dimension: ${SOULOUS_EMBEDDING_DIMENSION:768}
+    # 【中文：Embedding 调用超时时间（秒）】
+    timeout-seconds: 30
+    cache:
+      # 【中文：Embedding 缓存开关，相同文本的 embedding 结果会被缓存】
+      enabled: true
+      # 【中文：缓存最大条目数】
+      max: 512
+      # embedding 是确定性的，TTL 主要为了限制内存；可设较长
+      # 【中文：缓存 TTL（秒）。Embedding 是确定性的，TTL 主要为了限制内存占用，可设较长】
+      ttl-seconds: 3600
+  rag:
+    # RAG 总开关。默认关闭 — 启用需要同时配好 embedding provider 与可用语料
+    # 【中文：RAG（检索增强生成）总开关。默认关闭，启用需同时配好 embedding provider 和可用语料】
+    enabled: ${SOULOUS_RAG_ENABLED:false}
+    # 每次注入到 prompt 的最大 hit 数
+    # 【中文：每次注入 prompt 的最大检索命中数】
+    top-k: 3
+    # 余弦相似度阈值，低于此值的 hit 会被丢弃（学习场景下 0.65 是合理下限）
+    # 【中文：余弦相似度阈值，低于此值的检索结果会被丢弃。学习场景下 0.65 是合理下限】
+    min-similarity: 0.65
+    # 单条 hit 在 prompt 里最多显示多少字符
+    # 【中文：单条检索命中在 prompt 中的最大字符数，避免占用过多 token】
+    hit-max-chars: 500
+    # 检索得分时间衰减半衰期（天）：score = cosineSim * 0.5^(ageDays / halfLifeDays)
+    # 默认 90：3 个月前的记忆排名权重打 50%，6 个月打 25%；置 0 关闭衰减
+    # 【中文：检索得分时间衰减半衰期（天）。公式：score = cosineSim * 0.5^(ageDays / halfLifeDays)。
+    #   默认 90 天：3 个月前的记忆权重降至 50%，6 个月降至 25%。设为 0 关闭时间衰减】
+    half-life-days: ${SOULOUS_RAG_HALF_LIFE_DAYS:90}
+
+# 【中文：Spring Boot Actuator 监控端点配置】
+management:
+  endpoints:
+    web:
+      exposure:
+        # 【中文：暴露的 Web 端点列表 —— health（健康检查）、info（应用信息）、prometheus（指标导出）、metrics（指标查询）】
+        include: health,info,prometheus,metrics
+      # 【中文：Actuator 端点基础路径】
+      base-path: /actuator
+  endpoint:
+    health:
+      # 【中文：健康检查详情显示策略。never = 从不显示详情；when-authorized = 仅授权用户可见；always = 始终显示】
+      show-details: ${SOULOUS_HEALTH_DETAILS:never}
+  prometheus:
+    metrics:
+      export:
+        # 【中文：启用 Prometheus 指标导出，供 Prometheus 服务器抓取】
+        enabled: true
+  metrics:
+    distribution:
+      percentiles-histogram:
+        # 【中文：为 HTTP 请求延迟启用百分位直方图，支持 P50/P95/P99 等分位数查询】
+        http.server.requests: true
+      percentiles:
+        # 【中文：HTTP 请求延迟百分位数 —— 导出 P50、P95、P99 分位数】
+        http.server.requests: 0.5, 0.95, 0.99
+    tags:
+      # 【中文：全局指标标签，所有指标都会附带 application=soulous-backend 标签，便于多服务区分】
+      application: soulous-backend
+
+# 【中文：Profile 分隔符 —— 以下为 "prod" 生产环境专属配置，覆盖默认值】
+---
+spring:
+  config:
+    activate:
+      on-profile: prod
+  h2:
+    console:
+      # 【中文：生产环境禁用 H2 Web 控制台（安全要求）】
+      enabled: false
+  jpa:
+    hibernate:
+      # prod: Flyway owns the schema. Hibernate only validates entities against the DB.
+      # 【中文：生产环境 Hibernate 仅校验实体与数据库结构是否一致，不自动修改表结构。Schema 变更由 Flyway 管理】
+      ddl-auto: ${SOULOUS_JPA_DDL_AUTO:validate}
+      # 【中文：生产环境关闭 Open Session in View】
+    open-in-view: false
+
+soulous:
+  # 生产必须通过环境变量覆盖 cors-origin（可填多个，用逗号分隔），不再带 localhost 兜底
+  # 【中文：生产环境 CORS 源地址必须通过环境变量指定（支持逗号分隔多值），无 localhost 兜底】
+  cors-origin: ${SOULOUS_CORS_ORIGIN}
+  cookie:
+    # 【中文：生产环境 Cookie 强制 HTTPS 传输】
+    secure: true
+  security:
+    # 【中文：生产环境禁用 H2 控制台】
+    h2-console-enabled: false
+    # 【中文：生产环境禁用开发专用源（如 localhost 跨域等）】
+    dev-origins-enabled: false
+
+# 【中文：Profile 分隔符 —— 以下为 "mysql" MySQL 环境专属配置】
+---
+spring:
+  config:
+    activate:
+      on-profile: mysql
+  datasource:
+    # 【中文：MySQL 数据源 URL —— 连接本地 MySQL，自动创建数据库，设置时区为上海，字符集 UTF-8】
+    url: jdbc:mysql://localhost:3306/soulous?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&createDatabaseIfNotExist=true
+    # 【中文：MySQL 用户名】
+    username: root
+    # 【中文：MySQL 密码（通过环境变量设置）】
+    password:
+    # 【中文：MySQL JDBC 驱动类】
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      # 【中文：MySQL 环境下 Hibernate 自动更新表结构（开发阶段使用，生产应配合 Flyway）】
+      ddl-auto: update

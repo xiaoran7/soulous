@@ -1,0 +1,43 @@
+{
+  /* 【中文：TypeScript 编译器配置 —— Soulous 前端项目 TypeScript 编译选项 */
+  "compilerOptions": {
+    /* 【中文：编译目标 —— 输出 ES2020 语法，支持现代浏览器（Chrome 80+、Firefox 80+、Safari 14+）】 */
+    "target": "ES2020",
+    /* 【中文：使用 Object.defineProperty 定义类字段（符合 TC39 标准行为，避免旧版 TypeScript 的遗留行为）】 */
+    "useDefineForClassFields": true,
+    /* 【中文：包含的类型库 —— DOM API、DOM 可迭代接口、ES2020 内置类型】 */
+    "lib": ["DOM", "DOM.Iterable", "ES2020"],
+    /* 【中文：不允许编译 JavaScript 文件（仅处理 .ts/.tsx）】 */
+    "allowJs": false,
+    /* 【中文：跳过 node_modules 中 .d.ts 文件的类型检查（加速编译，避免第三方库类型冲突）】 */
+    "skipLibCheck": true,
+    /* 【中文：启用 ES 模块互操作 —— 允许 import React from 'react' 风格的默认导入】 */
+    "esModuleInterop": true,
+    /* 【中文：允许从没有默认导出的模块进行默认导入（配合 esModuleInterop 使用）】 */
+    "allowSyntheticDefaultImports": true,
+    /* 【中文：启用严格类型检查模式（包含 noImplicitAny、strictNullChecks 等所有严格选项）】 */
+    "strict": true,
+    /* 【中文：强制文件名大小写一致（防止跨平台导入路径大小写不匹配问题）】 */
+    "forceConsistentCasingInFileNames": true,
+    /* 【中文：模块系统 —— 使用 ESNext 模块语法（支持动态 import()、顶层 await 等）】 */
+    "module": "ESNext",
+    /* 【中文：模块解析策略 —— 使用 Node.js 风格的模块解析（从 node_modules 查找、支持包的 main/module 字段）】 */
+    "moduleResolution": "Node",
+    /* 【中文：允许导入 JSON 文件（如 import config from './config.json'）】 */
+    "resolveJsonModule": true,
+    /* 【中文：确保每个文件都可以独立编译（不依赖全局声明合并），为 Vite/esbuild 等工具的单文件转译提供保障】 */
+    "isolatedModules": true,
+    /* 【中文：不输出编译产物（仅做类型检查，实际编译由 Vite/esbuild 负责）】 */
+    "noEmit": true,
+    /* 【中文：JSX 转换 —— 使用 React 17+ 的自动 JSX 运行时（无需在每个文件中 import React）】 */
+    "jsx": "react-jsx",
+    /* 【中文：全局类型声明 —— 包含 Vitest 全局测试 API 类型和 Jest-DOM 断言匹配器类型】 */
+    "types": ["vitest/globals", "@testing-library/jest-dom"]
+  },
+  /* 【中文：包含的源码目录】 */
+  "include": ["src"],
+  /* 【中文：排除的文件 —— 测试文件和测试初始化文件不参与生产编译】 */
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/test-setup.ts"],
+  /* 【中文：项目引用（当前无子项目依赖）】 */
+  "references": []
+}

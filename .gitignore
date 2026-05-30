@@ -1,0 +1,46 @@
+# Java / Maven
+backend/target/
+backend/data/
+backend/uploads/
+backend/*.log
+backend/*.err
+backend-run.log
+
+# Node / Vite
+frontend/node_modules/
+frontend/dist/
+frontend/*.log
+frontend/*.err
+
+# Local QA artifacts
+.playwright-mcp/
+soulous-dashboard.png
+
+# Playwright E2E artifacts
+frontend/playwright-report/
+frontend/test-results/
+frontend/.auth/
+frontend/e2e-results/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+
+Defense_Presentation_Clean.pptx
+
+# Root-level runtime logs
+*.log
+*-err.log
+
+# TypeScript incremental build cache
+frontend/tsconfig.tsbuildinfo
+
+# Claude Code harness state
+.claude/scheduled_tasks.lock
+
+.tmp.driveupload/
+.claude_screenshots/
+.claude/

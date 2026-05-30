@@ -1,0 +1,293 @@
+/**
+ * 【Soulous 应用入口模块】
+ * 包含 App 根组件和应用初始化逻辑。
+ *
+ * App 组件是整个前端应用的顶层组件，负责：
+ * - 全局状态管理（用户、任务、宠物、统计数据）
+ * - 页面路由（通过 page 状态切换，非 React Router）
+ * - 侧边栏导航渲染
+ * - 顶部栏（页面标题、通知铃铛、用户头像）
+ * - 认证状态判断（未登录显示 AuthScreen）
+ * - 管理员角色自动重定向到审核页
+ * - 页面标题/副标题/眉毛文本的中英文映射
+ *
+ * 页面列表：dashboard / tasks / planner / review / pet / stats / focus / profile / admin
+ */
+import React, { useEffect, useState } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import {
+  Activity,
+  BarChart3,
+  Bot,
+  CalendarCheck,
+  CalendarRange,
+  ClipboardList,
+  LogOut,
+  PawPrint,
+  Plus,
+  ShieldCheck,
+  Timer,
+  UserCog
+} from 'lucide-react';
+import { api, UnauthorizedError } from './api';
+import { ClickableAvatar, NavButton, SidebarPet } from './components/shared';
+import { NotificationBell } from './components/NotificationBell';
+import type { DailyReview, Pet, StudyTask, Summary, User } from './types';
+import { AuthScreen } from './pages/AuthScreen';
+import { Dashboard } from './pages/Dashboard';
+import { TasksPage } from './pages/TasksPage';
+import { PlannerPage, type PlannerCache } from './pages/PlannerPage';
+import { DailyReviewPage } from './pages/DailyReviewPage';
+import { PetPage } from './pages/PetPage';
+import { StatsPage } from './pages/StatsPage';
+import { ProfilePage } from './pages/ProfilePage';
+import { AdminPage } from './pages/AdminPage';
+import { FocusPage } from './pages/FocusPage';
+import { TimetablePage } from './pages/TimetablePage';
+import './styles.css';
+
+/** 【页面路由类型】 */
+type Page = 'dashboard' | 'tasks' | 'timetable' | 'planner' | 'review' | 'pet' | 'stats' | 'focus' | 'profile' | 'admin';
+
+/**
+ * 【页面主标题映射】
+ * 每个页面的大标题，使用 ReactNode 支持斜体强调效果。
+ * 格式为"中文主题 + 英文副题"的混排风格。
+ */
+const pageTitles: Record<Page, React.ReactNode> = {
+  dashboard: <>今天 <em>的节奏</em></>,
+  tasks: <>任务 <em>与凭证</em></>,
+  timetable: <>我的 <em>课表</em></>,
+  planner: <>AI <em>拆解目标</em></>,
+  review: <>今日 <em>复盘</em></>,
+  pet: <>宠物 <em>成长</em></>,
+  stats: <>学习 <em>统计</em></>,
+  focus: <>专注 <em>计时</em></>,
+  profile: <>个人 <em>资料</em></>,
+  admin: <>审核 <em>管理</em></>
+};
+
+/**
+ * 【页面眉毛文本映射】
+ * 顶部栏中显示在主标题上方的小字，格式为"英文 · 中文"。
+ * 提供页面的中英双语标识，增强设计感。
+ */
+const pageEyebrows: Record<Page, string> = {
+  dashboard: 'Workspace · 工作台',
+  tasks: 'Tasks · 任务',
+  timetable: 'Timetable · 课表',
+  planner: 'Planner · 拆解',
+  review: 'Review · 复盘',
+  pet: 'Soul · 灵魂',
+  stats: 'Stats · 统计',
+  focus: 'Focus · 专注',
+  profile: 'Profile · 资料',
+  admin: 'Admin · 审核'
+};
+
+/**
+ * 【页面副标题映射】
+ * 顶部栏中显示在主标题下方的简短描述，帮助用户理解页面用途。
+ */
+const pageSubtitles: Record<Page, string> = {
+  dashboard: '今日节奏一眼可见',
+  tasks: '创建任务并提交学习凭证',
+  timetable: '导入课表，让 AI 更懂你的学习节奏',
+  planner: '让 AI 把目标拆成可执行的任务',
+  review: '一份轻量的今日复盘',
+  pet: '陪伴你成长的小伙伴',
+  stats: '近期学习数据与趋势',
+  focus: '减少干扰，保持节奏',
+  profile: '账号资料与偏好',
+  admin: '凭证与申诉复核'
+};
+
+/**
+ * 【App 根组件】
+ * 应用的顶层组件，管理全局状态和页面路由。
+ */
+function App() {
+  /** 【当前登录用户信息，null 表示未登录】 */
+  const [user, setUser] = useState<User | null>(null);
+  /** 【用户的任务列表】 */
+  const [tasks, setTasks] = useState<StudyTask[]>([]);
+  /** 【用户的宠物数据】 */
+  const [pet, setPet] = useState<Pet | null>(null);
+  /** 【学习统计数据摘要】 */
+  const [summary, setSummary] = useState<Summary | null>(null);
+  /** 【当前页面路由状态】 */
+  const [page, setPage] = useState<Page>('dashboard');
+
+  /**
+   * 【管理员自动重定向效果】
+   * 管理员角色只能访问审核管理和个人资料页面，
+   * 如果当前页面不是这两个之一，自动重定向到审核管理页。
+   */
+  useEffect(() => {
+    if (user?.role === 'ADMIN' && page !== 'admin' && page !== 'profile') {
+      setPage('admin');
+    }
+  }, [user?.role, page]);
+
+  /** 【全局加载状态】 */
+  const [loading, setLoading] = useState(false);
+  /** 【全局消息提示】 */
+  const [message, setMessage] = useState('');
+  /** 【AI 拆解页面的缓存状态，避免切换页面时丢失输入】 */
+  const [plannerCache, setPlannerCache] = useState<PlannerCache>({ goal: '' });
+  /** 【每日复盘数据缓存】 */
+  const [dailyReview, setDailyReview] = useState<DailyReview | null>(null);
+
+  /**
+   * 【应用初始化/数据刷新函数】
+   * 并行请求用户信息、任务列表、宠物数据和统计数据。
+   * 成功后更新全局状态，失败时清空用户状态（触发登录页面）。
+   * 被多处调用：页面加载、登录成功、任务变更后刷新等。
+   */
+  async function bootstrap() {
+    setLoading(true);
+    try {
+      const [me, taskList, petData, summaryData] = await Promise.all([
+        api.me(),
+        api.tasks(),
+        api.pet(),
+        api.summary()
+      ]);
+      setUser(me as User);
+      setTasks(Array.isArray(taskList) ? taskList : []);
+      setPet(petData as Pet);
+      setSummary(summaryData as Summary);
+      setMessage('');
+    } catch (error) {
+      setUser(null);
+      if (!(error instanceof UnauthorizedError)) {
+        setMessage(error instanceof Error ? error.message : '加载失败');
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  /** 【应用挂载时执行初始化】 */
+  useEffect(() => { void bootstrap(); }, []);
+
+  /**
+   * 【退出登录处理】
+   * 调用 API 清除服务端会话，清空所有本地状态。
+   * 即使 API 调用失败也清空本地状态（cookie 可能已失效）。
+   */
+  async function handleLogout() {
+    try { await api.logout(); } catch { /* cookie already cleared on error */ }
+    setUser(null);
+    setTasks([]);
+    setPet(null);
+    setSummary(null);
+  }
+
+  if (!user) {
+    return <AuthScreen onAuthed={() => { void bootstrap(); }} message={message} />;
+  }
+
+  const isAdmin = user.role === 'ADMIN';
+  /** 【仅在 Dashboard 页面显示"新建任务"快捷按钮】 */
+  const showQuickCreate = page === 'dashboard';
+
+  return (
+    <div className="app-shell">
+      <aside className="sidebar">
+        <div className="brand">
+          <span className="brand-mark" aria-hidden="true" />
+          <span>Soulous <em>灵魂</em></span>
+        </div>
+
+        {!isAdmin && (
+          <>
+            <div className="nav-group">
+              <div className="nav-group-label">Daily · 日常</div>
+              <NavButton active={page === 'dashboard'} icon={<Activity size={16} />} label="工作台" onClick={() => setPage('dashboard')} />
+              <NavButton active={page === 'tasks'} icon={<ClipboardList size={16} />} label="任务" onClick={() => setPage('tasks')} />
+              <NavButton active={page === 'timetable'} icon={<CalendarRange size={16} />} label="课表" onClick={() => setPage('timetable')} />
+              <NavButton active={page === 'review'} icon={<CalendarCheck size={16} />} label="复盘" onClick={() => setPage('review')} />
+              <NavButton active={page === 'focus'} icon={<Timer size={16} />} label="专注" onClick={() => setPage('focus')} />
+              <NavButton active={page === 'pet'} icon={<PawPrint size={16} />} label="宠物" onClick={() => setPage('pet')} />
+            </div>
+
+            <div className="nav-group">
+              <div className="nav-group-label">Tools · 工具</div>
+              <NavButton active={page === 'planner'} icon={<Bot size={16} />} label="AI 拆解" onClick={() => setPage('planner')} />
+              <NavButton active={page === 'stats'} icon={<BarChart3 size={16} />} label="统计" onClick={() => setPage('stats')} />
+            </div>
+          </>
+        )}
+
+        <div className="nav-group">
+          <div className="nav-group-label">Account · 账号</div>
+          {isAdmin && (
+            <NavButton active={page === 'admin'} icon={<ShieldCheck size={16} />} label="审核管理" onClick={() => setPage('admin')} />
+          )}
+          <NavButton active={page === 'profile'} icon={<UserCog size={16} />} label="资料" onClick={() => setPage('profile')} />
+        </div>
+
+        {!isAdmin && <SidebarPet pet={pet} onOpen={() => setPage('pet')} />}
+
+        <button className="ghost-button logout" onClick={() => void handleLogout()}>
+          <LogOut size={14} /> 退出
+        </button>
+      </aside>
+
+      <main>
+        <header className="topbar">
+          <div>
+            <p className="page-eyebrow">{pageEyebrows[page]}</p>
+            <h1>{pageTitles[page]}</h1>
+            <p className="page-sub">{pageSubtitles[page]}</p>
+          </div>
+          <div className="topbar-actions">
+            {showQuickCreate && (
+              <button className="primary-button" onClick={() => setPage('tasks')}>
+                <Plus size={14} /> 新建任务
+              </button>
+            )}
+            <NotificationBell />
+            <button className="user-chip" type="button" onClick={() => setPage('profile')} title="个人资料">
+              {user.avatarUrl ? (
+                <ClickableAvatar className="avatar-chip" url={user.avatarUrl} alt={user.nickname} />
+              ) : (
+                <span className="avatar-chip" aria-hidden="true">
+                  {(user.nickname || user.username || '?').slice(0, 1).toUpperCase()}
+                </span>
+              )}
+              <strong>{user.nickname}</strong>
+              <span>{user.role}</span>
+            </button>
+          </div>
+        </header>
+
+        {loading && <div className="notice">正在同步数据...</div>}
+        {message && <div className="notice">{message}</div>}
+
+        {page === 'dashboard' && <Dashboard tasks={tasks} pet={pet} summary={summary} onRefresh={bootstrap} onOpenTasks={() => setPage('tasks')} onOpenReview={() => setPage('review')} onOpenPet={() => setPage('pet')} />}
+        {page === 'tasks' && <TasksPage tasks={tasks} onRefresh={bootstrap} />}
+        {page === 'timetable' && <TimetablePage onRefresh={bootstrap} />}
+        {page === 'planner' && <PlannerPage onRefresh={bootstrap} cache={plannerCache} setCache={setPlannerCache} />}
+        {page === 'review' && <DailyReviewPage summary={summary} review={dailyReview} onReviewChange={setDailyReview} />}
+        {page === 'pet' && <PetPage pet={pet} />}
+        {page === 'stats' && <StatsPage summary={summary} />}
+        {page === 'profile' && <ProfilePage user={user} onUpdated={setUser} />}
+        {page === 'focus' && <FocusPage />}
+        {page === 'admin' && <AdminPage user={user} onRefresh={bootstrap} />}
+      </main>
+    </div>
+  );
+}
+
+/**
+ * 【应用挂载】
+ * 获取根 DOM 容器，创建 React Root 并渲染 App 组件。
+ * 将 Root 实例缓存到 window 对象上，支持 HMR（热模块替换）时复用。
+ */
+const rootContainer = document.getElementById('root')!;
+const rootWindow = window as typeof window & { __soulousRoot?: Root };
+const root = rootWindow.__soulousRoot ?? createRoot(rootContainer);
+rootWindow.__soulousRoot = root;
+root.render(<App />);

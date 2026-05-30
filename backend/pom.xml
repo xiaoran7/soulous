@@ -1,0 +1,190 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 【中文：Soulous 后端 Maven 项目配置文件 —— 定义项目依赖、构建插件和项目元数据】 -->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!-- 【中文：父 POM —— 继承 Spring Boot Starter Parent，自动管理依赖版本和默认配置】 -->
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.4.5</version>
+        <relativePath/>
+    </parent>
+
+    <!-- 【中文：项目坐标 —— com.soulous:soulous-backend:0.1.0】 -->
+    <groupId>com.soulous</groupId>
+    <artifactId>soulous-backend</artifactId>
+    <version>0.1.0</version>
+    <name>soulous-backend</name>
+    <!-- 【中文：项目描述】 -->
+    <description>Soulous Web MVP backend</description>
+
+    <properties>
+        <!-- 【中文：Java 版本要求 —— 使用 Java 21（LTS 版本，支持虚拟线程等新特性）】 -->
+        <java.version>21</java.version>
+    </properties>
+
+    <dependencies>
+        <!-- 【中文：Spring Boot Web Starter —— 提供 RESTful API、内嵌 Tomcat、JSON 序列化等 Web 开发核心能力】 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <!-- 【中文：Spring Data JPA Starter —— 提供 JPA/Hibernate ORM、Repository 抽象层】 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+        <!-- 【中文：Bean Validation Starter —— 提供 @NotNull/@Size 等参数校验注解支持】 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+        <!-- 【中文：H2 嵌入式数据库 —— 用于本地开发和单元测试（运行时依赖）】 -->
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <!-- 【中文：MySQL JDBC 驱动 —— 生产环境连接 MySQL 数据库（运行时依赖）】 -->
+        <dependency>
+            <groupId>com.mysql</groupId>
+            <artifactId>mysql-connector-j</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <!-- 【中文：Flyway Core —— 数据库版本化迁移工具，管理 schema 变更】 -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+        <!-- 【中文：Flyway MySQL 扩展 —— 支持 MySQL 特有的迁移语法（如 ENUM 修改等）】 -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-mysql</artifactId>
+        </dependency>
+        <!-- 【中文：Spring Security Starter —— 提供认证授权、CSRF 防护、密码加密等安全能力】 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+        <!-- 【中文：JJWT API —— Java JWT 库的 API 接口，用于创建和解析 JWT 令牌】 -->
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-api</artifactId>
+            <version>0.12.6</version>
+        </dependency>
+        <!-- 【中文：JJWT Impl —— JWT 库的运行时实现（运行时依赖）】 -->
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-impl</artifactId>
+            <version>0.12.6</version>
+            <scope>runtime</scope>
+        </dependency>
+        <!-- 【中文：JJWT Jackson —— JWT 库的 Jackson 序列化支持（运行时依赖）】 -->
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-jackson</artifactId>
+            <version>0.12.6</version>
+            <scope>runtime</scope>
+        </dependency>
+        <!-- 【中文：AWS S3 SDK —— 用于 S3 兼容对象存储（AWS S3 / R2 / OSS / MinIO），
+             排除了 netty-nio-client 和 apache-client 以减小包体积，使用 url-connection-client 替代】 -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <version>2.30.0</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>software.amazon.awssdk</groupId>
+                    <artifactId>netty-nio-client</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>software.amazon.awssdk</groupId>
+                    <artifactId>apache-client</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <!-- 【中文：AWS URL Connection Client —— 轻量级 HTTP 客户端，替代默认的 Netty/Apache 客户端】 -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>url-connection-client</artifactId>
+            <version>2.30.0</version>
+        </dependency>
+        <!-- 【中文：Caffeine 本地缓存 —— 高性能 Java 缓存库，用于 LLM 响应缓存、Embedding 缓存等】 -->
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+        </dependency>
+        <!-- 【中文：Bucket4j 限流库 —— 基于令牌桶算法的应用层限流，保护 API 免受滥用】 -->
+        <dependency>
+            <groupId>com.bucket4j</groupId>
+            <artifactId>bucket4j_jdk17-core</artifactId>
+            <version>8.14.0</version>
+        </dependency>
+        <!-- 【中文：Thumbnailator 图片处理库 —— 用于图片压缩和缩略图生成（如用户头像、截图处理）】 -->
+        <dependency>
+            <groupId>net.coobird</groupId>
+            <artifactId>thumbnailator</artifactId>
+            <version>0.4.20</version>
+        </dependency>
+        <!-- 【中文：Spring AOP Starter —— 提供面向切面编程支持，用于日志、审计、限流等横切关注点】 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-aop</artifactId>
+        </dependency>
+        <!-- 【中文：Spring Actuator Starter —— 提供健康检查、指标监控、Prometheus 端点等运维能力】 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <!-- 【中文：Spring Mail Starter —— 提供邮件发送能力（如验证码邮件、通知邮件）】 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-mail</artifactId>
+        </dependency>
+        <!-- 【中文：Micrometer Prometheus Registry —— 将应用指标导出为 Prometheus 格式，供 Grafana 等监控工具采集】 -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
+        <!-- 【中文：Spring Boot Test Starter —— 提供单元测试和集成测试支持（测试范围依赖）】 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- 【中文：Spring Boot Maven 插件 —— 支持 mvn spring-boot:run 启动应用和打包可执行 JAR】 -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+            <!-- 【中文：Maven Surefire 插件 —— 单元测试运行器配置。
+                 测试时默认使用 mock LLM provider 和禁用限流，确保测试隔离和可重复性。
+                 AI 审核设为同步模式（soulous.async.ai-review.sync=true），
+                 使断言无需等待异步线程池完成即可验证审核结果。】 -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <systemPropertyVariables>
+                        <soulous.llm.provider>mock</soulous.llm.provider>
+                        <soulous.llm.api-key></soulous.llm.api-key>
+                        <soulous.llm.base-url></soulous.llm.base-url>
+                        <soulous.llm.model></soulous.llm.model>
+                        <soulous.rate-limit.enabled>false</soulous.rate-limit.enabled>
+                        <!-- Run AI review on the caller thread in tests so post-submit
+                             assertions see the verdict without racing the @Async pool. -->
+                        <!-- 【中文：测试中 AI 审核在调用线程同步执行，避免断言与异步线程池竞争】 -->
+                        <soulous.async.ai-review.sync>true</soulous.async.ai-review.sync>
+                    </systemPropertyVariables>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>
