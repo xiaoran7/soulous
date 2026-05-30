@@ -62,7 +62,7 @@ const pageTitles: Record<Page, React.ReactNode> = {
   review: <>今日 <em>复盘</em></>,
   pet: <>宠物 <em>成长</em></>,
   stats: <>学习 <em>统计</em></>,
-  focus: <>专注 <em>计时</em></>,
+  focus: <>进入 <em>自习室</em></>,
   profile: <>个人 <em>资料</em></>,
   admin: <>审核 <em>管理</em></>
 };
@@ -80,7 +80,7 @@ const pageEyebrows: Record<Page, string> = {
   review: 'Review · 复盘',
   pet: 'Soul · 灵魂',
   stats: 'Stats · 统计',
-  focus: 'Focus · 专注',
+  focus: 'Study Room · 自习室',
   profile: 'Profile · 资料',
   admin: 'Admin · 审核'
 };
@@ -97,7 +97,7 @@ const pageSubtitles: Record<Page, string> = {
   review: '一份轻量的今日复盘',
   pet: '陪伴你成长的小伙伴',
   stats: '近期学习数据与趋势',
-  focus: '减少干扰，保持节奏',
+  focus: '选场景、调氛围，快速进入状态',
   profile: '账号资料与偏好',
   admin: '凭证与申诉复核'
 };
@@ -208,7 +208,7 @@ function App() {
               <NavButton active={page === 'tasks'} icon={<ClipboardList size={16} />} label="任务" onClick={() => setPage('tasks')} />
               <NavButton active={page === 'timetable'} icon={<CalendarRange size={16} />} label="课表" onClick={() => setPage('timetable')} />
               <NavButton active={page === 'review'} icon={<CalendarCheck size={16} />} label="复盘" onClick={() => setPage('review')} />
-              <NavButton active={page === 'focus'} icon={<Timer size={16} />} label="专注" onClick={() => setPage('focus')} />
+              <NavButton active={page === 'focus'} icon={<Timer size={16} />} label="自习室" onClick={() => setPage('focus')} />
               <NavButton active={page === 'pet'} icon={<PawPrint size={16} />} label="宠物" onClick={() => setPage('pet')} />
             </div>
 

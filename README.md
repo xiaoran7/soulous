@@ -21,6 +21,7 @@
 - **账户与安全**：注册登录、SVG 图形验证码、密码强度策略、JWT 双 token（1h access + 30d refresh，HttpOnly cookie、SHA-256 入库、自动轮换、复用触发全设备登出）、`audit_log` 全量审计
 - **目标与任务**：长期目标 CRUD（软删 `ARCHIVED`）、AI 拆解会话（Planning Session 对话流、`COMMITTED` 历史保留、闲置 session 定时清理）、任务生命周期管理
 - **专注 / 凭证**：番茄钟专注时长记录、图文 / 代码 / 截图凭证提交（白名单 + 5MB 限制 + 自动压缩 1920px / JPEG 85%）、鉴权下载 `/uploads/**`
+- **课表**：导入教务系统学期课表（`.xls` 浏览器内 SheetJS 解析 → LLM 结构化，或粘贴 HTML）、按学期/周次（含单双周）展示、手动增删、开学日期定位本周；课程名注入 AI 拆解上下文（`[COURSES]`）
 - **AI 中枢**：
   - 智能拆解（交互式 Planning Session）
   - 凭证审核引擎（相关性 / 完整度 / 质量分多维评估，自动发经验）

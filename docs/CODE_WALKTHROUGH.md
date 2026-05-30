@@ -69,6 +69,7 @@ flowchart LR
 | AI 拆解会话（多轮） | [`com.soulous.aisession`](../backend/src/main/java/com/soulous/aisession) | `components/PlanningSessionChat.tsx` | `planning_session`, `session_turn` |
 | 学习任务 + 凭证提交 | [`com.soulous.task`](../backend/src/main/java/com/soulous/task) | `pages/TasksPage.tsx` + `components/ProofUploader.tsx` | `study_task`, `task_submission` |
 | 专注（番茄钟） | [`com.soulous.focus`](../backend/src/main/java/com/soulous/focus) | `pages/FocusPage.tsx` | `focus_session` |
+| 课表（导入 / 增删 / 周次） | [`com.soulous.timetable`](../backend/src/main/java/com/soulous/timetable) | `pages/TimetablePage.tsx` + `components/TimetableGrid.tsx` | `course_entry` |
 | AI 审核 + 出题 + 拆解 | [`com.soulous.ai`](../backend/src/main/java/com/soulous/ai) | （透明调用） | `ai_review` |
 | LLM 抽象 + Provider 池 | `com.soulous.ai`、`com.soulous.ai.provider` | — | — |
 | 内容风控 | [`com.soulous.moderation`](../backend/src/main/java/com/soulous/moderation) | （透明调用） | `moderation_log` |

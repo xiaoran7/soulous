@@ -75,7 +75,7 @@ frontend http://localhost:5173
 前端（`frontend/src/`）：
 
 - `main.tsx`：应用外壳，仅 174 行；按 page 调度子页面。
-- `pages/`：`AuthScreen`、`Dashboard`、`TasksPage`、`PlannerPage`、`DailyReviewPage`、`PetPage`、`StatsPage`、`FocusPage`、`ProfilePage`、`AdminPage`。
+- `pages/`：`AuthScreen`、`Dashboard`、`TasksPage`、`TimetablePage`、`PlannerPage`、`DailyReviewPage`、`PetPage`、`StatsPage`、`FocusPage`、`ProfilePage`、`AdminPage`。
 - `components/shared.tsx`：跨页面共享组件（NavButton、Metric、TaskRow、PetCard、Empty、ProgressRing、SidebarPet、animationForPet 等）。
 - `components/TrendChart.tsx`：Recharts 趋势图，独立 chunk，被 Dashboard 和 StatsPage 通过 `React.lazy` 懒加载。
 - `api.ts`：API 客户端。
