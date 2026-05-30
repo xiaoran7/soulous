@@ -44,7 +44,7 @@ frontend http://localhost:5173
 - AI 每日复盘：根据今日任务、提交、学习时长、经验日志、宠物状态生成总结。
 - 宠物成长页：宠物状态、动作预览、成长事件日志。
 - 统计页：今日指标、近 7 天趋势、课程分布。
-- 专注计时（Pomodoro 风格）：开始/暂停/继续/完成/中止。
+- 自习室：选场景 + 环境音/音乐 + **正计时**专注（非倒计时，时间往上加），点进入即全屏沉浸（隐藏侧栏/顶栏，抽屉唤回）；支持自定义上传场景图/音乐。后端会话沿用开始/暂停/继续/完成/中止。
 
 管理员侧：
 
@@ -75,7 +75,7 @@ frontend http://localhost:5173
 前端（`frontend/src/`）：
 
 - `main.tsx`：应用外壳，仅 174 行；按 page 调度子页面。
-- `pages/`：`AuthScreen`、`Dashboard`、`TasksPage`、`PlannerPage`、`DailyReviewPage`、`PetPage`、`StatsPage`、`FocusPage`、`ProfilePage`、`AdminPage`。
+- `pages/`：`AuthScreen`、`Dashboard`、`TasksPage`、`TimetablePage`、`PlannerPage`、`DailyReviewPage`、`PetPage`、`StatsPage`、`FocusPage`、`ProfilePage`、`AdminPage`。
 - `components/shared.tsx`：跨页面共享组件（NavButton、Metric、TaskRow、PetCard、Empty、ProgressRing、SidebarPet、animationForPet 等）。
 - `components/TrendChart.tsx`：Recharts 趋势图，独立 chunk，被 Dashboard 和 StatsPage 通过 `React.lazy` 懒加载。
 - `api.ts`：API 客户端。

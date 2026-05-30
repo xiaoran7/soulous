@@ -15,7 +15,7 @@ nginx（端口 80/443）
   └── /*, /assets/**       → React SPA (dist/)
 ```
 
-- **frontend**：React 19 + Vite + TypeScript，SPA，页面路由：工作台 / 任务 / AI 拆解 / 宠物 / 统计 / 管理后台。
+- **frontend**：React 19 + Vite + TypeScript，SPA，页面路由：工作台 / 任务 / 课表 / 复盘 / 自习室 / AI 拆解 / 宠物 / 统计 / 管理后台。
 - **backend**：Spring Boot 3 + Java 21 + JPA + Spring Security，提供业务 REST API；feature-package 拆分（`com.soulous.{admin,auth,focus,goal,task,pet,...}`）。
 - **DB**：默认 H2 文件库（`backend/data/soulous.mv.db`），可切 MySQL。**Flyway 管理迁移**（h2 / mysql 各一套，`db/migration/{vendor}/V*.sql`）。
 
@@ -57,7 +57,8 @@ nginx（端口 80/443）
 | `task` | 任务 CRUD、开始、提交凭证、AI 初审、内容审核 |
 | `focus` | 专注计时会话，关联到 task |
 | `goal` | 学习目标管理 |
-| `aisession` | AI 对话式拆解目标，RAG 增强上下文 |
+| `aisession` | AI 对话式拆解目标，RAG 增强上下文 + 注入用户课表（`[COURSES]` 段，让 AI 了解所修专业方向） |
+| `timetable` | 课表：LLM 解析导入（HTML/教务 .xls）、手动增删、按学期/周次组织；课程名喂给 `aisession` |
 | `pet` | 宠物成长、经验、心情；心情加权 EXP |
 | `stats` | 今日指标、近 7 天趋势、课程占比 |
 | `review` | 管理员提交队列、人工复核 |
@@ -83,6 +84,8 @@ Flyway 迁移版本（h2 / mysql 各一套）：
 | V4 | 新增 `notification` 表 |
 | V5 | 新增 `audit_log` 表 |
 | V6 | `task_submission` 状态枚举新增 `AI_REVIEWING` |
+| V7 | 新增 `course_entry` 表（课表） |
+| V8 | `study_task` 新增 `scheduled_weekday` 列 |
 
 > **注意（运维）**：prod 模式 `ddl-auto: validate`，新增实体字段必须同步写 `V{n}__*.sql`；否则启动时 Hibernate 校验失败。已有 VPS 上若漏写迁移，需手动 `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`。
 > 已应用的迁移文件**不要再改内容**，否则 checksum 变了 Flyway 启动时会校验失败（修法见 `docs/database.md`）。

@@ -72,6 +72,7 @@ prod（MySQL）同样会中招——换成 mysql 的 url / 凭据和 `db/migrati
 - `Pet`：等级、当前经验、升级所需经验、心情、饱腹度、成长阶段、状态。
 - `ExpLog`：经验变更记录。
 - `StudyRecord`：学习时长和摘要记录。
+- `CourseEntry`（表 `course_entry`，V7）：课表一节课——课程名、教师、地点、星期(1-7)、起止节次、起止时间、周次原文、单双周(ALL/ODD/EVEN)、学期。来源是导入的教务课表（HTML/.xls 经 LLM 解析）或手动新增。
 
 ## 主要状态
 

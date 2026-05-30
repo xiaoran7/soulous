@@ -23,6 +23,7 @@ import {
   CalendarRange,
   ClipboardList,
   LogOut,
+  Menu,
   PawPrint,
   Plus,
   ShieldCheck,
@@ -62,7 +63,7 @@ const pageTitles: Record<Page, React.ReactNode> = {
   review: <>今日 <em>复盘</em></>,
   pet: <>宠物 <em>成长</em></>,
   stats: <>学习 <em>统计</em></>,
-  focus: <>专注 <em>计时</em></>,
+  focus: <>进入 <em>自习室</em></>,
   profile: <>个人 <em>资料</em></>,
   admin: <>审核 <em>管理</em></>
 };
@@ -80,7 +81,7 @@ const pageEyebrows: Record<Page, string> = {
   review: 'Review · 复盘',
   pet: 'Soul · 灵魂',
   stats: 'Stats · 统计',
-  focus: 'Focus · 专注',
+  focus: 'Study Room · 自习室',
   profile: 'Profile · 资料',
   admin: 'Admin · 审核'
 };
@@ -97,7 +98,7 @@ const pageSubtitles: Record<Page, string> = {
   review: '一份轻量的今日复盘',
   pet: '陪伴你成长的小伙伴',
   stats: '近期学习数据与趋势',
-  focus: '减少干扰，保持节奏',
+  focus: '选场景、调氛围，快速进入状态',
   profile: '账号资料与偏好',
   admin: '凭证与申诉复核'
 };
@@ -117,6 +118,10 @@ function App() {
   const [summary, setSummary] = useState<Summary | null>(null);
   /** 【当前页面路由状态】 */
   const [page, setPage] = useState<Page>('dashboard');
+  /** 【沉浸态】自习室进行中时全屏：隐藏侧边栏与顶栏 */
+  const [immersive, setImmersive] = useState(false);
+  /** 【侧边栏抽屉】沉浸态下从左侧滑出导航 */
+  const [navDrawerOpen, setNavDrawerOpen] = useState(false);
 
   /**
    * 【管理员自动重定向效果】
@@ -184,6 +189,10 @@ function App() {
     setSummary(null);
   }
 
+  // 离开自习室页立即退出沉浸态；退出沉浸态时收起抽屉
+  useEffect(() => { if (page !== 'focus') setImmersive(false); }, [page]);
+  useEffect(() => { if (!immersive) setNavDrawerOpen(false); }, [immersive]);
+
   if (!user) {
     return <AuthScreen onAuthed={() => { void bootstrap(); }} message={message} />;
   }
@@ -193,7 +202,16 @@ function App() {
   const showQuickCreate = page === 'dashboard';
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell${immersive ? ' immersive' : ''}${immersive && navDrawerOpen ? ' nav-open' : ''}`}>
+      {/* 沉浸态：左侧抽屉把手 + 遮罩，用于唤回被隐藏的侧边栏 */}
+      {immersive && (
+        <>
+          <button className="nav-drawer-handle" onClick={() => setNavDrawerOpen(o => !o)} aria-label="菜单">
+            <Menu size={18} />
+          </button>
+          {navDrawerOpen && <div className="nav-drawer-backdrop" onClick={() => setNavDrawerOpen(false)} />}
+        </>
+      )}
       <aside className="sidebar">
         <div className="brand">
           <span className="brand-mark" aria-hidden="true" />
@@ -208,7 +226,7 @@ function App() {
               <NavButton active={page === 'tasks'} icon={<ClipboardList size={16} />} label="任务" onClick={() => setPage('tasks')} />
               <NavButton active={page === 'timetable'} icon={<CalendarRange size={16} />} label="课表" onClick={() => setPage('timetable')} />
               <NavButton active={page === 'review'} icon={<CalendarCheck size={16} />} label="复盘" onClick={() => setPage('review')} />
-              <NavButton active={page === 'focus'} icon={<Timer size={16} />} label="专注" onClick={() => setPage('focus')} />
+              <NavButton active={page === 'focus'} icon={<Timer size={16} />} label="自习室" onClick={() => setPage('focus')} />
               <NavButton active={page === 'pet'} icon={<PawPrint size={16} />} label="宠物" onClick={() => setPage('pet')} />
             </div>
 
@@ -237,11 +255,14 @@ function App() {
 
       <main>
         <header className="topbar">
-          <div>
-            <p className="page-eyebrow">{pageEyebrows[page]}</p>
-            <h1>{pageTitles[page]}</h1>
-            <p className="page-sub">{pageSubtitles[page]}</p>
-          </div>
+          {/* 自习室页不显示大标题（随心学习，少干扰） */}
+          {page !== 'focus' ? (
+            <div>
+              <p className="page-eyebrow">{pageEyebrows[page]}</p>
+              <h1>{pageTitles[page]}</h1>
+              <p className="page-sub">{pageSubtitles[page]}</p>
+            </div>
+          ) : <div />}
           <div className="topbar-actions">
             {showQuickCreate && (
               <button className="primary-button" onClick={() => setPage('tasks')}>
@@ -274,7 +295,7 @@ function App() {
         {page === 'pet' && <PetPage pet={pet} />}
         {page === 'stats' && <StatsPage summary={summary} />}
         {page === 'profile' && <ProfilePage user={user} onUpdated={setUser} />}
-        {page === 'focus' && <FocusPage />}
+        {page === 'focus' && <FocusPage onImmersiveChange={setImmersive} />}
         {page === 'admin' && <AdminPage user={user} onRefresh={bootstrap} />}
       </main>
     </div>

@@ -235,6 +235,42 @@ MVP 中审核随任务提交自动触发，此接口返回说明消息。
 }
 ```
 
+## Timetable / 课表
+
+用户课表（一周课程网格），供前端展示，并作为背景画像注入 AI 拆解（见 `architecture.md` 的 `[COURSES]` 段）。导入走 LLM 解析：前端把教务系统导出的 `.xls`（用 SheetJS 在浏览器内转成 HTML 表格）或直接粘贴的课表 HTML 交给后端解析。全部接口需登录。
+
+### `GET /api/timetable?semester=`
+
+列出当前用户课表，可选 `semester` 过滤。
+
+### `POST /api/timetable/import`
+
+LLM 解析课表 HTML 落库，按用户限流 30/h、100/day。
+
+```json
+{ "html": "<table>...</table>", "semester": "2025-2026-2", "replace": true }
+```
+
+`replace=true` 时先清空旧课表（指定 `semester` 则只清该学期）。返回 `{ count, semester, courses }`。
+
+### `POST /api/timetable`
+
+手动新增一节课（不走 LLM）。`courseName` 与 `dayOfWeek`(1-7) 必填，其余可空；`weekParity` 为 `ALL`|`ODD`|`EVEN`。
+
+```json
+{ "courseName": "高等数学A2", "dayOfWeek": 1, "startSection": 1, "endSection": 2,
+  "teacher": "刘老师", "location": "公共楼105", "startTime": "08:00", "endTime": "09:40",
+  "weeks": "1-16", "weekParity": "ALL", "semester": "2025-2026-2" }
+```
+
+### `DELETE /api/timetable/{id}`
+
+删除一节课（仅限本人）。
+
+### `DELETE /api/timetable?semester=`
+
+清空课表；带 `semester` 只清该学期，不带清全部。
+
 ## Pet/Stats
 
 ### `GET /api/pet`
