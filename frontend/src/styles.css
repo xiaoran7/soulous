@@ -1208,7 +1208,7 @@ textarea.code, .textarea.code { font-family: var(--mono); font-size: 12.5px; }
 .status-line strong { font-family: var(--serif); font-weight: 400; font-size: 17px; color: var(--ink); }
 
 /* pet stat bars */
-.pet-stat-bars { display: grid; gap: 12px; margin-top: 16px; width: 100%; }
+.pet-stat-bars { display: grid; gap: 10px; margin-top: 0; width: 100%; }
 .stat-bar { display: grid; gap: 6px; }
 .stat-bar-head {
   display: flex;
@@ -1235,6 +1235,60 @@ textarea.code, .textarea.code { font-family: var(--mono); font-size: 12.5px; }
 .stat-bar.tone-warm .stat-bar-track > span { background: var(--amber); }
 .stat-bar.tone-cool .stat-bar-track > span { background: var(--sage-deep); }
 
+/* merged pet profile (identity + feedback) */
+.pet-profile-body {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 26px;
+  align-items: stretch;
+}
+.pet-profile-identity {
+  display: grid;
+  place-items: center;
+  align-content: start;
+  gap: 10px;
+  text-align: center;
+  padding-right: 26px;
+  border-right: 1px solid var(--line-2);
+}
+.pet-profile-identity h3 {
+  margin: 0;
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 22px;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.pet-profile-detail {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 16px;
+  text-align: left;
+}
+.pet-profile-detail .pet-state-copy { text-align: left; }
+.pet-profile-detail .pet-state-copy p { margin-left: 0; }
+
+/* merged growth dynamics (trend + action preview) — nested under profile */
+.pet-dynamics {
+  display: grid;
+  gap: 16px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line-2);
+}
+.pet-dynamics-block { display: grid; gap: 12px; }
+.pet-subhead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
 /* pet stage section */
 .pet-stage {
   display: grid;
@@ -1247,34 +1301,45 @@ textarea.code, .textarea.code { font-family: var(--mono); font-size: 12.5px; }
 }
 .pet-state-copy span {
   font-family: var(--serif);
-  font-size: 22px;
+  font-size: 18px;
   font-weight: 400;
   color: var(--ink);
   letter-spacing: -0.01em;
 }
 .pet-state-copy p {
-  margin: 8px auto 0;
+  margin: 6px auto 0;
   max-width: 560px;
   color: var(--ink-3);
-  line-height: 1.7;
-  font-size: 13.5px;
+  line-height: 1.6;
+  font-size: 12.5px;
 }
 .pet-state-grid {
   width: min(560px, 100%);
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  gap: 8px;
 }
 .pet-state-grid div {
   border: 1px solid var(--line);
   border-radius: var(--r-md);
-  padding: 12px 14px;
+  padding: 8px 8px;
   background: var(--bg-elev);
   display: grid;
-  gap: 4px;
+  gap: 3px;
+  min-width: 0;
 }
-.pet-state-grid span { font-family: var(--mono); color: var(--ink-3); font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; }
-.pet-state-grid strong { font-family: var(--serif); color: var(--ink); font-weight: 400; font-size: 22px; letter-spacing: -0.01em; }
+.pet-state-grid span { font-family: var(--mono); color: var(--ink-3); font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase; }
+.pet-state-grid strong {
+  font-family: var(--serif);
+  color: var(--ink);
+  font-weight: 400;
+  font-size: 14px;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
 
 .pet-avatar-frame {
   position: relative;
@@ -1283,8 +1348,8 @@ textarea.code, .textarea.code { font-family: var(--mono); font-size: 12.5px; }
   justify-content: center;
 }
 .pet-avatar-frame img {
-  width: 176px;
-  height: 176px;
+  width: 140px;
+  height: 140px;
   border-radius: 50%;
   object-fit: cover;
   border: 1px solid var(--line);
@@ -1294,7 +1359,7 @@ textarea.code, .textarea.code { font-family: var(--mono); font-size: 12.5px; }
 .pet-avatar-actions {
   display: flex;
   gap: 8px;
-  margin-top: 14px;
+  margin-top: 8px;
   align-items: center;
   flex-wrap: wrap;
   justify-content: center;
@@ -1311,41 +1376,20 @@ textarea.code, .textarea.code { font-family: var(--mono); font-size: 12.5px; }
   border-radius: var(--r-md);
   background: var(--bg-elev);
   color: var(--ink);
-  min-height: 170px;
-  padding: 14px;
+  min-height: 100px;
+  padding: 10px 8px;
   display: grid;
   place-items: center;
-  gap: 6px;
+  gap: 3px;
   text-align: center;
   transition: border-color .12s ease, background .12s ease;
 }
 .pet-action:hover, .pet-action.selected { border-color: var(--ink-3); background: var(--paper); }
 .pet-action.selected { background: color-mix(in oklab, var(--amber) 10%, var(--paper)); }
-.pet-action strong { font-size: 13.5px; font-weight: 500; }
-.pet-action span { font-family: var(--mono); color: var(--ink-3); font-size: 10.5px; letter-spacing: 0.04em; }
+.pet-action strong { font-size: 13px; font-weight: 500; }
+.pet-action span { font-family: var(--mono); color: var(--ink-3); font-size: 10px; letter-spacing: 0.04em; }
 
-/* pet logs */
-.pet-log-list { display: flex; flex-direction: column; }
-.pet-log-item {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 16px;
-  padding: 14px 0;
-  border-bottom: 1px solid var(--line-2);
-  align-items: center;
-}
-.pet-log-item:last-child { border-bottom: 0; }
-.pet-log-item strong { display: block; margin-bottom: 4px; font-weight: 500; font-size: 13.5px; }
-.pet-log-item .muted { font-family: var(--mono); font-size: 11px; color: var(--ink-3); letter-spacing: 0.02em; }
-.pet-log-item > span {
-  font-family: var(--mono);
-  color: var(--success);
-  font-weight: 500;
-  font-size: 13px;
-}
-.pet-log-item > span.neutral { color: var(--warn); }
-
-.chart { width: 100%; min-height: 220px; }
+.chart { width: 100%; min-height: 150px; }
 
 /* =========================================================
    Auth
@@ -2422,12 +2466,46 @@ main::-webkit-scrollbar-thumb:hover { background: var(--ink-4); background-clip:
   .sidebar-pet { display: none; }
   main { padding: 20px; }
   .content-grid, .two-column { grid-template-columns: 1fr; }
+  .pet-profile-body { grid-template-columns: 1fr; gap: 24px; }
+  .pet-profile-identity { padding-right: 0; border-right: 0; padding-bottom: 24px; border-bottom: 1px solid var(--line-2); }
+  .pet-profile-detail { text-align: center; }
+  .pet-profile-detail .pet-state-copy { text-align: center; }
   .panel.wide, .panel.full { grid-column: auto; }
   .metric-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .hero { grid-template-columns: 1fr; }
   .topbar { align-items: flex-start; gap: 12px; flex-direction: column; }
   .pet-action-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
+
+/* ===== Distilled Memory 可视化（目标详情） ===== */
+.memory-card {
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 14px 16px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ink-2);
+}
+.memory-object { display: grid; gap: 12px; }
+.memory-field { display: grid; gap: 4px; }
+.memory-key {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.memory-val { color: var(--ink); }
+/* nested object/list 缩进，形成层级感 */
+.memory-val .memory-object,
+.memory-val .memory-list {
+  margin-top: 4px;
+  padding-left: 12px;
+  border-left: 2px solid var(--line-2);
+}
+.memory-list { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+.memory-list li { color: var(--ink); }
 
 /* ===== Planner chat (AI 拆解会话) — ChatGPT/Gemini-ish bubble style ===== */
 .planner-chat-scroll {
@@ -2524,8 +2602,7 @@ main::-webkit-scrollbar-thumb:hover { background: var(--ink-4); background-clip:
   .task-row, .row-actions { align-items: flex-start; flex-direction: column; }
   .daily-review-hero { flex-direction: column; }
   .auth-panel { padding: 24px; }
-  .pet-state-grid, .pet-action-grid { grid-template-columns: 1fr; }
-  .pet-log-item { grid-template-columns: 1fr; }
+  .pet-state-grid { grid-template-columns: 1fr; }
   .admin-meta-grid { grid-template-columns: 1fr; }
   .profile-hero { align-items: flex-start; flex-direction: column; }
   .profile-facts { grid-template-columns: 1fr; }

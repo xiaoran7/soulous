@@ -43,65 +43,12 @@ import { PetPage } from './pages/PetPage';
 import { StatsPage } from './pages/StatsPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { AdminPage } from './pages/AdminPage';
-import { FocusPage } from './pages/FocusPage';
-import { TimetablePage, type TimetableImportState } from './pages/TimetablePage';
+import { FocusPage, resetFocusCache } from './pages/FocusPage';
+import { TimetablePage, resetTimetableCache, type TimetableImportState } from './pages/TimetablePage';
 import './styles.css';
 
 /** 【页面路由类型】 */
 type Page = 'dashboard' | 'tasks' | 'timetable' | 'planner' | 'review' | 'pet' | 'stats' | 'focus' | 'profile' | 'admin';
-
-/**
- * 【页面主标题映射】
- * 每个页面的大标题，使用 ReactNode 支持斜体强调效果。
- * 格式为"中文主题 + 英文副题"的混排风格。
- */
-const pageTitles: Record<Page, React.ReactNode> = {
-  dashboard: <>今天 <em>的节奏</em></>,
-  tasks: <>任务 <em>与凭证</em></>,
-  timetable: <>我的 <em>课表</em></>,
-  planner: <>AI <em>拆解目标</em></>,
-  review: <>今日 <em>复盘</em></>,
-  pet: <>宠物 <em>成长</em></>,
-  stats: <>学习 <em>统计</em></>,
-  focus: <>进入 <em>自习室</em></>,
-  profile: <>个人 <em>资料</em></>,
-  admin: <>审核 <em>管理</em></>
-};
-
-/**
- * 【页面眉毛文本映射】
- * 顶部栏中显示在主标题上方的小字，格式为"英文 · 中文"。
- * 提供页面的中英双语标识，增强设计感。
- */
-const pageEyebrows: Record<Page, string> = {
-  dashboard: 'Workspace · 工作台',
-  tasks: 'Tasks · 任务',
-  timetable: 'Timetable · 课表',
-  planner: 'Planner · 拆解',
-  review: 'Review · 复盘',
-  pet: 'Soul · 灵魂',
-  stats: 'Stats · 统计',
-  focus: 'Study Room · 自习室',
-  profile: 'Profile · 资料',
-  admin: 'Admin · 审核'
-};
-
-/**
- * 【页面副标题映射】
- * 顶部栏中显示在主标题下方的简短描述，帮助用户理解页面用途。
- */
-const pageSubtitles: Record<Page, string> = {
-  dashboard: '今日节奏一眼可见',
-  tasks: '创建任务并提交学习凭证',
-  timetable: '导入课表，让 AI 更懂你的学习节奏',
-  planner: '让 AI 把目标拆成可执行的任务',
-  review: '一份轻量的今日复盘',
-  pet: '陪伴你成长的小伙伴',
-  stats: '近期学习数据与趋势',
-  focus: '选场景、调氛围，快速进入状态',
-  profile: '账号资料与偏好',
-  admin: '凭证与申诉复核'
-};
 
 /**
  * 【App 根组件】
@@ -189,6 +136,8 @@ function App() {
     setTasks([]);
     setPet(null);
     setSummary(null);
+    resetTimetableCache();
+    resetFocusCache();
   }
 
   // 离开自习室页立即退出沉浸态；退出沉浸态时收起抽屉
@@ -196,7 +145,7 @@ function App() {
   useEffect(() => { if (!immersive) setNavDrawerOpen(false); }, [immersive]);
 
   if (!user) {
-    return <AuthScreen onAuthed={() => { void bootstrap(); }} message={message} />;
+    return <AuthScreen onAuthed={() => { resetTimetableCache(); resetFocusCache(); void bootstrap(); }} message={message} />;
   }
 
   const isAdmin = user.role === 'ADMIN';
@@ -257,14 +206,8 @@ function App() {
 
       <main>
         <header className="topbar">
-          {/* 自习室页不显示大标题（随心学习，少干扰） */}
-          {page !== 'focus' ? (
-            <div>
-              <p className="page-eyebrow">{pageEyebrows[page]}</p>
-              <h1>{pageTitles[page]}</h1>
-              <p className="page-sub">{pageSubtitles[page]}</p>
-            </div>
-          ) : <div />}
+          {/* 左上角页面标题已移除：导航已能表明当前位置，少一处干扰 */}
+          <div />
           <div className="topbar-actions">
             {showQuickCreate && (
               <button className="primary-button" onClick={() => setPage('tasks')}>

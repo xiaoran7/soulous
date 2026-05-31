@@ -27,20 +27,76 @@ function fmt(iso: string | null | undefined): string {
 }
 
 /**
- * 【蒸馏记忆格式化函数】
- * 将 JSON 字符串格式化为可读的缩进格式。
- * 解析失败时返回原始字符串（可能是纯文本格式的记忆）。
- *
- * @param json - JSON 字符串（可为 null）
- * @returns 格式化后的 JSON 或提示文本
+ * 【蒸馏记忆字段中文标签】将 distilled memory 的常见英文 key 映射为中文标签。
+ * 未命中的 key 直接显示原文，避免误翻译。
  */
-function formatMemory(json: string | null): string {
-  if (!json) return '（暂无 distilled memory）';
+const MEMORY_LABELS: Record<string, string> = {
+  goalStatement: '目标陈述',
+  successCriteria: '成功标准',
+  currentLevel: '当前水平',
+  selfReported: '自我评估',
+  inferredFromTasks: '任务推断',
+  constraints: '约束条件',
+  milestones: '阶段里程碑',
+  preferences: '学习偏好',
+  knownStrengths: '已知优势',
+  knownGaps: '薄弱环节',
+  focusAreas: '重点领域',
+  nextSteps: '下一步',
+  timeline: '时间安排',
+  resources: '资源',
+  notes: '备注'
+};
+
+/** 【字段标签】命中映射用中文，否则把 camelCase 拆成可读词 */
+function memoryLabel(key: string): string {
+  if (MEMORY_LABELS[key]) return MEMORY_LABELS[key];
+  return key.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, (c) => c.toUpperCase());
+}
+
+/** 【解析 distilled memory】解析 JSON，失败返回 null（按纯文本处理） */
+function parseMemory(json: string | null): unknown {
+  if (!json) return undefined;
   try {
-    return JSON.stringify(JSON.parse(json), null, 2);
+    return JSON.parse(json);
   } catch {
     return json;
   }
+}
+
+/**
+ * 【蒸馏记忆可视化渲染】递归把 JSON 渲染为可读结构：
+ * - 字符串/数字 → 文本
+ * - 数组 → 项目符号列表
+ * - 对象 → 字段名 + 值的分组
+ */
+function MemoryValue({ value }: { value: unknown }) {
+  if (value === null || value === undefined || value === '') {
+    return <span className="muted">—</span>;
+  }
+  if (Array.isArray(value)) {
+    if (value.length === 0) return <span className="muted">—</span>;
+    return (
+      <ul className="memory-list">
+        {value.map((item, i) => <li key={i}><MemoryValue value={item} /></li>)}
+      </ul>
+    );
+  }
+  if (typeof value === 'object') {
+    return (
+      <div className="memory-object">
+        {Object.entries(value as Record<string, unknown>)
+          .filter(([k]) => k !== 'version')
+          .map(([k, v]) => (
+            <div className="memory-field" key={k}>
+              <span className="memory-key">{memoryLabel(k)}</span>
+              <div className="memory-val"><MemoryValue value={v} /></div>
+            </div>
+          ))}
+      </div>
+    );
+  }
+  return <span>{String(value)}</span>;
 }
 
 /**
@@ -135,7 +191,7 @@ export function GoalDetailPanel({ goalId, onBack, onOpenSession, onChanged }: {
   }
 
   return (
-    <div className="panel" style={{ marginTop: 12 }}>
+    <div className="panel">
       <div className="panel-title">
         <h2>目标详情</h2>
         <button className="secondary-button" onClick={onBack}>
@@ -213,13 +269,13 @@ export function GoalDetailPanel({ goalId, onBack, onOpenSession, onChanged }: {
             </div>
           ))}
 
-          <h3 style={{ marginTop: 14 }}>Distilled Memory</h3>
-          <pre style={{
-            background: 'var(--surface-2)', padding: 10, borderRadius: 6,
-            fontSize: 12, overflow: 'auto', maxHeight: 240, whiteSpace: 'pre-wrap', wordBreak: 'break-word'
-          }}>
-            {formatMemory(detail.distilledMemoryJson)}
-          </pre>
+          <h3 style={{ marginTop: 14 }}>目标记忆 <em style={{ fontStyle: 'italic', color: 'var(--ink-3)', fontWeight: 400 }}>Distilled Memory</em></h3>
+          {(() => {
+            const mem = parseMemory(detail.distilledMemoryJson);
+            if (mem === undefined) return <div className="muted small">（暂无目标记忆）</div>;
+            if (typeof mem === 'string') return <div className="memory-card"><p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{mem}</p></div>;
+            return <div className="memory-card"><MemoryValue value={mem} /></div>;
+          })()}
 
           {(() => {
             const active = detail.tasks;

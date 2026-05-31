@@ -29,6 +29,18 @@ import { AiProgressBar } from '../components/AiProgressBar';
 const GOAL_STATUSES: GoalSummary['status'][] = ['ACTIVE', 'PAUSED', 'ACHIEVED', 'ABANDONED'];
 
 /**
+ * 【目标状态徽章映射】将目标状态转换为中文标签和任务模块同款徽章样式类
+ * 复用 styles.css 的 badge 配色：进行中=amber，暂停=warn，达成=success，放弃=danger
+ */
+const GOAL_STATUS_META: Record<GoalSummary['status'], { label: string; cls: string }> = {
+  ACTIVE: { label: '进行中', cls: 'badge-running' },
+  PAUSED: { label: '已暂停', cls: 'badge-paused' },
+  ACHIEVED: { label: '已达成', cls: 'badge-completed' },
+  ABANDONED: { label: '已放弃', cls: 'badge-aborted' },
+  ARCHIVED: { label: '已归档', cls: '' }
+};
+
+/**
  * 【格式化相对时间】将 ISO 日期字符串转换为相对时间描述
  * @param iso - ISO 日期字符串
  * @returns 如 "刚刚"、"5 分钟前"、"2 小时前"、"3 天前" 或具体日期
@@ -234,6 +246,18 @@ export function PlannerPage({ onRefresh, cache, setCache }: {
     }
   }
 
+  // 【目标详情独立页】点击「详情」后整页切换到目标详情，而非在列表下方内联展开
+  if (detailGoalId !== null && !session) {
+    return (
+      <GoalDetailPanel
+        goalId={detailGoalId}
+        onBack={() => { setDetailGoalId(null); refreshGoals(); }}
+        onOpenSession={(view) => { setSession(view); }}
+        onChanged={() => { refreshGoals(); onRefresh(); }}
+      />
+    );
+  }
+
   return (
     <div className="panel">
       {/* ===== 【页面标题和 AI 信息】 ===== */}
@@ -301,44 +325,33 @@ export function PlannerPage({ onRefresh, cache, setCache }: {
         </div>
       )}
 
-      {/* 【目标卡片列表】每个目标显示进度、状态和操作按钮 */}
+      {/* 【目标卡片列表】仿任务模块的 task-list / task-card 样式 */}
+      {goalList.length > 0 && (
+      <div className="task-list" style={{ marginTop: 8 }}>
       {goalList.map((g) => {
-        const pct = g.totalTasks > 0 ? Math.round((g.completedTasks / g.totalTasks) * 100) : 0;
         const isTerminal = g.status === 'ACHIEVED' || g.status === 'ABANDONED';
         const isEditing = editingId === g.id;
         const isDeleting = deletingId === g.id;
         const isConfirmingDelete = confirmDeleteGoalId === g.id;
+        const statusMeta = GOAL_STATUS_META[g.status] ?? { label: g.status, cls: '' };
         return (
-          <div key={g.id} className="task-card" style={{ marginTop: 8 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                {/* 【目标标题和标签】 */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <strong style={{ fontSize: 15 }}>{g.title}</strong>
-                  <span className="chip">{g.status}</span>
-                  {g.targetDate && <span className="chip" title="目标日期">📅 {g.targetDate}</span>}
-                </div>
-                {/* 【目标统计】任务完成数、待办数、对话次数、上次时间 */}
-                <div className="muted small" style={{ marginTop: 4 }}>
+          <div key={g.id} className="task-card">
+            {/* 【目标标题 + 状态徽章】仿任务模块的 task-row 结构 */}
+            <div className="task-row">
+              <div>
+                <strong>{g.title}</strong>
+                <p>
                   任务 {g.completedTasks}/{g.totalTasks} 完成
                   {g.openTasks > 0 ? ` · ${g.openTasks} 待办` : ''}
                   {' · '}已对话 {g.sessionCount} 次
                   {g.lastSessionAt ? ` · 上次：${formatRelative(g.lastSessionAt)}` : ''}
-                </div>
-                {/* 【进度条】展示任务完成百分比 */}
-                <div style={{
-                  height: 4, background: 'var(--surface-2)', borderRadius: 2, marginTop: 6, overflow: 'hidden'
-                }}>
-                  <div style={{
-                    height: '100%',
-                    width: `${pct}%`,
-                    background: g.status === 'ACHIEVED' ? 'var(--success, #6ab04c)' : 'var(--brand)',
-                    transition: 'width 0.2s'
-                  }} />
-                </div>
+                  {g.targetDate ? ` · 📅 ${g.targetDate}` : ''}
+                </p>
               </div>
-              {/* 【操作按钮组】推进、详情、编辑、删除 */}
-              <div className="row-actions" style={{ flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              <span className={`badge ${statusMeta.cls}`}>{statusMeta.label}</span>
+            </div>
+            {/* 【操作按钮组】推进、详情、编辑、删除 */}
+            <div className="row-actions">
                 <button
                   className="primary-button"
                   disabled={sessionLoading || !!session || isTerminal || isEditing || isDeleting}
@@ -390,7 +403,6 @@ export function PlannerPage({ onRefresh, cache, setCache }: {
                   </button>
                 )}
               </div>
-            </div>
             {/* 【编辑表单】展开时显示标题、目标日期、状态编辑 */}
             {isEditing && (
               <div style={{ marginTop: 10, padding: 10, background: 'var(--surface-2)', borderRadius: 6, display: 'grid', gap: 8 }}>
@@ -435,18 +447,10 @@ export function PlannerPage({ onRefresh, cache, setCache }: {
           </div>
         );
       })}
+      </div>
+      )}
 
       {deleteError && <div className="form-error" style={{ marginTop: 8 }}>{deleteError}</div>}
-
-      {/* 【目标详情面板】查看历史会话和关联任务 */}
-      {detailGoalId !== null && !session && (
-        <GoalDetailPanel
-          goalId={detailGoalId}
-          onBack={() => { setDetailGoalId(null); refreshGoals(); }}
-          onOpenSession={(view) => { setSession(view); }}
-          onChanged={() => { refreshGoals(); onRefresh(); }}
-        />
-      )}
 
       {/* 【AI 对话会话界面】与 AI 进行目标拆解对话 */}
       {session && (

@@ -64,6 +64,13 @@ function writeActiveHint(active: boolean) {
   } catch { /* 隐私模式/配额超限静默忽略 */ }
 }
 
+/**
+ * 【自习室模块级缓存】保留上次拉取的进行中会话与可关联任务，跨面板切换重建时
+ * 直接复用、不再请求，消除每次进入的顿挫。登出/重新登录时由 resetFocusCache() 清空。
+ */
+let focusCache: { active: FocusSession | null; tasks: StudyTask[] } | null = null;
+export function resetFocusCache() { focusCache = null; }
+
 const AMBIENT_ICON: Record<AmbientKind, React.ReactNode> = {
   rain: <CloudRain size={13} />,
   waves: <Waves size={13} />,
@@ -278,11 +285,13 @@ function ImmersiveRoom({ session, scene, prefs, audio, audioControls, onUpdate, 
  */
 export function FocusPage({ onImmersiveChange }: { onImmersiveChange?: (v: boolean) => void } = {}) {
   const { prefs, update } = useStudyRoomPrefs();
-  const [active, setActive] = useState<FocusSession | null>(null);
-  const [tasks, setTasks] = useState<StudyTask[]>([]);
-  // 仅当本地提示"专注中"时才让首屏等待恢复沉浸态；否则设置态直接渲染，杜绝加载闪屏
-  const [loading, setLoading] = useState(readActiveHint);
+  const [active, setActive] = useState<FocusSession | null>(() => focusCache?.active ?? null);
+  const [tasks, setTasks] = useState<StudyTask[]>(() => focusCache?.tasks ?? []);
+  // 有缓存直接渲染、无需等待；无缓存时仅当本地提示"专注中"才等首屏恢复沉浸态，否则零闪屏
+  const [loading, setLoading] = useState(() => focusCache === null && readActiveHint());
   const [loadError, setLoadError] = useState('');
+  // 渲染期捕获是否需要首次拉取，避免被同步缓存的 effect 抢先改写
+  const needInitialLoad = useRef(focusCache === null);
 
   const [linkTaskId, setLinkTaskId] = useState<number | ''>('');
   const [starting, setStarting] = useState(false);
@@ -361,7 +370,13 @@ export function FocusPage({ onImmersiveChange }: { onImmersiveChange?: (v: boole
       setLoading(false);
     }
   }
-  useEffect(() => { void load(); }, []);
+  // 会话/任务变化时同步回模块缓存
+  useEffect(() => { focusCache = { active, tasks }; }, [active, tasks]);
+
+  useEffect(() => {
+    if (needInitialLoad.current) void load(); // 仅首次进入拉取；有缓存直接复用
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function handleUpdate(session: FocusSession) {
     if (session.status === 'COMPLETED' || session.status === 'ABORTED') {
