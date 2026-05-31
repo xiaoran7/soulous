@@ -35,7 +35,23 @@ function detectSemester(text: string): string | undefined {
   return m ? `${m[1]}-${m[2]}-${m[3]}` : undefined;
 }
 
-export function TimetablePage({ onRefresh }: { onRefresh: () => void }) {
+/**
+ * 【课表导入状态】importing=AI 解析中；msg/err=成功/失败提示。
+ * 提升到 App 层持有，使 AI 解析过程中切换面板再回来不丢进度与结果
+ * （后端请求本就不会因组件卸载而中断，丢的只是这份 UI 状态）。
+ */
+export interface TimetableImportState {
+  importing: boolean;
+  msg: string;
+  err: string;
+}
+const EMPTY_IMPORT: TimetableImportState = { importing: false, msg: '', err: '' };
+
+export function TimetablePage({ onRefresh, importState, setImportState }: {
+  onRefresh: () => void;
+  importState?: TimetableImportState;
+  setImportState?: React.Dispatch<React.SetStateAction<TimetableImportState>>;
+}) {
   const [courses, setCourses] = useState<CourseEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedSemester, setSelectedSemester] = useState<string>('');
@@ -48,9 +64,16 @@ export function TimetablePage({ onRefresh }: { onRefresh: () => void }) {
 
   // 导入区
   const [html, setHtml] = useState('');
-  const [importing, setImporting] = useState(false);
-  const [importMsg, setImportMsg] = useState('');
-  const [importErr, setImportErr] = useState('');
+  // 导入状态优先用外部（App 层）持有，未提供时回退内部，保证组件可独立使用
+  const [internalImport, setInternalImport] = useState<TimetableImportState>(EMPTY_IMPORT);
+  const impState = importState ?? internalImport;
+  const updateImport = setImportState ?? setInternalImport;
+  const importing = impState.importing;
+  const importMsg = impState.msg;
+  const importErr = impState.err;
+  const setImporting = (v: boolean) => updateImport((prev) => ({ ...prev, importing: v }));
+  const setImportMsg = (v: string) => updateImport((prev) => ({ ...prev, msg: v }));
+  const setImportErr = (v: string) => updateImport((prev) => ({ ...prev, err: v }));
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
 

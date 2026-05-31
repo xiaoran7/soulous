@@ -46,6 +46,24 @@ function currentElapsed(session: FocusSession): number {
 /** 【正计时启动时给后端的占位时长】仅满足接口（不再用于倒计时/不展示） */
 const PLACEHOLDER_MINUTES = 25;
 
+/**
+ * 【是否有进行中会话的本地提示】
+ * 自习室设置态（选场景/调音量）完全来自本地（常量 + localStorage + IndexedDB），
+ * 不依赖网络。唯一需要等网络才能决定的是"是否要直接进沉浸态"。
+ * 用这个本地提示来决定首屏是否需要等待：绝大多数情况下没有进行中会话，
+ * 首屏直接渲染设置态、零加载闪屏；只有真在专注中时才短暂等待恢复沉浸态。
+ */
+const ACTIVE_HINT_KEY = 'soulous.studyroom.active.v1';
+function readActiveHint(): boolean {
+  try { return localStorage.getItem(ACTIVE_HINT_KEY) === '1'; } catch { return false; }
+}
+function writeActiveHint(active: boolean) {
+  try {
+    if (active) localStorage.setItem(ACTIVE_HINT_KEY, '1');
+    else localStorage.removeItem(ACTIVE_HINT_KEY);
+  } catch { /* 隐私模式/配额超限静默忽略 */ }
+}
+
 const AMBIENT_ICON: Record<AmbientKind, React.ReactNode> = {
   rain: <CloudRain size={13} />,
   waves: <Waves size={13} />,
@@ -262,7 +280,8 @@ export function FocusPage({ onImmersiveChange }: { onImmersiveChange?: (v: boole
   const { prefs, update } = useStudyRoomPrefs();
   const [active, setActive] = useState<FocusSession | null>(null);
   const [tasks, setTasks] = useState<StudyTask[]>([]);
-  const [loading, setLoading] = useState(true);
+  // 仅当本地提示"专注中"时才让首屏等待恢复沉浸态；否则设置态直接渲染，杜绝加载闪屏
+  const [loading, setLoading] = useState(readActiveHint);
   const [loadError, setLoadError] = useState('');
 
   const [linkTaskId, setLinkTaskId] = useState<number | ''>('');
@@ -328,10 +347,13 @@ export function FocusPage({ onImmersiveChange }: { onImmersiveChange?: (v: boole
   }, [active, onImmersiveChange]);
 
   async function load() {
-    setLoading(true); setLoadError('');
+    // 不主动置 loading=true：首屏由 readActiveHint 决定；后台刷新静默进行，避免闪屏
+    setLoadError('');
     try {
       const [activeRes, tasksRes] = await Promise.all([api.activeFocus(), api.tasks()]);
-      setActive('id' in activeRes ? activeRes as FocusSession : null);
+      const session = 'id' in activeRes ? activeRes as FocusSession : null;
+      setActive(session);
+      writeActiveHint(!!session); // 同步本地提示，保证下次进入的首屏判断准确
       setTasks(tasksRes);
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : '加载自习室数据失败');
@@ -345,6 +367,7 @@ export function FocusPage({ onImmersiveChange }: { onImmersiveChange?: (v: boole
     if (session.status === 'COMPLETED' || session.status === 'ABORTED') {
       audio.stop();
       setActive(null);
+      writeActiveHint(false);
       void load(); // 刷新会话/任务状态
     } else {
       setActive(session);
@@ -362,6 +385,7 @@ export function FocusPage({ onImmersiveChange }: { onImmersiveChange?: (v: boole
     try {
       const session = await api.startFocus(title, PLACEHOLDER_MINUTES, linkTaskId === '' ? null : linkTaskId);
       setActive(session);
+      writeActiveHint(true);
     } catch (err) {
       audio.stop();
       setStartErr(err instanceof Error ? err.message : '进入失败');

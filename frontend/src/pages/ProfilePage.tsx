@@ -14,6 +14,7 @@ import { Save, Settings, Upload, UserRound, Cat } from 'lucide-react';
 import { api } from '../api';
 import type { Pet, User } from '../types';
 import { ClickableAvatar } from '../components/shared';
+import { downscaleImage } from '../imageResize';
 
 /**
  * 【个人资料页面主组件】
@@ -109,7 +110,9 @@ export function ProfilePage({ user, onUpdated }: { user: User; onUpdated: (user:
     setError('');
     setMessage('');
     try {
-      const updated = await api.uploadAvatar(file, setUploadProgress);
+      // 先在浏览器里把头像缩到小尺寸，避免大图被反代拦成 413
+      const resized = await downscaleImage(file);
+      const updated = await api.uploadAvatar(resized, setUploadProgress);
       onUpdated(updated);
       setMessage('头像已更新。');
     } catch (err) {

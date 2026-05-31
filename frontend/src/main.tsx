@@ -44,7 +44,7 @@ import { StatsPage } from './pages/StatsPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { AdminPage } from './pages/AdminPage';
 import { FocusPage } from './pages/FocusPage';
-import { TimetablePage } from './pages/TimetablePage';
+import { TimetablePage, type TimetableImportState } from './pages/TimetablePage';
 import './styles.css';
 
 /** 【页面路由类型】 */
@@ -140,6 +140,8 @@ function App() {
   const [message, setMessage] = useState('');
   /** 【AI 拆解页面的缓存状态，避免切换页面时丢失输入】 */
   const [plannerCache, setPlannerCache] = useState<PlannerCache>({ goal: '' });
+  /** 【课表导入状态】提升到 App 层，AI 解析中切走再回来不丢进度/结果 */
+  const [timetableImport, setTimetableImport] = useState<TimetableImportState>({ importing: false, msg: '', err: '' });
   /** 【每日复盘数据缓存】 */
   const [dailyReview, setDailyReview] = useState<DailyReview | null>(null);
 
@@ -289,7 +291,7 @@ function App() {
 
         {page === 'dashboard' && <Dashboard tasks={tasks} pet={pet} summary={summary} onRefresh={bootstrap} onOpenTasks={() => setPage('tasks')} onOpenReview={() => setPage('review')} onOpenPet={() => setPage('pet')} />}
         {page === 'tasks' && <TasksPage tasks={tasks} onRefresh={bootstrap} />}
-        {page === 'timetable' && <TimetablePage onRefresh={bootstrap} />}
+        {page === 'timetable' && <TimetablePage onRefresh={bootstrap} importState={timetableImport} setImportState={setTimetableImport} />}
         {page === 'planner' && <PlannerPage onRefresh={bootstrap} cache={plannerCache} setCache={setPlannerCache} />}
         {page === 'review' && <DailyReviewPage summary={summary} review={dailyReview} onReviewChange={setDailyReview} />}
         {page === 'pet' && <PetPage pet={pet} />}
