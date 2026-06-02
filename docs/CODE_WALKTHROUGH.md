@@ -76,8 +76,8 @@ flowchart LR
 | RAG 长时记忆 | [`com.soulous.rag`](../backend/src/main/java/com/soulous/rag) + `ai.embedding` | — | `memory_embedding` |
 | 宠物成长规则 | [`com.soulous.pet`](../backend/src/main/java/com/soulous/pet) | `pages/PetPage.tsx` + `PetSprite.tsx` | `pet`, `exp_log` |
 | 每日复盘 | [`com.soulous.review`](../backend/src/main/java/com/soulous/review) | `pages/DailyReviewPage.tsx` | （从已有表聚合） |
-| 数据看板 | [`com.soulous.stats`](../backend/src/main/java/com/soulous/stats) | `pages/StatsPage.tsx` + `components/TrendChart.tsx` | （从已有表聚合） |
-| 通知 | [`com.soulous.notification`](../backend/src/main/java/com/soulous/notification) | `components/NotificationBell.tsx` | `notification` |
+| 数据看板 | [`com.soulous.stats`](../backend/src/main/java/com/soulous/stats) | `components/TrendChart.tsx`（趋势图已并入 `DailyReviewPage`，独立统计页已下线） | （从已有表聚合） |
+| 通知 | [`com.soulous.notification`](../backend/src/main/java/com/soulous/notification) | 后端保留；前端铃铛入口已移除 | `notification` |
 | 申诉 | [`com.soulous.appeal`](../backend/src/main/java/com/soulous/appeal) | `pages/AdminPage.tsx` | `appeal` |
 | 后台 / 审计 | `com.soulous.admin` + `com.soulous.audit` | `pages/AdminPage.tsx` | `admin_audit_log`, `audit_log` |
 | 文件存储 | [`com.soulous.storage`](../backend/src/main/java/com/soulous/storage) | `utils/imageCompress.ts` + `ProofUploader.tsx` | 磁盘 `/uploads/**` 或 S3 |
@@ -531,11 +531,9 @@ flowchart TB
     M --> P4["ChatPage → ChatConversation / ChatComposer"]
     M --> P5["FocusPage"]
     M --> P6["PetPage → PetSprite"]
-    M --> P7["DailyReviewPage"]
-    M --> P8["StatsPage → TrendChart 懒加载 Recharts"]
+    M --> P7["DailyReviewPage → CoursePie / TrendChart 懒加载 Recharts"]
     M --> P9["AdminPage"]
     M --> P10["ProfilePage"]
-    M --> NB["NotificationBell<br/>setInterval 30s 轮询"]
     P1 --> API["api.ts"]
     P2 --> API
     P3 --> API

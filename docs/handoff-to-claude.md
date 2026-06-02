@@ -41,9 +41,8 @@ frontend http://localhost:5173
 - 用户可查看提交记录，并打开单条"审核反馈"，看到 AI 分数、原因、建议、关联任务以及管理员复核意见（`adminComment` 字段）。
 - 被打回或要求补充的提交可发起申诉。
 - AI 任务拆解：输入学习目标，生成可加入任务列表的任务。
-- AI 每日复盘：根据今日任务、提交、学习时长、经验日志、宠物状态生成总结。
+- AI 每日复盘：根据今日任务、提交、学习时长、经验日志、宠物状态生成总结；同页展示今日完成度、课程分布、近 7 天学习时长趋势（原独立统计页已并入此页）。
 - 宠物成长页：宠物状态、动作预览、成长事件日志。
-- 统计页：今日指标、近 7 天趋势、课程分布。
 - 自习室：选场景 + 环境音/音乐 + **正计时**专注（非倒计时，时间往上加），点进入即全屏沉浸（隐藏侧栏/顶栏，抽屉唤回）；支持自定义上传场景图/音乐。后端会话沿用开始/暂停/继续/完成/中止。
 
 管理员侧：
@@ -74,10 +73,10 @@ frontend http://localhost:5173
 
 前端（`frontend/src/`）：
 
-- `main.tsx`：应用外壳，仅 174 行；按 page 调度子页面。
-- `pages/`：`AuthScreen`、`Dashboard`、`TasksPage`、`TimetablePage`、`ChatPage`（AI 拆解对话）、`DailyReviewPage`、`PetPage`、`StatsPage`、`FocusPage`、`ProfilePage`、`SettingsPage`、`AdminPage`。`ChatPage` 配 `components/ChatConversation` + `components/ChatComposer`。
+- `main.tsx`：应用外壳；按 page 调度子页面，含全局侧边栏收起/展开（localStorage `soulous.sidebar.collapsed.v1`，收起后主区自适应铺满）。顶栏已精简（移除通知铃铛与用户卡片，仅工作台保留「新建任务」）。
+- `pages/`：`AuthScreen`、`Dashboard`、`TasksPage`、`TimetablePage`、`ChatPage`（AI 拆解对话）、`DailyReviewPage`（已并入近 7 天趋势图，原独立统计页下线）、`PetPage`、`FocusPage`、`ProfilePage`、`SettingsPage`、`AdminPage`。`ChatPage` 配 `components/ChatConversation` + `components/ChatComposer`。
 - `components/shared.tsx`：跨页面共享组件（NavButton、Metric、TaskRow、PetCard、Empty、ProgressRing、SidebarPet、animationForPet 等）。
-- `components/TrendChart.tsx`：Recharts 趋势图，独立 chunk，被 Dashboard 和 StatsPage 通过 `React.lazy` 懒加载。
+- `components/TrendChart.tsx`：Recharts 趋势图，独立 chunk，被 Dashboard 和 DailyReviewPage 通过 `React.lazy` 懒加载。
 - `api.ts`：API 客户端。
 - `types.ts`：前端类型。
 - `PetSprite.tsx`：宠物 spritesheet 动画组件。
@@ -120,7 +119,7 @@ npm run build     # 应无 chunk size 警告
 
 - `mvn test`：50 通过。
 - `npm test`：14 通过。
-- `npm run build`：之前通过，无 chunk size 警告。主 bundle 约 266 KB，TrendChart 独立 chunk 约 394 KB（首次进入统计/工作台页才下载）。
+- `npm run build`：之前通过，无 chunk size 警告。主 bundle 约 266 KB，TrendChart 独立 chunk 约 394 KB（首次进入复盘/工作台页才下载）。
 
 ## 重要 API
 

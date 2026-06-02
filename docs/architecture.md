@@ -15,7 +15,7 @@ nginx（端口 80/443）
   └── /*, /assets/**       → React SPA (dist/)
 ```
 
-- **frontend**：React 19 + Vite + TypeScript，SPA，页面路由：工作台 / 任务 / 课表 / 复盘 / 自习室 / AI 拆解 / 宠物 / 统计 / 管理后台。
+- **frontend**：React 19 + Vite + TypeScript，SPA，页面路由：工作台 / 任务 / 课表 / 复盘（含近 7 天趋势，原统计页已并入）/ 自习室 / AI 拆解 / 宠物 / 管理后台。
 - **backend**：Spring Boot 3 + Java 21 + JPA + Spring Security，提供业务 REST API；feature-package 拆分（`com.soulous.{admin,auth,focus,goal,task,pet,...}`）。
 - **DB**：默认 H2 文件库（`backend/data/soulous.mv.db`），可切 MySQL。**Flyway 管理迁移**（h2 / mysql 各一套，`db/migration/{vendor}/V*.sql`）。
 
@@ -63,7 +63,7 @@ nginx（端口 80/443）
 | `stats` | 今日指标、近 7 天趋势、课程占比 |
 | `review` | 管理员提交队列、人工复核 |
 | `appeal` | 内容审核误拦申诉流程 |
-| `notification` | 站内通知（AI 审核 / 申诉事件），前端 `NotificationBell` |
+| `notification` | 站内通知（AI 审核 / 申诉事件）；后端保留，前端铃铛入口已移除 |
 | `audit` | 统一 `audit_log`：login/logout/password/refresh-replay/admin 操作 |
 | `moderation` | 内容审核（fast-path + LLM，默认关） |
 | `rag` | 历史打卡 RAG（embedding + cosine + 时间衰减，默认关） |
