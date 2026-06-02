@@ -56,9 +56,9 @@ nginx（端口 80/443）
 | `auth` | 注册 / 登录 / refresh / logout / 改密；双 token；PasswordPolicy |
 | `task` | 任务 CRUD、开始、提交凭证、AI 初审、内容审核 |
 | `focus` | 专注计时会话，关联到 task |
-| `goal` | 学习目标管理 |
-| `aisession` | AI 对话式拆解目标，RAG 增强上下文 + 注入用户课表（`[COURSES]` 段，让 AI 了解所修专业方向） |
-| `timetable` | 课表：LLM 解析导入（HTML/教务 .xls）、手动增删、按学期/周次组织；课程名喂给 `aisession` |
+| `chat` | **AI 拆解对话（当前）**：Gemini 式「分类 → 对话 → 消息」聊天，流式回复、`PLAN_JSON` 计划草案落地为 `StudyTask`（不挂目标）、`CLARIFY_JSON` 结构化追问、滚动摘要控长、输入/输出审核；附件 md/pdf/txt 由前端提取文本拼进消息 |
+| `goal` / `aisession` | 旧的目标中心拆解（**已下线**，2026-06-01 重构）：REST 接口删除，表与服务暂留，仅 RAG 目标记忆 / 每日复盘 / `study_task.goal_id` 仍引用 |
+| `timetable` | 课表：LLM 解析导入（HTML/教务 .xls）、手动增删、按学期/周次组织 |
 | `pet` | 宠物成长、经验、心情；心情加权 EXP |
 | `stats` | 今日指标、近 7 天趋势、课程占比 |
 | `review` | 管理员提交队列、人工复核 |

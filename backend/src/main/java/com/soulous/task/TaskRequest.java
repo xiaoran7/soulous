@@ -21,6 +21,8 @@ public record TaskRequest(
         Difficulty difficulty,
         /** 【课程名称，可选，用于按课程分类任务】 */
         String courseName,
+        /** 【大分类，可选，更高一层的主题分组，与 AI 拆解的对话分类共用命名】 */
+        String category,
         /** 【预计学习时长（分钟），可选，用于任务规划和时间估算】 */
         Integer estimatedMinutes,
         /** 【基础经验值，可选，任务完成时获得的基础奖励】 */

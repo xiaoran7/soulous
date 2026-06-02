@@ -28,6 +28,16 @@ public final class GoalDtos {
     ) {}
 
     /**
+     * 【更新目标记忆请求体：用于在「目标工作台 · 设置」中导入/覆盖 distilled memory。
+     *  memoryJson 必须是合法 JSON 字符串，服务端会校验后存入 Goal.distilledMemoryJson。】
+     *
+     * @param memoryJson 【蒸馏记忆 JSON 文本，最长 20000 字符】
+     */
+    public record UpdateMemoryRequest(
+            @Size(max = 20000) String memoryJson
+    ) {}
+
+    /**
      * 【删除目标响应体：返回删除操作的统计结果。】
      *
      * @param id 【被删除的目标 ID】

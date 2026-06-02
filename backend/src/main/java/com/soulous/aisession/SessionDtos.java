@@ -26,9 +26,11 @@ public final class SessionDtos {
     /**
      * 【打卡跟进请求：用户对已有目标发起 check-in 时的请求体】
      *
-     * @param goalId 【目标 ID】
+     * @param goalId   【目标 ID】
+     * @param forceNew 【是否强制开启一个全新的空白会话（点击「新对话」时为 true）。
+     *                  为 null/false 时沿用旧行为：若已有活跃草稿会话则复用。】
      */
-    public record StartCheckInRequest(Long goalId) {}
+    public record StartCheckInRequest(Long goalId, Boolean forceNew) {}
 
     /**
      * 【发送消息请求：用户在会话中发送消息时的请求体】

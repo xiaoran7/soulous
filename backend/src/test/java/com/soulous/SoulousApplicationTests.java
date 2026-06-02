@@ -70,9 +70,9 @@ class SoulousApplicationTests {
         var unique = "crud" + System.nanoTime();
         var auth = users.register(new RegisterRequest(unique, "Passw0rd!","任务用户", unique + "@example.com"));
         var user = users.byToken(auth.token());
-        var task = tasks.create(user, new TaskRequest("整理错题", "复盘一组练习题", TaskType.REVIEW, Difficulty.EASY, "算法", 20, 12, null, null));
+        var task = tasks.create(user, new TaskRequest("整理错题", "复盘一组练习题", TaskType.REVIEW, Difficulty.EASY, "算法", null, 20, 12, null, null));
 
-        var updated = tasks.update(user, task.id, new TaskRequest("整理动态规划错题", "补齐状态转移和边界条件", TaskType.REVIEW, Difficulty.NORMAL, "算法", 35, 24, null, null));
+        var updated = tasks.update(user, task.id, new TaskRequest("整理动态规划错题", "补齐状态转移和边界条件", TaskType.REVIEW, Difficulty.NORMAL, "算法", null, 35, 24, null, null));
 
         assertThat(updated.title).isEqualTo("整理动态规划错题");
         assertThat(updated.baseExp).isEqualTo(24);
@@ -92,7 +92,7 @@ class SoulousApplicationTests {
         var unique = "tester" + System.nanoTime();
         var auth = users.register(new RegisterRequest(unique, "Passw0rd!","测试用户", unique + "@example.com"));
         var user = users.byToken(auth.token());
-        var task = tasks.create(user, new TaskRequest("复习数据结构栈和队列", "总结栈和队列的区别", TaskType.STUDY, Difficulty.NORMAL, "数据结构", 30, 30, null, null));
+        var task = tasks.create(user, new TaskRequest("复习数据结构栈和队列", "总结栈和队列的区别", TaskType.STUDY, Difficulty.NORMAL, "数据结构", null, 30, 30, null, null));
         tasks.start(user, task.id);
         var result = tasks.submit(user, task.id, new SubmitTaskRequest("我复习了栈的后进先出、队列的先进先出，并整理了循环队列判满条件。", "", "", 35, "", null));
         var pet = pets.get(user);
@@ -109,7 +109,7 @@ class SoulousApplicationTests {
         var unique = "rejecter" + System.nanoTime();
         var auth = users.register(new RegisterRequest(unique, "Passw0rd!","反馈用户", unique + "@example.com"));
         var user = users.byToken(auth.token());
-        var task = tasks.create(user, new TaskRequest("学习二叉树遍历", "提交学习总结", TaskType.STUDY, Difficulty.NORMAL, "数据结构", 30, 30, null, null));
+        var task = tasks.create(user, new TaskRequest("学习二叉树遍历", "提交学习总结", TaskType.STUDY, Difficulty.NORMAL, "数据结构", null, 30, 30, null, null));
         tasks.start(user, task.id);
 
         tasks.submit(user, task.id, new SubmitTaskRequest("短", "", "", 5, "", null));
@@ -133,7 +133,7 @@ class SoulousApplicationTests {
         var unique = "manual" + System.nanoTime();
         var auth = users.register(new RegisterRequest(unique, "Passw0rd!","人工复核用户", unique + "@example.com"));
         var user = users.byToken(auth.token());
-        var task = tasks.create(user, new TaskRequest("补交学习凭证", "等待管理员确认", TaskType.STUDY, Difficulty.NORMAL, "数学", 20, 30, null, null));
+        var task = tasks.create(user, new TaskRequest("补交学习凭证", "等待管理员确认", TaskType.STUDY, Difficulty.NORMAL, "数学", null, 20, 30, null, null));
         tasks.start(user, task.id);
         var result = tasks.submit(user, task.id, new SubmitTaskRequest("短", "", "", 5, "", null));
         var submission = (TaskSubmission) result.get("submission");
@@ -173,7 +173,7 @@ class SoulousApplicationTests {
         var otherAuth = users.register(new RegisterRequest(unique + "other", "Passw0rd!","其他用户", unique + "other@example.com"));
         var user = users.byToken(auth.token());
         var other = users.byToken(otherAuth.token());
-        var task = tasks.create(user, new TaskRequest("查看审核反馈", "提交后查看 AI 说明", TaskType.STUDY, Difficulty.NORMAL, "英语", 20, 25, null, null));
+        var task = tasks.create(user, new TaskRequest("查看审核反馈", "提交后查看 AI 说明", TaskType.STUDY, Difficulty.NORMAL, "英语", null, 20, 25, null, null));
         tasks.start(user, task.id);
         var result = tasks.submit(user, task.id, new SubmitTaskRequest("短", "", "", 5, "", null));
         var submission = (TaskSubmission) result.get("submission");
@@ -193,7 +193,7 @@ class SoulousApplicationTests {
         var unique = "hardelete" + System.nanoTime();
         var auth = users.register(new RegisterRequest(unique, "Passw0rd!","硬删除用户", unique + "@example.com"));
         var user = users.byToken(auth.token());
-        var task = tasks.create(user, new TaskRequest("可删除任务", "已有提交记录", TaskType.STUDY, Difficulty.NORMAL, "英语", 20, 25, null, null));
+        var task = tasks.create(user, new TaskRequest("可删除任务", "已有提交记录", TaskType.STUDY, Difficulty.NORMAL, "英语", null, 20, 25, null, null));
         tasks.start(user, task.id);
         tasks.submit(user, task.id, new SubmitTaskRequest("短", "", "", 5, "", null));
 
@@ -211,7 +211,7 @@ class SoulousApplicationTests {
         var unique = "worker" + System.nanoTime();
         var auth = users.register(new RegisterRequest(unique, "Passw0rd!","工作用户", unique + "@example.com"));
         var user = users.byToken(auth.token());
-        var task = tasks.create(user, new TaskRequest("完成算法练习", "写一段练习总结", TaskType.CODING, Difficulty.NORMAL, "算法", 30, 30, null, null));
+        var task = tasks.create(user, new TaskRequest("完成算法练习", "写一段练习总结", TaskType.CODING, Difficulty.NORMAL, "算法", null, 30, 30, null, null));
 
         tasks.start(user, task.id);
         assertThat(pets.get(user).status).isEqualTo(PetStatus.WORKING);

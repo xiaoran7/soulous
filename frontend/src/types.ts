@@ -34,6 +34,8 @@ export interface StudyTask {
   taskType: TaskType;
   difficulty: Difficulty;
   courseName: string;
+  /** 【大分类：更高一层的主题分组，与 AI 拆解的对话分类共用命名。可空】 */
+  category?: string | null;
   estimatedMinutes: number;
   actualMinutes: number;
   baseExp: number;
@@ -263,53 +265,44 @@ export interface FocusSession {
   createdAt: string;
 }
 
+/** 【聊天消息角色：USER 为用户，ASSISTANT 为 AI 助手】 */
+export type ChatRole = 'USER' | 'ASSISTANT';
+
 /**
- * 【目标摘要接口】
- * 用户创建的学习目标的概要信息，包含目标状态（活跃/暂停/达成/放弃/归档）、
- * 目标日期、关联会话数和任务完成进度。
- * 用于目标列表页和拆解会话选择。
+ * 【聊天分类接口】用户自建的对话文件夹（类似 Gemini 分组）。
  */
-export interface GoalSummary {
+export interface ChatCategory {
   id: number;
-  title: string;
-  status: 'ACTIVE' | 'PAUSED' | 'ACHIEVED' | 'ABANDONED' | 'ARCHIVED';
-  targetDate?: string | null;
-  sessionCount: number;
-  lastSessionAt: string | null;
-  updatedAt: string | null;
-  totalTasks: number;
-  completedTasks: number;
-  openTasks: number;
+  name: string;
 }
 
-/** 【会话类型：NEW_GOAL 为拆解新目标，CHECK_IN 为推进已有目标】 */
-export type SessionKind = 'NEW_GOAL' | 'CHECK_IN';
-/** 【会话状态：从起草到计划提出、确认、提交、放弃或关闭的完整流程】 */
-export type SessionState = 'DRAFTING' | 'PLAN_PROPOSED' | 'COMMITMENT' | 'COMMITTED' | 'ABANDONED' | 'CLOSED';
-/** 【对话角色：USER 为用户，ASSISTANT 为 AI 助手，SYSTEM 为系统消息】 */
-export type TurnRole = 'USER' | 'ASSISTANT' | 'SYSTEM';
+/**
+ * 【聊天对话摘要接口】侧边栏列表项。categoryId 为 null 表示未分类（默认组）。
+ */
+export interface ChatConversationSummary {
+  id: number;
+  title: string;
+  categoryId: number | null;
+  lastActivityAt: string;
+  messageCount: number;
+}
 
 /**
- * 【会话对话轮次视图接口】
- * 表示 AI 拆解会话中的一轮对话，包含轮次序号、角色和消息内容。
- * 用于渲染聊天界面的消息列表。
+ * 【侧边栏树接口】全部分类 + 全部对话摘要（前端据 categoryId 分组渲染）。
  */
-export interface SessionTurnView {
+export interface ChatTree {
+  categories: ChatCategory[];
+  conversations: ChatConversationSummary[];
+}
+
+/**
+ * 【聊天消息视图接口】对话中的一条发言。
+ */
+export interface ChatMessageView {
   id: number;
   idx: number;
-  role: TurnRole;
+  role: ChatRole;
   content: string;
-}
-
-/**
- * 【重复目标候选接口】
- * 当用户创建新目标时，系统检测到的可能重复的已有目标，
- * 包含目标 ID、标题和重复原因，用于提醒用户避免重复创建。
- */
-export interface DuplicateCandidate {
-  goalId: number;
-  title: string;
-  reason: string;
 }
 
 /**
@@ -368,54 +361,19 @@ export interface PendingClarify {
 }
 
 /**
- * 【会话视图接口（完整状态）】
- * AI 拆解会话的完整状态，包含所有对话轮次、待确认计划、
- * 建议操作列表、重复目标候选和蒸馏警告信息。
- * 是 PlanningSessionChat 组件的核心数据源。
+ * 【聊天对话完整视图接口】
+ * 一段对话的完整状态：标题、所属分类、全部消息、待确认计划草案、
+ * 待回答的结构化澄清问题、当前可用操作。是 ChatConversation 组件的核心数据源。
  */
-export interface SessionView {
+export interface ChatConversationView {
   id: number;
-  goalId: number;
-  goalTitle: string;
-  kind: SessionKind;
-  state: SessionState;
-  turnCount: number;
+  title: string;
+  categoryId: number | null;
+  messages: ChatMessageView[];
   pendingPlan: PendingPlan | null;
   /** Structured clarifying questions to render as selectable cards; null once a plan is proposed. */
   pendingClarify?: PendingClarify | null;
-  turns: SessionTurnView[];
   suggestedActions: string[];
-  duplicateCandidates: DuplicateCandidate[];
-  /** Set when the last distillation pass exceeded the 4KB cap; UI shows a banner. */
-  distillationWarning?: string | null;
-}
-
-/**
- * 【会话摘要接口（列表用）】
- * 会话的简要信息，用于目标详情页的历史会话列表展示，
- * 包含会话类型、状态、轮次统计和时间信息。
- */
-export interface SessionSummary {
-  id: number;
-  goalId: number;
-  kind: SessionKind;
-  state: SessionState;
-  turnCount: number;
-  startedAt: string;
-  lastActivityAt: string;
-  endedAt: string | null;
-  committedTaskCount: number;
-}
-
-/**
- * 【目标详情接口】
- * 继承自 GoalSummary，额外包含蒸馏记忆 JSON、创建时间和关联任务列表。
- * 用于目标详情面板的完整数据展示。
- */
-export interface GoalDetail extends GoalSummary {
-  distilledMemoryJson: string | null;
-  createdAt: string | null;
-  tasks: StudyTask[];
 }
 
 /**

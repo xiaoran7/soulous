@@ -65,8 +65,8 @@ flowchart LR
 | --- | --- | --- | --- |
 | 注册 / 登录 / 验证码 / 改密 | [`com.soulous.auth`](../backend/src/main/java/com/soulous/auth) | [`pages/AuthScreen.tsx`](../frontend/src/pages/AuthScreen.tsx) | `user_account`, `refresh_token` |
 | JWT 双 token + Filter | `auth/JwtService`, `auth/RefreshTokenService`, `common/web/JwtAuthenticationFilter` | `api.ts` 单飞刷新 | `refresh_token` |
-| 长期目标 | [`com.soulous.goal`](../backend/src/main/java/com/soulous/goal) | `pages/PlannerPage.tsx` + `components/GoalDetailPanel.tsx` | `goal` |
-| AI 拆解会话（多轮） | [`com.soulous.aisession`](../backend/src/main/java/com/soulous/aisession) | `components/PlanningSessionChat.tsx` | `planning_session`, `session_turn` |
+| AI 拆解对话（Gemini 式：分类/对话/消息） | [`com.soulous.chat`](../backend/src/main/java/com/soulous/chat) | `pages/ChatPage.tsx` + `components/ChatConversation.tsx` + `components/ChatComposer.tsx` | `chat_category`, `chat_conversation`, `chat_message` |
+| ~~长期目标 / 旧拆解会话~~（**已下线**，2026-06-01 重构；表/服务暂留供 RAG/复盘引用） | `com.soulous.goal`、`com.soulous.aisession` | — | `goal`, `planning_session`, `session_turn` |
 | 学习任务 + 凭证提交 | [`com.soulous.task`](../backend/src/main/java/com/soulous/task) | `pages/TasksPage.tsx` + `components/ProofUploader.tsx` | `study_task`, `task_submission` |
 | 自习室（正计时专注） | [`com.soulous.focus`](../backend/src/main/java/com/soulous/focus) | `pages/FocusPage.tsx` + `studyroom/`（场景目录 / 音频混音 / 本地偏好 / 自定义素材 IndexedDB） | `focus_session` |
 | 课表（导入 / 增删 / 周次） | [`com.soulous.timetable`](../backend/src/main/java/com/soulous/timetable) | `pages/TimetablePage.tsx` + `components/TimetableGrid.tsx` | `course_entry` |
@@ -145,56 +145,49 @@ sequenceDiagram
 
 ---
 
-### 2.2 跟 AI 多轮拆解学习目标
+### 2.2 跟 AI 拆解对话（Gemini 式）
+
+> 2026-06-01 重构：旧的「目标 → 多轮 session」被整段替换为「分类 → 对话 → 消息」的连续聊天。AI 不再强制围绕目标，平时正常答疑，需要时输出 `<PLAN_JSON>` 计划草案，确认后落地为 `StudyTask`（不挂目标）。
 
 ```mermaid
 sequenceDiagram
     autonumber
     participant U as 用户
-    participant FE as PlanningSessionChat
-    participant PSC as PlanningSessionController
-    participant PSS as PlanningSessionService
+    participant FE as ChatConversation / ChatComposer
+    participant CC as ChatController
+    participant CS as ChatService
     participant MOD as ModerationService
-    participant RAG as RetrievalService
     participant LLM as LlmService
-    participant DB as planning_session / session_turn
+    participant DB as chat_conversation / chat_message
 
-    U->>FE: 输入"我想学线性代数"
-    FE->>PSC: POST /api/ai/sessions/new-goal
-    PSC->>PSS: startNewGoal(...)
-    PSS->>DB: 建 PlanningSession(state=DRAFTING)
-    PSS-->>FE: 返回 sessionId + 第一条 AI 提示
-
-    loop 每次用户发言
-      FE->>PSC: POST /api/ai/sessions/{id}/messages
-      PSC->>PSS: postMessage(content)
-      PSS->>MOD: moderateInput(content, recentTurns)
-      MOD->>MOD: 1) regex 快路径<br/>2) 拼对话上下文喂 LLM 评分
-      MOD-->>PSS: PASS / FLAG / BLOCK
-      alt BLOCK
-        PSS-->>FE: ModerationBlocked 400
-      else
-        PSS->>RAG: retrieve(user, content)
-        RAG->>RAG: 向量 cosine + 0.5^(age/halfLife)
-        RAG-->>PSS: 命中片段拼进 system prompt
-        PSS->>LLM: completeJson(system+history+memory)
-        LLM-->>PSS: 下一轮回答 / 候选任务列表
-        PSS->>DB: append SessionTurn × 2
-        PSS-->>FE: SessionView（含 plan 数组）
-      end
+    U->>FE: 新建对话，输入诉求（可「+」上传 md/pdf/txt）
+    FE->>CC: POST /api/chat/conversations 然后 .../messages/stream
+    CC->>CS: postMessageStream(content, onChunk)
+    CS->>MOD: moderateInput(content)
+    MOD-->>CS: PASS / BLOCK
+    alt BLOCK
+      CS-->>FE: 记一条受限回复
+    else
+      CS->>CS: 滚动摘要控长 + 拼 [SUMMARY]/[RECENT]/[CURRENT]
+      CS->>LLM: stream(system, userPrompt) 逐 token
+      LLM-->>FE: token 流（SSE event: token）
+      CS->>CS: 抽取 <PLAN_JSON> → conv.pendingPlanJson
+      CS->>DB: append ChatMessage × 2
+      CS-->>FE: done（含完整 ConversationView）
     end
 
-    FE->>PSC: POST /sessions/{id}/commit
-    PSC->>PSS: commit → 转 study_task × N
-    PSS->>DB: state=COMMITTED + 写 Goal + StudyTask
+    opt 有计划草案
+      U->>FE: 编辑/删除草案任务后「确认并创建任务」
+      FE->>CC: POST /api/chat/conversations/{id}/commit
+      CC->>CS: commitPlan → 转 study_task × N（goalId=null）
+    end
 ```
 
 **关键代码地标：**
 
-- 上下文/记忆拼接的逻辑在 [`PlanningSessionService`](../backend/src/main/java/com/soulous/aisession/PlanningSessionService.java)
+- 上下文/记忆拼接、PLAN/CLARIFY 抽取、计划落地都在 [`ChatService`](../backend/src/main/java/com/soulous/chat/ChatService.java)（移植精简自旧 `PlanningSessionService`）
 - 风控两层（regex + LLM）在 [`ModerationService.moderateInput`](../backend/src/main/java/com/soulous/moderation/ModerationService.java:73)
-- 时间衰减检索算法在 [`RetrievalService.retrieve`](../backend/src/main/java/com/soulous/rag/RetrievalService.java:139)
-- 闲置 7 天的 DRAFTING session 每天 04:00 由 [`SessionCleanupTask`](../backend/src/main/java/com/soulous/aisession/SessionCleanupTask.java) 自动清
+- 附件文本提取（pdfjs 懒加载 + 截断 3w 字符）在前端 [`fileExtract.ts`](../frontend/src/fileExtract.ts)，由 [`ChatComposer`](../frontend/src/components/ChatComposer.tsx) 的「+」菜单触发
 
 ---
 
@@ -535,7 +528,7 @@ flowchart TB
     M["main.tsx<br/>路由 / 顶部布局 / 当前用户态"] --> P1["AuthScreen"]
     M --> P2["Dashboard"]
     M --> P3["TasksPage"]
-    M --> P4["PlannerPage → PlanningSessionChat / GoalDetailPanel"]
+    M --> P4["ChatPage → ChatConversation / ChatComposer"]
     M --> P5["FocusPage"]
     M --> P6["PetPage → PetSprite"]
     M --> P7["DailyReviewPage"]
@@ -580,9 +573,11 @@ flowchart TB
 - 渲染时用 `transform: translate3d(-frame*size, -row*height, 0)` 平移整张 sprite 图——硬件加速 + 不会触发 layout。
 - atlas 资源在 [`frontend/public/pets/feixue/`](../frontend/public/pets/feixue/)，由仓库根的 [hatch-soulous-pet](../skills) skill 生成。
 
-### 5.5 `PlanningSessionChat.tsx`
+### 5.5 `ChatPage.tsx` / `ChatConversation.tsx` / `ChatComposer.tsx`
 
-[components/PlanningSessionChat.tsx](../frontend/src/components/PlanningSessionChat.tsx)：渲染多轮对话气泡 + 当前 plan 草稿 + commit 按钮。所有"AI 在拆解吗 / 用户能改任务列表 / 一键 commit"逻辑都集中在这里，后端是 `PlanningSessionController`。
+- [pages/ChatPage.tsx](../frontend/src/pages/ChatPage.tsx)：Gemini 式布局——可收起侧边栏（分类分组 + 对话「移动到」菜单）+ 主区；无选中/空对话时显示居中欢迎态。
+- [components/ChatConversation.tsx](../frontend/src/components/ChatConversation.tsx)：消息气泡 + 流式打字 + `PLAN_JSON` 计划草案卡片（编辑/删除/「确认并创建任务」）+ `CLARIFY_JSON` 选项卡 + 用户消息里附件的可折叠展示。空对话直接渲染欢迎态。
+- [components/ChatComposer.tsx](../frontend/src/components/ChatComposer.tsx)：欢迎态与底部栏共用的输入组件，左侧「+」菜单上传 md/pdf/txt（经 `fileExtract` 提取文本拼进消息）。后端是 `ChatController`。
 
 ---
 
@@ -662,7 +657,7 @@ erDiagram
 
 ## 9. 自己想动手时的小提示
 
-- 写新接口：抄一个最近的 Controller（比如 [`GoalController`](../backend/src/main/java/com/soulous/goal/GoalController.java)）模板，注意贴 `@RateLimit` 和 `@Transactional`。
+- 写新接口：抄一个最近的 Controller（比如 [`ChatController`](../backend/src/main/java/com/soulous/chat/ChatController.java)）模板，注意贴 `@RateLimit` 和 `@Transactional`。
 - 加新 entity：先在 [`db/migration/h2/`](../backend/src/main/resources/db/migration/h2/) 和 `mysql/` 同时加 `V<下一个n>__xxx.sql`，再写 `@Entity` ，**不要靠 `ddl-auto=update` 隐式建表**——prod 是 `validate`，会启动失败。
 - 调 LLM：永远走 `LlmService.complete / completeJson`，不要直接 `new HttpClient`；不可用要有 rule-based 兜底。
 - 前端发请求：走 `api.ts`，不要写裸 `fetch`——否则 401 自动刷新和单飞机制都没法享受。

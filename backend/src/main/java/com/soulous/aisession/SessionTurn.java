@@ -36,8 +36,12 @@ public class SessionTurn {
     @Column(nullable = false, length = 16)
     public TurnRole role;
 
-    /** 【发言内容：对话的正文文本，以 TEXT 类型存储大文本】 */
-    @Column(columnDefinition = "TEXT")
+    /**
+     * 【发言内容：对话的正文文本，以 MEDIUMTEXT 存储大文本】
+     * 上传文件喂给 AI 时，提取文本（上限 30,000 字符）会拼进 USER 轮次正文，
+     * 中文按 UTF-8 计可能超过 MySQL TEXT 的 ~64KB 上限，故用 MEDIUMTEXT（见 mysql/V9 迁移）。
+     */
+    @Column(columnDefinition = "MEDIUMTEXT")
     public String content;
 
     /** 【创建时间：该轮对话的生成时间戳，默认取当前时间】 */

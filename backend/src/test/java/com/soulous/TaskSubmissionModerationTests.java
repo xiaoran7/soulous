@@ -72,7 +72,7 @@ class TaskSubmissionModerationTests {
      * 【辅助方法：创建并启动一个任务，返回任务对象】
      */
     private com.soulous.task.StudyTask startTask(UserAccount user, String title) {
-        var task = tasks.create(user, new TaskRequest(title, "d", TaskType.STUDY, Difficulty.NORMAL, "测试", 30, 20, null, null));
+        var task = tasks.create(user, new TaskRequest(title, "d", TaskType.STUDY, Difficulty.NORMAL, "测试", null, 30, 20, null, null));
         tasks.start(user, task.id);
         return task;
     }

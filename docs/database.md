@@ -73,6 +73,8 @@ prod（MySQL）同样会中招——换成 mysql 的 url / 凭据和 `db/migrati
 - `ExpLog`：经验变更记录。
 - `StudyRecord`：学习时长和摘要记录。
 - `CourseEntry`（表 `course_entry`，V7）：课表一节课——课程名、教师、地点、星期(1-7)、起止节次、起止时间、周次原文、单双周(ALL/ODD/EVEN)、学期。来源是导入的教务课表（HTML/.xls 经 LLM 解析）或手动新增。
+- `ChatCategory` / `ChatConversation` / `ChatMessage`（表 `chat_category` / `chat_conversation` / `chat_message`，mysql V10 / h2 V9）：AI 拆解的「分类 → 对话 → 消息」三级结构。对话可选归入某分类（`category_id` 为空 = 默认组），`pending_plan_json` 非空表示有待确认计划草案，`running_summary` 滚动摘要控长；`chat_message.content` 用 `MEDIUMTEXT`（附件文本可达 3 万字符）。
+- `Goal` / `PlanningSession` / `SessionTurn`（旧目标拆解，**已下线**）：2026-06-01 的对话重构后这些表与服务不再有对外接口，但暂时保留（RAG 目标记忆、每日复盘、`study_task.goal_id` 仍引用）。新功能不要再往这些表写。
 
 ## 主要状态
 

@@ -11,7 +11,7 @@
  * - 管理员角色自动重定向到审核页
  * - 页面标题/副标题/眉毛文本的中英文映射
  *
- * 页面列表：dashboard / tasks / planner / review / pet / stats / focus / profile / admin
+ * 页面列表：dashboard / tasks / timetable / chat / review / pet / stats / focus / profile / settings / admin
  */
 import React, { useEffect, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -26,6 +26,7 @@ import {
   Menu,
   PawPrint,
   Plus,
+  Settings,
   ShieldCheck,
   Timer,
   UserCog
@@ -37,18 +38,20 @@ import type { DailyReview, Pet, StudyTask, Summary, User } from './types';
 import { AuthScreen } from './pages/AuthScreen';
 import { Dashboard } from './pages/Dashboard';
 import { TasksPage } from './pages/TasksPage';
-import { PlannerPage, type PlannerCache } from './pages/PlannerPage';
+import { ChatPage } from './pages/ChatPage';
 import { DailyReviewPage } from './pages/DailyReviewPage';
 import { PetPage } from './pages/PetPage';
 import { StatsPage } from './pages/StatsPage';
 import { ProfilePage } from './pages/ProfilePage';
+import { SettingsPage } from './pages/SettingsPage';
 import { AdminPage } from './pages/AdminPage';
 import { FocusPage, resetFocusCache } from './pages/FocusPage';
 import { TimetablePage, resetTimetableCache, type TimetableImportState } from './pages/TimetablePage';
+import { type AppPreferences, loadPreferences, savePreferences } from './preferences';
 import './styles.css';
 
 /** 【页面路由类型】 */
-type Page = 'dashboard' | 'tasks' | 'timetable' | 'planner' | 'review' | 'pet' | 'stats' | 'focus' | 'profile' | 'admin';
+type Page = 'dashboard' | 'tasks' | 'timetable' | 'chat' | 'review' | 'pet' | 'stats' | 'focus' | 'profile' | 'settings' | 'admin';
 
 /**
  * 【App 根组件】
@@ -63,8 +66,10 @@ function App() {
   const [pet, setPet] = useState<Pet | null>(null);
   /** 【学习统计数据摘要】 */
   const [summary, setSummary] = useState<Summary | null>(null);
-  /** 【当前页面路由状态】 */
-  const [page, setPage] = useState<Page>('dashboard');
+  /** 【应用偏好】纯前端 localStorage，控制默认登录页与侧边栏宠物显隐 */
+  const [prefs, setPrefs] = useState<AppPreferences>(loadPreferences);
+  /** 【当前页面路由状态】初始页取自偏好（默认登录页） */
+  const [page, setPage] = useState<Page>(() => loadPreferences().defaultPage);
   /** 【沉浸态】自习室进行中时全屏：隐藏侧边栏与顶栏 */
   const [immersive, setImmersive] = useState(false);
   /** 【侧边栏抽屉】沉浸态下从左侧滑出导航 */
@@ -76,7 +81,7 @@ function App() {
    * 如果当前页面不是这两个之一，自动重定向到审核管理页。
    */
   useEffect(() => {
-    if (user?.role === 'ADMIN' && page !== 'admin' && page !== 'profile') {
+    if (user?.role === 'ADMIN' && page !== 'admin' && page !== 'profile' && page !== 'settings') {
       setPage('admin');
     }
   }, [user?.role, page]);
@@ -85,8 +90,6 @@ function App() {
   const [loading, setLoading] = useState(false);
   /** 【全局消息提示】 */
   const [message, setMessage] = useState('');
-  /** 【AI 拆解页面的缓存状态，避免切换页面时丢失输入】 */
-  const [plannerCache, setPlannerCache] = useState<PlannerCache>({ goal: '' });
   /** 【课表导入状态】提升到 App 层，AI 解析中切走再回来不丢进度/结果 */
   const [timetableImport, setTimetableImport] = useState<TimetableImportState>({ importing: false, msg: '', err: '' });
   /** 【每日复盘数据缓存】 */
@@ -130,14 +133,25 @@ function App() {
    * 调用 API 清除服务端会话，清空所有本地状态。
    * 即使 API 调用失败也清空本地状态（cookie 可能已失效）。
    */
-  async function handleLogout() {
-    try { await api.logout(); } catch { /* cookie already cleared on error */ }
+  /** 【清空本地会话状态】退出登录 / 退出所有设备共用，回到登录页 */
+  function clearSession() {
     setUser(null);
     setTasks([]);
     setPet(null);
     setSummary(null);
     resetTimetableCache();
     resetFocusCache();
+  }
+
+  async function handleLogout() {
+    try { await api.logout(); } catch { /* cookie already cleared on error */ }
+    clearSession();
+  }
+
+  /** 【更新应用偏好】落 localStorage 并刷新本地状态（侧边栏宠物等即时生效） */
+  function updatePreferences(next: AppPreferences) {
+    setPrefs(next);
+    savePreferences(next);
   }
 
   // 离开自习室页立即退出沉浸态；退出沉浸态时收起抽屉
@@ -178,12 +192,11 @@ function App() {
               <NavButton active={page === 'timetable'} icon={<CalendarRange size={16} />} label="课表" onClick={() => setPage('timetable')} />
               <NavButton active={page === 'review'} icon={<CalendarCheck size={16} />} label="复盘" onClick={() => setPage('review')} />
               <NavButton active={page === 'focus'} icon={<Timer size={16} />} label="自习室" onClick={() => setPage('focus')} />
-              <NavButton active={page === 'pet'} icon={<PawPrint size={16} />} label="宠物" onClick={() => setPage('pet')} />
             </div>
 
             <div className="nav-group">
               <div className="nav-group-label">Tools · 工具</div>
-              <NavButton active={page === 'planner'} icon={<Bot size={16} />} label="AI 拆解" onClick={() => setPage('planner')} />
+              <NavButton active={page === 'chat'} icon={<Bot size={16} />} label="AI 拆解" onClick={() => setPage('chat')} />
               <NavButton active={page === 'stats'} icon={<BarChart3 size={16} />} label="统计" onClick={() => setPage('stats')} />
             </div>
           </>
@@ -194,10 +207,14 @@ function App() {
           {isAdmin && (
             <NavButton active={page === 'admin'} icon={<ShieldCheck size={16} />} label="审核管理" onClick={() => setPage('admin')} />
           )}
-          <NavButton active={page === 'profile'} icon={<UserCog size={16} />} label="资料" onClick={() => setPage('profile')} />
+          <NavButton active={page === 'profile'} icon={<UserCog size={16} />} label="我的" onClick={() => setPage('profile')} />
+          {!isAdmin && (
+            <NavButton active={page === 'pet'} icon={<PawPrint size={16} />} label="宠物" onClick={() => setPage('pet')} />
+          )}
+          <NavButton active={page === 'settings'} icon={<Settings size={16} />} label="设置" onClick={() => setPage('settings')} />
         </div>
 
-        {!isAdmin && <SidebarPet pet={pet} onOpen={() => setPage('pet')} />}
+        {!isAdmin && prefs.showSidebarPet && <SidebarPet pet={pet} onOpen={() => setPage('pet')} />}
 
         <button className="ghost-button logout" onClick={() => void handleLogout()}>
           <LogOut size={14} /> 退出
@@ -235,11 +252,12 @@ function App() {
         {page === 'dashboard' && <Dashboard tasks={tasks} pet={pet} summary={summary} onRefresh={bootstrap} onOpenTasks={() => setPage('tasks')} onOpenReview={() => setPage('review')} onOpenPet={() => setPage('pet')} />}
         {page === 'tasks' && <TasksPage tasks={tasks} onRefresh={bootstrap} />}
         {page === 'timetable' && <TimetablePage onRefresh={bootstrap} importState={timetableImport} setImportState={setTimetableImport} />}
-        {page === 'planner' && <PlannerPage onRefresh={bootstrap} cache={plannerCache} setCache={setPlannerCache} />}
+        {page === 'chat' && <ChatPage />}
         {page === 'review' && <DailyReviewPage summary={summary} review={dailyReview} onReviewChange={setDailyReview} />}
         {page === 'pet' && <PetPage pet={pet} />}
         {page === 'stats' && <StatsPage summary={summary} />}
-        {page === 'profile' && <ProfilePage user={user} onUpdated={setUser} />}
+        {page === 'profile' && <ProfilePage user={user} />}
+        {page === 'settings' && <SettingsPage user={user} onUpdated={setUser} onPetUpdated={setPet} prefs={prefs} onPrefsChange={updatePreferences} onSessionEnded={clearSession} />}
         {page === 'focus' && <FocusPage onImmersiveChange={setImmersive} />}
         {page === 'admin' && <AdminPage user={user} onRefresh={bootstrap} />}
       </main>
