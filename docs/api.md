@@ -117,7 +117,7 @@ Gemini 式的分类 → 对话 → 消息聊天（取代旧的目标中心 Plann
 
 - `GET /api/notifications` — 列表（分页）
 - `POST /api/notifications/{id}/read` / `POST /api/notifications/read-all`
-- `GET /api/notifications/stream` — `text/event-stream` 实时推送 AI 审核 / 申诉等事件，前端 NotificationBell 优先 SSE，断流 fallback 60s 轮询
+- `GET /api/notifications/stream` — `text/event-stream` 实时推送 AI 审核 / 申诉等事件（后端保留；前端铃铛入口已移除，暂无消费方）
 
 ## Tasks
 

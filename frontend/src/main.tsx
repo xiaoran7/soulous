@@ -17,13 +17,14 @@ import React, { useEffect, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import {
   Activity,
-  BarChart3,
   Bot,
   CalendarCheck,
   CalendarRange,
   ClipboardList,
   LogOut,
   Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
   PawPrint,
   Plus,
   Settings,
@@ -32,8 +33,7 @@ import {
   UserCog
 } from 'lucide-react';
 import { api, UnauthorizedError } from './api';
-import { ClickableAvatar, NavButton, SidebarPet } from './components/shared';
-import { NotificationBell } from './components/NotificationBell';
+import { NavButton, SidebarPet } from './components/shared';
 import type { DailyReview, Pet, StudyTask, Summary, User } from './types';
 import { AuthScreen } from './pages/AuthScreen';
 import { Dashboard } from './pages/Dashboard';
@@ -41,7 +41,6 @@ import { TasksPage } from './pages/TasksPage';
 import { ChatPage } from './pages/ChatPage';
 import { DailyReviewPage } from './pages/DailyReviewPage';
 import { PetPage } from './pages/PetPage';
-import { StatsPage } from './pages/StatsPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { SettingsPage } from './pages/SettingsPage';
 import { AdminPage } from './pages/AdminPage';
@@ -51,7 +50,10 @@ import { type AppPreferences, loadPreferences, savePreferences } from './prefere
 import './styles.css';
 
 /** 【页面路由类型】 */
-type Page = 'dashboard' | 'tasks' | 'timetable' | 'chat' | 'review' | 'pet' | 'stats' | 'focus' | 'profile' | 'settings' | 'admin';
+type Page = 'dashboard' | 'tasks' | 'timetable' | 'chat' | 'review' | 'pet' | 'focus' | 'profile' | 'settings' | 'admin';
+
+/** 【侧边栏收起状态存储键】纯前端 localStorage，记住用户上次的收起/展开选择 */
+const SIDEBAR_COLLAPSE_KEY = 'soulous.sidebar.collapsed.v1';
 
 /**
  * 【App 根组件】
@@ -74,6 +76,13 @@ function App() {
   const [immersive, setImmersive] = useState(false);
   /** 【侧边栏抽屉】沉浸态下从左侧滑出导航 */
   const [navDrawerOpen, setNavDrawerOpen] = useState(false);
+  /** 【侧边栏收起态】普通模式下手动收起侧边栏，主工作区自适应铺满 */
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    try { return localStorage.getItem(SIDEBAR_COLLAPSE_KEY) === '1'; } catch { return false; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(SIDEBAR_COLLAPSE_KEY, sidebarCollapsed ? '1' : '0'); } catch { /* ignore */ }
+  }, [sidebarCollapsed]);
 
   /**
    * 【管理员自动重定向效果】
@@ -167,7 +176,7 @@ function App() {
   const showQuickCreate = page === 'dashboard';
 
   return (
-    <div className={`app-shell${immersive ? ' immersive' : ''}${immersive && navDrawerOpen ? ' nav-open' : ''}`}>
+    <div className={`app-shell${immersive ? ' immersive' : ''}${immersive && navDrawerOpen ? ' nav-open' : ''}${sidebarCollapsed && !immersive ? ' sidebar-collapsed' : ''}`}>
       {/* 沉浸态：左侧抽屉把手 + 遮罩，用于唤回被隐藏的侧边栏 */}
       {immersive && (
         <>
@@ -177,9 +186,17 @@ function App() {
           {navDrawerOpen && <div className="nav-drawer-backdrop" onClick={() => setNavDrawerOpen(false)} />}
         </>
       )}
+      {/* 普通模式收起后：左上角悬浮把手，用于重新展开侧边栏 */}
+      {!immersive && sidebarCollapsed && (
+        <button className="sidebar-expand-handle" onClick={() => setSidebarCollapsed(false)} aria-label="展开侧边栏" title="展开侧边栏">
+          <PanelLeftOpen size={18} />
+        </button>
+      )}
       <aside className="sidebar">
         <div className="brand">
-          <span className="brand-mark" aria-hidden="true" />
+          <button className="sidebar-collapse-btn" onClick={() => setSidebarCollapsed(true)} aria-label="收起侧边栏" title="收起侧边栏">
+            <PanelLeftClose size={18} />
+          </button>
           <span>Soulous <em>灵魂</em></span>
         </div>
 
@@ -197,7 +214,6 @@ function App() {
             <div className="nav-group">
               <div className="nav-group-label">Tools · 工具</div>
               <NavButton active={page === 'chat'} icon={<Bot size={16} />} label="AI 拆解" onClick={() => setPage('chat')} />
-              <NavButton active={page === 'stats'} icon={<BarChart3 size={16} />} label="统计" onClick={() => setPage('stats')} />
             </div>
           </>
         )}
@@ -221,30 +237,19 @@ function App() {
         </button>
       </aside>
 
-      <main>
-        <header className="topbar">
-          {/* 左上角页面标题已移除：导航已能表明当前位置，少一处干扰 */}
-          <div />
-          <div className="topbar-actions">
-            {showQuickCreate && (
+      <main className={page === 'chat' ? 'is-chat' : undefined}>
+        {/* 顶栏精简：通知铃铛与用户信息已移除（个人资料走侧栏「我的」）。
+            仅在工作台保留「新建任务」快捷入口，其余页面不渲染顶栏，让内容铺满。 */}
+        {showQuickCreate && (
+          <header className="topbar">
+            <div />
+            <div className="topbar-actions">
               <button className="primary-button" onClick={() => setPage('tasks')}>
                 <Plus size={14} /> 新建任务
               </button>
-            )}
-            <NotificationBell />
-            <button className="user-chip" type="button" onClick={() => setPage('profile')} title="个人资料">
-              {user.avatarUrl ? (
-                <ClickableAvatar className="avatar-chip" url={user.avatarUrl} alt={user.nickname} />
-              ) : (
-                <span className="avatar-chip" aria-hidden="true">
-                  {(user.nickname || user.username || '?').slice(0, 1).toUpperCase()}
-                </span>
-              )}
-              <strong>{user.nickname}</strong>
-              <span>{user.role}</span>
-            </button>
-          </div>
-        </header>
+            </div>
+          </header>
+        )}
 
         {loading && <div className="notice">正在同步数据...</div>}
         {message && <div className="notice">{message}</div>}
@@ -255,7 +260,6 @@ function App() {
         {page === 'chat' && <ChatPage />}
         {page === 'review' && <DailyReviewPage summary={summary} review={dailyReview} onReviewChange={setDailyReview} />}
         {page === 'pet' && <PetPage pet={pet} />}
-        {page === 'stats' && <StatsPage summary={summary} />}
         {page === 'profile' && <ProfilePage user={user} />}
         {page === 'settings' && <SettingsPage user={user} onUpdated={setUser} onPetUpdated={setPet} prefs={prefs} onPrefsChange={updatePreferences} onSessionEnded={clearSession} />}
         {page === 'focus' && <FocusPage onImmersiveChange={setImmersive} />}

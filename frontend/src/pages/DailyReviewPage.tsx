@@ -19,6 +19,8 @@ import { Metric, ProgressRing } from '../components/shared';
 
 /** 【懒加载饼图组件】仅在用户滚动到课程分布区域时才加载，减少首屏体积 */
 const CoursePie = lazy(() => import('../components/ReviewCharts'));
+/** 【懒加载趋势图组件】原统计页合并而来，展示近 7 天学习时长 */
+const TrendChart = lazy(() => import('../components/TrendChart'));
 
 /**
  * 【复盘列表组件】用于展示亮点、风险、建议等字符串列表
@@ -150,10 +152,10 @@ export function DailyReviewPage({ summary, review, onReviewChange }: {
   const completionPercent = Math.round((completed / completionRingMax) * 100);
 
   return (
-    <div className="content-grid">
-      {/* ===== 【复盘首屏】展示日期、标题、摘要和生成按钮 ===== */}
-      <section className="panel wide daily-review-hero">
-        <div>
+    <div className="daily-review-page">
+      {/* ===== 【复盘首屏】整宽横幅：日期 / 标题 / 摘要 + 生成按钮 ===== */}
+      <section className="panel daily-review-hero">
+        <div className="daily-review-hero-copy">
           <p className="page-eyebrow" style={{ marginBottom: 6 }}>{review?.date ?? new Date().toISOString().slice(0, 10)} · Reflection</p>
           <h2>{review?.title ?? (loading ? '正在生成今日复盘' : '今日复盘')}</h2>
           <p>{review?.summary ?? '点击右侧按钮，Soulous 会根据今天的任务、提交、学习时长、经验和宠物状态生成一份轻量复盘。生成后会保留在本页，切换栏目不会刷新。'}</p>
@@ -165,9 +167,24 @@ export function DailyReviewPage({ summary, review, onReviewChange }: {
         </button>
       </section>
 
+      {/* ===== 【错误提示】展示错误信息和重试按钮 ===== */}
+      {error && (
+        <section className="panel">
+          <div className="form-error" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+            <span>{error}</span>
+            <button className="secondary-button compact-button" onClick={generate}>
+              <RefreshCw size={12} /> 重试
+            </button>
+          </div>
+        </section>
+      )}
+
       {/* ===== 【流式输出区域】加载中时展示打字机效果 ===== */}
       {loading && (
-        <section className="panel wide">
+        <section className="panel daily-review-narrative">
+          <div className="panel-title">
+            <h2><Sparkles size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} />AI 解读</h2>
+          </div>
           <div className="planner-chat-row assistant">
             <span className="planner-chat-role">AI</span>
             <div className="planner-chat-bubble assistant streaming">
@@ -188,7 +205,7 @@ export function DailyReviewPage({ summary, review, onReviewChange }: {
 
       {/* ===== 【AI 解读面板】加载完成后展示完整的叙事文本 ===== */}
       {!loading && narrative && (
-        <section className="panel wide daily-review-narrative">
+        <section className="panel daily-review-narrative">
           <div className="panel-title">
             <h2><Sparkles size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} />AI 解读</h2>
           </div>
@@ -196,45 +213,7 @@ export function DailyReviewPage({ summary, review, onReviewChange }: {
         </section>
       )}
 
-      {/* ===== 【错误提示】展示错误信息和重试按钮 ===== */}
-      {error && (
-        <section className="panel full">
-          <div className="form-error" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-            <span>{error}</span>
-            <button className="secondary-button compact-button" onClick={generate}>
-              <RefreshCw size={12} /> 重试
-            </button>
-          </div>
-        </section>
-      )}
-
-      {/* ===== 【今日完成度】环形进度图展示任务完成比例 ===== */}
-      <section className="panel completion-panel">
-        <div className="panel-title"><h2>今日完成度</h2></div>
-        <div className="completion-body">
-          <ProgressRing
-            value={completed}
-            max={completionRingMax}
-            label={`${completionPercent}%`}
-            sublabel={`${completed}/${completionRingMax} 任务`}
-          />
-          <div className="completion-meta">
-            <p className="muted">完成任务 / 今日总任务</p>
-            <strong>{completed} / {completionRingMax}</strong>
-            <p className="muted">提交凭证：{metrics?.submissions ?? 0} 条 · 学习时长：{metrics?.studyMinutes ?? 0} 分</p>
-          </div>
-        </div>
-      </section>
-
-      {/* ===== 【课程分布】饼图展示各课程的任务占比 ===== */}
-      <section className="panel wide course-pie-panel">
-        <div className="panel-title"><h2>课程分布</h2></div>
-        <Suspense fallback={<div className="muted">加载图表中...</div>}>
-          <CoursePie courses={summary?.courses ?? {}} />
-        </Suspense>
-      </section>
-
-      {/* ===== 【关键指标行】4 个指标卡片展示核心数据 ===== */}
+      {/* ===== 【关键指标行】4 个指标卡片，整宽密排 ===== */}
       <section className="metric-row">
         <Metric icon={<CheckCircle2 />} label="完成任务" value={metrics?.completedTasks ?? 0} />
         <Metric icon={<ClipboardList />} label="提交凭证" value={metrics?.submissions ?? summary?.todaySubmissions ?? 0} />
@@ -242,13 +221,50 @@ export function DailyReviewPage({ summary, review, onReviewChange }: {
         <Metric icon={<Sparkles />} label="获得经验" value={metrics?.earnedExp ?? summary?.todayExp ?? 0} />
       </section>
 
-      {/* ===== 【亮点/风险/建议】三个列表展示复盘洞察 ===== */}
-      <ReviewList title="今日亮点" items={review?.highlights ?? ['还没有可展示的亮点，完成一个任务后再回来看看。']} />
-      <ReviewList title="需要留意" items={review?.risks ?? ['暂无风险数据。']} />
-      <ReviewList title="明日建议" items={review?.tomorrowSuggestions ?? ['创建一个 30 分钟以内的新学习任务。']} />
+      {/* ===== 【完成度 + 课程分布】两枚环形/饼图等宽并排 ===== */}
+      <div className="dr-row dr-row-2">
+        <section className="panel completion-panel">
+          <div className="panel-title"><h2>今日完成度</h2></div>
+          <div className="completion-body">
+            <ProgressRing
+              value={completed}
+              max={completionRingMax}
+              label={`${completionPercent}%`}
+              sublabel={`${completed}/${completionRingMax} 任务`}
+            />
+            <div className="completion-meta">
+              <p className="muted">完成任务 / 今日总任务</p>
+              <strong>{completed} / {completionRingMax}</strong>
+              <p className="muted">提交凭证：{metrics?.submissions ?? 0} 条 · 学习时长：{metrics?.studyMinutes ?? 0} 分</p>
+            </div>
+          </div>
+        </section>
+
+        <section className="panel course-pie-panel">
+          <div className="panel-title"><h2>课程分布</h2></div>
+          <Suspense fallback={<div className="muted">加载图表中...</div>}>
+            <CoursePie courses={summary?.courses ?? {}} />
+          </Suspense>
+        </section>
+      </div>
+
+      {/* ===== 【学习时长趋势】近 7 天柱状图整宽（原统计页合并而来）===== */}
+      <section className="panel">
+        <div className="panel-title"><h2>学习时长趋势（近 7 天）</h2></div>
+        <Suspense fallback={<div className="muted">加载图表中...</div>}>
+          <TrendChart data={summary?.trend ?? []} />
+        </Suspense>
+      </section>
+
+      {/* ===== 【亮点 / 风险 / 建议】三列等宽洞察 ===== */}
+      <div className="dr-row dr-row-3">
+        <ReviewList title="今日亮点" items={review?.highlights ?? ['还没有可展示的亮点，完成一个任务后再回来看看。']} />
+        <ReviewList title="需要留意" items={review?.risks ?? ['暂无风险数据。']} />
+        <ReviewList title="明日建议" items={review?.tomorrowSuggestions ?? ['创建一个 30 分钟以内的新学习任务。']} />
+      </div>
 
       {/* ===== 【宠物反馈】展示宠物对今日学习的评价 ===== */}
-      <section className="panel full">
+      <section className="panel pet-feedback-panel">
         <div className="panel-title"><h2>宠物 <em style={{ fontStyle: 'italic', color: 'var(--ink-3)' }}>反馈</em></h2><PawPrint size={16} /></div>
         <p className="pet-message">"{review?.petMessage ?? '宠物正在等待今天的学习凭证。'}"</p>
       </section>
