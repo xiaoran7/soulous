@@ -17,11 +17,14 @@ vi.mock('../api', () => ({
     submissionDetail: vi.fn(),
     deleteTask: vi.fn(),
     startTask: vi.fn(),
+    pauseTask: vi.fn(),
+    resumeTask: vi.fn(),
     createTask: vi.fn(),
     updateTask: vi.fn(),
     answerAiQuestion: vi.fn(),
     createAppeal: vi.fn(),
-    uploadScreenshot: vi.fn()
+    uploadScreenshot: vi.fn(),
+    chatTree: vi.fn()
   }
 }));
 
@@ -60,7 +63,9 @@ const submission: Submission = {
   studyMinutes: 35,
   submitType: 'TEXT',
   status: 'AI_REJECTED',
-  createdAt: '2026-05-15T11:00:00'
+  createdAt: '2026-05-15T11:00:00',
+  // 提交记录现在按任务分组展示在该任务的详情页，需带上关联任务
+  task
 };
 
 /**
@@ -95,6 +100,8 @@ describe('TasksPage', () => {
     Object.values(api).forEach((fn) => 'mockReset' in fn && fn.mockReset());
     // 【默认返回提交列表】模拟页面加载时已有提交记录
     vi.mocked(api.mySubmissions).mockResolvedValue([submission]);
+    // 【AI 拆解分类候选】组件挂载时会拉一次作为「大分类」候选，返回空树即可
+    vi.mocked(api.chatTree).mockResolvedValue({ categories: [], conversations: [] } as any);
   });
 
   /**
@@ -113,7 +120,8 @@ describe('TasksPage', () => {
     const onRefresh = vi.fn().mockResolvedValue(undefined);
     render(<TasksPage tasks={[task]} onRefresh={onRefresh} />);
 
-    await userEvent.click(screen.getByRole('button', { name: '提交任务' }));
+    // 新流程：点列表里的任务卡片进入详情页，凭证表单内联在详情中
+    await userEvent.click(screen.getByText('复习栈和队列'));
     await userEvent.click(screen.getByRole('button', { name: /提交审核/ }));
 
     await waitFor(() => expect(api.submitTask).toHaveBeenCalled());
@@ -131,7 +139,7 @@ describe('TasksPage', () => {
     vi.mocked(api.submitTask).mockRejectedValue(new Error('提交太频繁，请稍后再试'));
     render(<TasksPage tasks={[task]} onRefresh={vi.fn()} />);
 
-    await userEvent.click(screen.getByRole('button', { name: '提交任务' }));
+    await userEvent.click(screen.getByText('复习栈和队列'));
     await userEvent.click(screen.getByRole('button', { name: /提交审核/ }));
 
     expect(await screen.findByText('提交太频繁，请稍后再试')).toBeInTheDocument();
@@ -147,7 +155,8 @@ describe('TasksPage', () => {
     vi.mocked(api.submissionDetail).mockResolvedValue(submissionDetail);
     render(<TasksPage tasks={[task]} onRefresh={vi.fn()} />);
 
-    await userEvent.click(screen.getByRole('button', { name: '提交与申诉' }));
+    // 新流程：提交记录归入对应任务的详情页，点卡片进入后即可看到
+    await userEvent.click(screen.getByText('复习栈和队列'));
     await waitFor(() => expect(screen.getByText('提交 #42')).toBeInTheDocument());
     await userEvent.click(screen.getByRole('button', { name: /查看反馈/ }));
 
@@ -166,7 +175,9 @@ describe('TasksPage', () => {
     const onRefresh = vi.fn().mockResolvedValue(undefined);
     render(<TasksPage tasks={[task]} onRefresh={onRefresh} />);
 
-    await userEvent.click(screen.getByRole('button', { name: /^删除$/ }));
+    // 删除动作现在在任务详情页：先进详情，再删除并二次确认
+    await userEvent.click(screen.getByText('复习栈和队列'));
+    await userEvent.click(await screen.findByRole('button', { name: /^删除$/ }));
     await userEvent.click(await screen.findByRole('button', { name: /确认删除/ }));
 
     await waitFor(() => expect(api.deleteTask).toHaveBeenCalledWith(1));
@@ -184,7 +195,8 @@ describe('TasksPage', () => {
     const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
     render(<TasksPage tasks={[task]} onRefresh={vi.fn()} />);
 
-    await userEvent.click(screen.getByRole('button', { name: /^删除$/ }));
+    await userEvent.click(screen.getByText('复习栈和队列'));
+    await userEvent.click(await screen.findByRole('button', { name: /^删除$/ }));
     await userEvent.click(await screen.findByRole('button', { name: /确认删除/ }));
 
     expect(await screen.findByText('该任务无法删除')).toBeInTheDocument();
