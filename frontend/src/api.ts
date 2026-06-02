@@ -260,7 +260,11 @@ async function streamSse<T>(path: string, body: unknown, onToken: (chunk: string
     evName = 'message';
   };
 
-  while (true) {
+  // 一旦收到终止事件（done/error）就停止读取并立即返回，不再等服务端关闭连接。
+  // 否则若连接因 keep-alive / 代理缓冲而迟迟不关闭，reader.read() 会一直阻塞，
+  // 调用方的 busy 永远不复位 —— 表现为回复已渲染完、输入框却一直禁用、无法二次回复。
+  let terminated = false;
+  while (!terminated) {
     const { value, done } = await reader.read();
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
@@ -270,6 +274,7 @@ async function streamSse<T>(path: string, body: unknown, onToken: (chunk: string
       buffer = buffer.slice(nl + 1);
       if (line === '') {
         dispatch();
+        if (finalPayload !== null || errorMessage !== null) { terminated = true; break; }
         continue;
       }
       if (line.startsWith('event:')) evName = line.slice(6).trim();
@@ -277,6 +282,8 @@ async function streamSse<T>(path: string, body: unknown, onToken: (chunk: string
       // comment / heartbeat lines start with ':' — ignore
     }
   }
+  // 主动取消底层流，释放连接（已终止时尤其重要）。
+  try { await reader.cancel(); } catch { /* already closed */ }
   // Flush trailing event if the server didn't end with a blank line.
   dispatch();
 
