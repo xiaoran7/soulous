@@ -75,14 +75,14 @@ frontend http://localhost:5173
 前端（`frontend/src/`）：
 
 - `main.tsx`：应用外壳，仅 174 行；按 page 调度子页面。
-- `pages/`：`AuthScreen`、`Dashboard`、`TasksPage`、`TimetablePage`、`PlannerPage`、`DailyReviewPage`、`PetPage`、`StatsPage`、`FocusPage`、`ProfilePage`、`AdminPage`。
+- `pages/`：`AuthScreen`、`Dashboard`、`TasksPage`、`TimetablePage`、`ChatPage`（AI 拆解对话）、`DailyReviewPage`、`PetPage`、`StatsPage`、`FocusPage`、`ProfilePage`、`SettingsPage`、`AdminPage`。`ChatPage` 配 `components/ChatConversation` + `components/ChatComposer`。
 - `components/shared.tsx`：跨页面共享组件（NavButton、Metric、TaskRow、PetCard、Empty、ProgressRing、SidebarPet、animationForPet 等）。
 - `components/TrendChart.tsx`：Recharts 趋势图，独立 chunk，被 Dashboard 和 StatsPage 通过 `React.lazy` 懒加载。
 - `api.ts`：API 客户端。
 - `types.ts`：前端类型。
 - `PetSprite.tsx`：宠物 spritesheet 动画组件。
 - `styles.css`：全局样式。
-- `__tests__/`：Vitest + @testing-library/react 测试，覆盖 AuthScreen 和 PlannerPage。
+- `__tests__/`：Vitest + @testing-library/react 测试，覆盖 AuthScreen / TasksPage / AdminPage 与课表纯函数等。
 
 文档：
 
@@ -139,8 +139,9 @@ npm run build     # 应无 chunk size 警告
 
 AI：
 
-- `GET /api/ai/info` —— 返回 `{ provider, available, model }`，前端 PlannerPage 显示当前 AI 状态。
+- `GET /api/ai/info` —— 返回 `{ provider, available, model }`（端点仍在；旧 PlannerPage 的状态展示已随 2026-06-01 对话重构移除）。
 - `POST /api/ai/decompose`、`POST /api/ai/review`、`POST /api/ai/daily-review`
+- AI 拆解对话见 `docs/api.md` 的「AI 拆解对话（Chat）」段（`/api/chat/*`）。
 - `POST /api/ai/question/answer`
 - `GET /api/admin/llm-stats` —— 仅 admin，返回 `{ totalCalls, cacheHits, successes, failures, cacheSize, cacheEnabled, lastFailure* }`。
 
@@ -186,7 +187,7 @@ AI：
 
 - 截图 URL `/uploads/<UUID>` 现已要求认证。开发模式通过 Vite proxy 把 `/uploads/**` 转发到后端，cookie 同源；生产部署需要前后端同域或开启 SameSite=None+Secure（HTTPS）。
 - LLM `provider=mock` 是默认值，所有 AI 行为与之前一致。生产启用真实 LLM 需要至少 `SOULOUS_LLM_PROVIDER` + `SOULOUS_LLM_API_KEY`，可选 `SOULOUS_LLM_MODEL` 和 `SOULOUS_LLM_BASE_URL`。
-- **本机当前接通 DeepSeek**（Windows 用户级环境变量）：`SOULOUS_LLM_PROVIDER=openai`、`SOULOUS_LLM_BASE_URL=https://api.deepseek.com`（不带 `/v1`，LlmService 自己拼）、`SOULOUS_LLM_MODEL=deepseek-chat`、`SOULOUS_LLM_API_KEY=<key>`。改环境变量后需重启 PowerShell/IDE/后端。验证接通：PlannerPage 标题旁显示 `OpenAI 兼容 · deepseek-chat`。
+- **本机当前接通 DeepSeek**（Windows 用户级环境变量）：`SOULOUS_LLM_PROVIDER=openai`、`SOULOUS_LLM_BASE_URL=https://api.deepseek.com`（不带 `/v1`，LlmService 自己拼）、`SOULOUS_LLM_MODEL=deepseek-chat`、`SOULOUS_LLM_API_KEY=<key>`。改环境变量后需重启 PowerShell/IDE/后端。验证接通：在「AI 拆解」里发一条消息看是否有真实流式回复（或查 `GET /api/ai/info` 返回 `available:true`）。
 - 已提交过的任务不能硬删除，DELETE 实际是归档（写 `archivedAt`）。任何级联行为务必谨慎。
 - H2 文件库在反复开发和重启后可能残留测试/烟测数据。需要干净演示时，可停止后端后清理 `backend/data` 和 `backend/uploads`。
 - `SecurityConfig` 同时启用了 H2 console 路径放行和 `frameOptions().disable()`，仅开发可用。**生产用 `--spring.profiles.active=prod` 一键收紧**：`soulous.cookie.secure=true`、H2 console + frameOptions 关闭、`/h2-console/**` 不再 permitAll、CORS 不再带 localhost 兜底、demo/admin 默认账号不再播种；启动时若仍用默认 JWT secret 直接抛错。开关在 `soulous.security.h2-console-enabled` / `soulous.security.dev-origins-enabled` / `soulous.seed-default-users`。

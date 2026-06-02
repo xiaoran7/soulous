@@ -100,7 +100,9 @@ export function ProofUploader({
     const pendingItem: PendingItem = { id, name: raw.name || '粘贴的截图', bytes: raw.size, progress: 0 };
     setPending((p) => [...p, pendingItem]);
     try {
-      const file = await compressImageIfNeeded(raw);
+      // 凭证图只需看清内容即可：限制最长边 1600px、超过 ~1MB 即重编码，
+      // 保证压缩后稳稳低于反代上限，又保留足够的可读细节
+      const file = await compressImageIfNeeded(raw, { maxDimension: 1600, maxBytes: 1024 * 1024 });
       if (file.size > MAX_BYTES) {
         throw new Error(`图片过大（${formatBytes(file.size)}），上限 ${MAX_BYTES / 1024 / 1024}MB`);
       }

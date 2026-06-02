@@ -8,6 +8,7 @@ import com.soulous.common.exception.BadRequestException;
 import com.soulous.common.exception.ForbiddenException;
 import com.soulous.common.exception.NotFoundException;
 import com.soulous.task.TaskRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,13 +33,17 @@ public class GoalService {
     private final PlanningSessionRepository sessions;
     /** 【会话对话记录数据仓库，用于级联删除会话的对话记录】 */
     private final SessionTurnRepository turns;
+    /** 【JSON 解析器，用于校验导入的 distilled memory 是否为合法 JSON】 */
+    private final ObjectMapper objectMapper;
 
     public GoalService(GoalRepository goals, TaskRepository tasks,
-                       PlanningSessionRepository sessions, SessionTurnRepository turns) {
+                       PlanningSessionRepository sessions, SessionTurnRepository turns,
+                       ObjectMapper objectMapper) {
         this.goals = goals;
         this.tasks = tasks;
         this.sessions = sessions;
         this.turns = turns;
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -106,6 +111,52 @@ public class GoalService {
         }
         goal.updatedAt = LocalDateTime.now();
         return goals.save(goal);
+    }
+
+    /**
+     * 【导入/覆盖目标记忆：将用户在「设置」中粘贴或上传的 JSON 存入 distilledMemoryJson。
+     *  会先校验是否为合法 JSON，非法则抛 BadRequestException。空白内容等同于清空。
+     *  返回更新后的目标详情（与 detail 同结构），方便前端直接刷新。】
+     *
+     * @param user 【当前登录用户】
+     * @param goalId 【目标 ID】
+     * @param memoryJson 【蒸馏记忆 JSON 文本】
+     * @return 【更新后的目标详情 Map】
+     * @throws BadRequestException 【JSON 非法时抛出】
+     */
+    @Transactional
+    public Map<String, Object> updateMemory(UserAccount user, Long goalId, String memoryJson) {
+        var goal = loadOwned(user, goalId);
+        var trimmed = memoryJson == null ? "" : memoryJson.trim();
+        if (trimmed.isBlank()) {
+            goal.distilledMemoryJson = null;
+        } else {
+            try {
+                objectMapper.readTree(trimmed);
+            } catch (Exception e) {
+                throw new BadRequestException("目标记忆必须是合法的 JSON");
+            }
+            goal.distilledMemoryJson = trimmed;
+        }
+        goal.updatedAt = LocalDateTime.now();
+        goals.save(goal);
+        return detail(user, goalId);
+    }
+
+    /**
+     * 【清空目标记忆：将 distilledMemoryJson 置空。返回更新后的目标详情。】
+     *
+     * @param user 【当前登录用户】
+     * @param goalId 【目标 ID】
+     * @return 【更新后的目标详情 Map】
+     */
+    @Transactional
+    public Map<String, Object> clearMemory(UserAccount user, Long goalId) {
+        var goal = loadOwned(user, goalId);
+        goal.distilledMemoryJson = null;
+        goal.updatedAt = LocalDateTime.now();
+        goals.save(goal);
+        return detail(user, goalId);
     }
 
     /**

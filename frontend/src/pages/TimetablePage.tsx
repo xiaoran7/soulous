@@ -7,7 +7,7 @@
  * → 复用后端 /api/timetable/import 的 AI 解析链路落库；学期自动从表头单元格识别，无需手填。
  * 粘贴 HTML 仍作为兜底（老用户 / 无法导出 xls 的系统）。
  */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { CalendarRange, ChevronDown, ChevronLeft, ChevronRight, FileSpreadsheet, Settings2, Trash2, Upload } from 'lucide-react';
 import { api } from '../api';
 import type { CourseCreateInput, CourseEntry } from '../types';
@@ -35,9 +35,37 @@ function detectSemester(text: string): string | undefined {
   return m ? `${m[1]}-${m[2]}-${m[3]}` : undefined;
 }
 
-export function TimetablePage({ onRefresh }: { onRefresh: () => void }) {
-  const [courses, setCourses] = useState<CourseEntry[]>([]);
-  const [loading, setLoading] = useState(false);
+/**
+ * 【课表导入状态】importing=AI 解析中；msg/err=成功/失败提示。
+ * 提升到 App 层持有，使 AI 解析过程中切换面板再回来不丢进度与结果
+ * （后端请求本就不会因组件卸载而中断，丢的只是这份 UI 状态）。
+ */
+export interface TimetableImportState {
+  importing: boolean;
+  msg: string;
+  err: string;
+}
+const EMPTY_IMPORT: TimetableImportState = { importing: false, msg: '', err: '' };
+
+/**
+ * 【课表模块级缓存】跨面板切换时组件会被卸载/重建，若每次都重新拉取就会出现
+ * "空白→填充"的顿挫。这里用模块级变量保留上次的课表，重建时直接复用、不再请求；
+ * 仅首次进入（缓存为空）或发生导入/增删等变更时才向后端取数。
+ * 登出/重新登录时由 resetTimetableCache() 清空，避免串户看到上一个账号的课表。
+ */
+let coursesCache: CourseEntry[] | null = null;
+export function resetTimetableCache() { coursesCache = null; }
+
+export function TimetablePage({ onRefresh, importState, setImportState }: {
+  onRefresh: () => void;
+  importState?: TimetableImportState;
+  setImportState?: React.Dispatch<React.SetStateAction<TimetableImportState>>;
+}) {
+  // 有缓存则直接渲染，零顿挫；仅缓存为空时才需要首次加载
+  const [courses, setCourses] = useState<CourseEntry[]>(() => coursesCache ?? []);
+  const [loading, setLoading] = useState(coursesCache === null);
+  // 在任何 effect 改写缓存之前，于渲染期捕获"是否需要首次拉取"，避免竞态
+  const needInitialLoad = useRef(coursesCache === null);
   const [selectedSemester, setSelectedSemester] = useState<string>('');
 
   // 周次导航
@@ -48,9 +76,16 @@ export function TimetablePage({ onRefresh }: { onRefresh: () => void }) {
 
   // 导入区
   const [html, setHtml] = useState('');
-  const [importing, setImporting] = useState(false);
-  const [importMsg, setImportMsg] = useState('');
-  const [importErr, setImportErr] = useState('');
+  // 导入状态优先用外部（App 层）持有，未提供时回退内部，保证组件可独立使用
+  const [internalImport, setInternalImport] = useState<TimetableImportState>(EMPTY_IMPORT);
+  const impState = importState ?? internalImport;
+  const updateImport = setImportState ?? setInternalImport;
+  const importing = impState.importing;
+  const importMsg = impState.msg;
+  const importErr = impState.err;
+  const setImporting = (v: boolean) => updateImport((prev) => ({ ...prev, importing: v }));
+  const setImportMsg = (v: string) => updateImport((prev) => ({ ...prev, msg: v }));
+  const setImportErr = (v: string) => updateImport((prev) => ({ ...prev, err: v }));
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
 
@@ -66,8 +101,12 @@ export function TimetablePage({ onRefresh }: { onRefresh: () => void }) {
     }
   }
 
+  // 课表变化时同步回模块缓存（加载完成、增删、导入后都会经过这里）
+  useEffect(() => { coursesCache = courses; }, [courses]);
+
   useEffect(() => {
-    void loadCourses();
+    if (needInitialLoad.current) void loadCourses(); // 仅首次进入拉取；有缓存直接复用
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // 已导入课表里出现过的学期（去重、排序），用于顶部切换

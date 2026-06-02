@@ -181,7 +181,10 @@ export function TaskRow({ task }: { task: StudyTask }) {
     <div className="task-row">
       <div>
         <strong>{task.title}</strong>
-        <p>{task.courseName || '未分类'} · {task.taskType} · {task.difficulty}</p>
+        <p>
+          {task.category && <span className="task-cat-tag">{task.category}</span>}
+          {task.courseName || '未分类'} · {task.taskType} · {task.difficulty}
+        </p>
       </div>
       <span className={`badge ${task.status}`}>{statusLabel[task.status] ?? task.status}</span>
     </div>
@@ -347,7 +350,7 @@ export function SidebarPet({ pet, onOpen }: { pet: Pet | null; onOpen: () => voi
       <div className="sidebar-pet-bar"><span style={{ width: `${percent}%` }} /></div>
       <span className="sidebar-pet-link">
         <Sparkles size={11} style={{ verticalAlign: '-1px', marginRight: 4 }} />
-        Soul · 详情
+        {pet?.name ?? 'Soul'} · 详情
       </span>
     </button>
   );

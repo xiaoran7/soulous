@@ -46,6 +46,31 @@ function currentElapsed(session: FocusSession): number {
 /** 【正计时启动时给后端的占位时长】仅满足接口（不再用于倒计时/不展示） */
 const PLACEHOLDER_MINUTES = 25;
 
+/**
+ * 【是否有进行中会话的本地提示】
+ * 自习室设置态（选场景/调音量）完全来自本地（常量 + localStorage + IndexedDB），
+ * 不依赖网络。唯一需要等网络才能决定的是"是否要直接进沉浸态"。
+ * 用这个本地提示来决定首屏是否需要等待：绝大多数情况下没有进行中会话，
+ * 首屏直接渲染设置态、零加载闪屏；只有真在专注中时才短暂等待恢复沉浸态。
+ */
+const ACTIVE_HINT_KEY = 'soulous.studyroom.active.v1';
+function readActiveHint(): boolean {
+  try { return localStorage.getItem(ACTIVE_HINT_KEY) === '1'; } catch { return false; }
+}
+function writeActiveHint(active: boolean) {
+  try {
+    if (active) localStorage.setItem(ACTIVE_HINT_KEY, '1');
+    else localStorage.removeItem(ACTIVE_HINT_KEY);
+  } catch { /* 隐私模式/配额超限静默忽略 */ }
+}
+
+/**
+ * 【自习室模块级缓存】保留上次拉取的进行中会话与可关联任务，跨面板切换重建时
+ * 直接复用、不再请求，消除每次进入的顿挫。登出/重新登录时由 resetFocusCache() 清空。
+ */
+let focusCache: { active: FocusSession | null; tasks: StudyTask[] } | null = null;
+export function resetFocusCache() { focusCache = null; }
+
 const AMBIENT_ICON: Record<AmbientKind, React.ReactNode> = {
   rain: <CloudRain size={13} />,
   waves: <Waves size={13} />,
@@ -260,10 +285,13 @@ function ImmersiveRoom({ session, scene, prefs, audio, audioControls, onUpdate, 
  */
 export function FocusPage({ onImmersiveChange }: { onImmersiveChange?: (v: boolean) => void } = {}) {
   const { prefs, update } = useStudyRoomPrefs();
-  const [active, setActive] = useState<FocusSession | null>(null);
-  const [tasks, setTasks] = useState<StudyTask[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [active, setActive] = useState<FocusSession | null>(() => focusCache?.active ?? null);
+  const [tasks, setTasks] = useState<StudyTask[]>(() => focusCache?.tasks ?? []);
+  // 有缓存直接渲染、无需等待；无缓存时仅当本地提示"专注中"才等首屏恢复沉浸态，否则零闪屏
+  const [loading, setLoading] = useState(() => focusCache === null && readActiveHint());
   const [loadError, setLoadError] = useState('');
+  // 渲染期捕获是否需要首次拉取，避免被同步缓存的 effect 抢先改写
+  const needInitialLoad = useRef(focusCache === null);
 
   const [linkTaskId, setLinkTaskId] = useState<number | ''>('');
   const [starting, setStarting] = useState(false);
@@ -328,10 +356,13 @@ export function FocusPage({ onImmersiveChange }: { onImmersiveChange?: (v: boole
   }, [active, onImmersiveChange]);
 
   async function load() {
-    setLoading(true); setLoadError('');
+    // 不主动置 loading=true：首屏由 readActiveHint 决定；后台刷新静默进行，避免闪屏
+    setLoadError('');
     try {
       const [activeRes, tasksRes] = await Promise.all([api.activeFocus(), api.tasks()]);
-      setActive('id' in activeRes ? activeRes as FocusSession : null);
+      const session = 'id' in activeRes ? activeRes as FocusSession : null;
+      setActive(session);
+      writeActiveHint(!!session); // 同步本地提示，保证下次进入的首屏判断准确
       setTasks(tasksRes);
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : '加载自习室数据失败');
@@ -339,12 +370,19 @@ export function FocusPage({ onImmersiveChange }: { onImmersiveChange?: (v: boole
       setLoading(false);
     }
   }
-  useEffect(() => { void load(); }, []);
+  // 会话/任务变化时同步回模块缓存
+  useEffect(() => { focusCache = { active, tasks }; }, [active, tasks]);
+
+  useEffect(() => {
+    if (needInitialLoad.current) void load(); // 仅首次进入拉取；有缓存直接复用
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function handleUpdate(session: FocusSession) {
     if (session.status === 'COMPLETED' || session.status === 'ABORTED') {
       audio.stop();
       setActive(null);
+      writeActiveHint(false);
       void load(); // 刷新会话/任务状态
     } else {
       setActive(session);
@@ -362,6 +400,7 @@ export function FocusPage({ onImmersiveChange }: { onImmersiveChange?: (v: boole
     try {
       const session = await api.startFocus(title, PLACEHOLDER_MINUTES, linkTaskId === '' ? null : linkTaskId);
       setActive(session);
+      writeActiveHint(true);
     } catch (err) {
       audio.stop();
       setStartErr(err instanceof Error ? err.message : '进入失败');

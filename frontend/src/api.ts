@@ -7,7 +7,7 @@
  *
  * 所有 API 方法均返回 Promise，调用方无需关心认证刷新和错误重试细节。
  */
-import type { CourseCreateInput, CourseEntry, DailyReview, ExpLog, FocusSession, GoalDetail, GoalSummary, MetricsSnapshot, Pet, SessionSummary, SessionView, StudyTask, SubmissionDetail, Summary, TimetableImportResult, User } from './types';
+import type { ChatCategory, ChatConversationView, ChatTree, CourseCreateInput, CourseEntry, DailyReview, ExpLog, FocusSession, MetricsSnapshot, Pet, StudyTask, SubmissionDetail, Summary, TimetableImportResult, User } from './types';
 
 /** 【API 基础路径，可通过环境变量 VITE_API_BASE 覆盖，空字符串表示同源请求】 */
 const API_BASE = import.meta.env.VITE_API_BASE ?? '';
@@ -292,8 +292,9 @@ async function streamSse<T>(path: string, body: unknown, onToken: (chunk: string
  * - 用户：me、updateMe、uploadAvatar
  * - 任务：tasks、createTask、updateTask、deleteTask、startTask、pauseTask、resumeTask、submitTask
  * - AI：decompose、dailyReview、dailyReviewStream、answerAiQuestion、aiInfo
- * - 会话：sessionStart、sessionGet、sessionPostMessage、sessionCommit、sessionAbandon 等
- * - 目标：sessionActiveGoals、sessionAllGoals、updateGoal、deleteGoal、goalDetail
+ * - AI 拆解对话：chatTree、chatCreateCategory/Rename/Delete、chatCreateConversation、
+ *   chatGetConversation、chatUpdateConversation、chatDeleteConversation、
+ *   chatPostMessage[Stream]、chatEditPlanTask、chatDeletePlanTask、chatCommit
  * - 宠物：pet、feedPet、petLogs、setPetName、setPetAvatar
  * - 统计：summary
  * - 专注：focusSessions、activeFocus、startFocus、pauseFocus、resumeFocus、finishFocus
@@ -421,75 +422,51 @@ export const api = {
    */
   dailyReviewStream: (onToken: (chunk: string) => void): Promise<DailyReview> =>
     streamSse<DailyReview>('/api/ai/daily-review/stream', {}, onToken),
-  /** 【获取有活跃会话的目标列表】 */
-  sessionActiveGoals: () => request<GoalSummary[]>('/api/ai/sessions/active-goals'),
-  /** 【获取所有目标列表】 */
-  sessionAllGoals: () => request<GoalSummary[]>('/api/ai/sessions/goals'),
-  /** 【开启新目标拆解会话】 */
-  sessionStartNewGoal: (goal: string) => request<SessionView>('/api/ai/sessions/new-goal', {
-    method: 'POST', body: JSON.stringify({ goal })
+  // ===== AI 拆解对话（Gemini 式：分类 → 对话 → 消息） =====
+  /** 【侧边栏树：分类 + 全部对话摘要】 */
+  chatTree: () => request<ChatTree>('/api/chat/tree'),
+  /** 【创建分类】 */
+  chatCreateCategory: (name: string) => request<ChatCategory>('/api/chat/categories', {
+    method: 'POST', body: JSON.stringify({ name })
   }),
-  /** 【开启目标推进会话（Check-in）】 */
-  sessionStartCheckIn: (goalId: number) => request<SessionView>('/api/ai/sessions/check-in', {
-    method: 'POST', body: JSON.stringify({ goalId })
+  /** 【重命名分类】 */
+  chatRenameCategory: (id: number, name: string) => request<ChatCategory>(`/api/chat/categories/${id}`, {
+    method: 'PATCH', body: JSON.stringify({ name })
   }),
-  /** 【获取会话详情】 */
-  sessionGet: (id: number) => request<SessionView>(`/api/ai/sessions/${id}`),
-  /** 【向会话发送消息（非流式）】 */
-  sessionPostMessage: (id: number, content: string) => request<SessionView>(`/api/ai/sessions/${id}/messages`, {
+  /** 【删除分类（其下对话归入默认组）】 */
+  chatDeleteCategory: (id: number) => request<{ id: number }>(`/api/chat/categories/${id}`, { method: 'DELETE' }),
+  /** 【新建对话，可选归入某分类】 */
+  chatCreateConversation: (categoryId?: number | null) => request<ChatConversationView>('/api/chat/conversations', {
+    method: 'POST', body: JSON.stringify({ categoryId: categoryId ?? null })
+  }),
+  /** 【获取对话详情（含全部消息）】 */
+  chatGetConversation: (id: number) => request<ChatConversationView>(`/api/chat/conversations/${id}`),
+  /** 【更新对话：重命名 / 移动分类（clearCategory=true 移出到默认组）】 */
+  chatUpdateConversation: (id: number, patch: { title?: string; categoryId?: number | null; clearCategory?: boolean }) =>
+    request<ChatConversationView>(`/api/chat/conversations/${id}`, {
+      method: 'PATCH', body: JSON.stringify(patch)
+    }),
+  /** 【删除对话】 */
+  chatDeleteConversation: (id: number) => request<{ id: number }>(`/api/chat/conversations/${id}`, { method: 'DELETE' }),
+  /** 【发送消息（非流式）】 */
+  chatPostMessage: (id: number, content: string) => request<ChatConversationView>(`/api/chat/conversations/${id}/messages`, {
     method: 'POST', body: JSON.stringify({ content })
   }),
-  /**
-   * Streaming variant. Calls the SSE endpoint with fetch+ReadableStream (EventSource can't
-   * POST a body) and dispatches incremental tokens to onToken. The server emits exactly
-   * one `done` event with the final SessionView, which resolves the returned promise.
-   * Falls back to caller-handled error if anything blows up mid-stream.
-   *
-   * 【流式会话消息】
-   * 通过 SSE 流式传输 AI 回复的增量文本，服务端最终发送一个 done 事件
-   * 携带完整的 SessionView 数据。如果流式过程中出错，由调用方处理降级。
-   */
-  sessionPostMessageStream: (
-    id: number,
-    content: string,
-    onToken: (chunk: string) => void
-  ): Promise<SessionView> => streamSse<SessionView>(`/api/ai/sessions/${id}/messages/stream`, { content }, onToken),
+  /** 【发送消息（SSE 流式）：增量文本经 onToken 推送，done 时 resolve 完整对话视图】 */
+  chatPostMessageStream: (id: number, content: string, onToken: (chunk: string) => void): Promise<ChatConversationView> =>
+    streamSse<ChatConversationView>(`/api/chat/conversations/${id}/messages/stream`, { content }, onToken),
   /** 【编辑计划草案中的单个任务】 */
-  sessionEditPlanTask: (id: number, index: number, patch: {
-    title?: string;
-    description?: string;
-    estimatedMinutes?: number;
-    difficulty?: string;
-    taskType?: string;
-    baseExp?: number;
-  }) => request<SessionView>(`/api/ai/sessions/${id}/plan/tasks/${index}`, {
+  chatEditPlanTask: (id: number, index: number, patch: {
+    title?: string; description?: string; estimatedMinutes?: number; difficulty?: string; taskType?: string; baseExp?: number;
+  }) => request<ChatConversationView>(`/api/chat/conversations/${id}/plan/tasks/${index}`, {
     method: 'PATCH', body: JSON.stringify(patch)
   }),
   /** 【删除计划草案中的单个任务】 */
-  sessionDeletePlanTask: (id: number, index: number) => request<SessionView>(`/api/ai/sessions/${id}/plan/tasks/${index}`, {
+  chatDeletePlanTask: (id: number, index: number) => request<ChatConversationView>(`/api/chat/conversations/${id}/plan/tasks/${index}`, {
     method: 'DELETE'
   }),
-  /** 【确认计划草案，将待定任务落地为真实任务并更新目标记忆】 */
-  sessionCommit: (id: number) => request<SessionView>(`/api/ai/sessions/${id}/commit`, {
-    method: 'POST'
-  }),
-  /** 【放弃当前会话】 */
-  sessionAbandon: (id: number) => request<SessionView>(`/api/ai/sessions/${id}/abandon`, { method: 'POST' }),
-  /** 【更新目标信息（标题、日期、状态等）】 */
-  updateGoal: (id: number, patch: { title?: string; targetDate?: string | null; status?: GoalSummary['status']; clearTargetDate?: boolean }) =>
-    request<{ id: number; title: string; status: GoalSummary['status']; targetDate?: string | null }>(`/api/goals/${id}`, {
-      method: 'PATCH', body: JSON.stringify(patch)
-    }),
-  /** 【删除目标，同时解绑关联任务和关闭会话】 */
-  deleteGoal: (id: number) => request<{ id: number; unboundTasks: number; closedSessions: number }>(`/api/goals/${id}`, {
-    method: 'DELETE'
-  }),
-  /** 【获取目标详情（含蒸馏记忆和关联任务）】 */
-  goalDetail: (id: number) => request<GoalDetail>(`/api/goals/${id}`),
-  /** 【获取指定目标的所有会话列表】 */
-  sessionListForGoal: (goalId: number) => request<SessionSummary[]>(`/api/ai/sessions?goalId=${goalId}`),
-  /** 【删除会话】 */
-  deleteSession: (id: number) => request<{ id: number; deletedTurns: number }>(`/api/ai/sessions/${id}`, { method: 'DELETE' }),
+  /** 【确认计划草案，落地为真实任务（不挂目标）】 */
+  chatCommit: (id: number) => request<ChatConversationView>(`/api/chat/conversations/${id}/commit`, { method: 'POST' }),
   /** 【获取宠物信息】 */
   pet: () => request<Pet>('/api/pet'),
   /** 【喂食宠物（增加饱食度）】 */

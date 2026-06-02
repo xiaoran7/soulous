@@ -175,6 +175,26 @@ public class PlanningSessionService {
      */
     @Transactional
     public SessionDtos.SessionView startCheckIn(UserAccount user, Long goalId) {
+        return startCheckIn(user, goalId, false);
+    }
+
+    /**
+     * 【打卡跟进（可强制新建）：对已有目标开启 check-in 会话。】
+     *
+     * <p>当 {@code forceNew} 为 false（默认）时沿用复用语义：若目标下已有 DRAFTING/PLAN_PROPOSED
+     * 的活跃会话则直接返回，避免重复刷会话。当 {@code forceNew} 为 true（用户点击「新对话」）时
+     * 跳过复用查找，始终新建一段空白会话并生成 AI 开场白——已有的草稿会话保留在历史中。</p>
+     *
+     * @param user     【当前登录用户】
+     * @param goalId   【目标 ID】
+     * @param forceNew 【true 表示强制新建空白会话，不复用已有草稿】
+     * @return 【会话视图】
+     * @throws NotFoundException    【目标不存在】
+     * @throws ForbiddenException   【目标不属于当前用户】
+     * @throws BadRequestException  【目标已不再活跃（已完成/已归档/已放弃）】
+     */
+    @Transactional
+    public SessionDtos.SessionView startCheckIn(UserAccount user, Long goalId, boolean forceNew) {
         var goal = goals.findById(goalId).orElseThrow(() -> new NotFoundException("Goal not found"));
         if (!Objects.equals(goal.user.id, user.id)) throw new ForbiddenException("Goal belongs to another user");
         // Issue #5: ensureActive (called on every subsequent postMessage) rejects ABANDONED
@@ -186,10 +206,12 @@ public class PlanningSessionService {
             throw new BadRequestException("Goal is no longer active");
         }
 
-        var existing = sessions.findFirstByGoalAndStateInOrderByStartedAtDesc(
-                goal, List.of(SessionState.DRAFTING, SessionState.PLAN_PROPOSED));
-        if (existing.isPresent()) {
-            return view(existing.get(), null, List.of());
+        if (!forceNew) {
+            var existing = sessions.findFirstByGoalAndStateInOrderByStartedAtDesc(
+                    goal, List.of(SessionState.DRAFTING, SessionState.PLAN_PROPOSED));
+            if (existing.isPresent()) {
+                return view(existing.get(), null, List.of());
+            }
         }
 
         var session = openSession(user, goal, SessionKind.CHECK_IN);

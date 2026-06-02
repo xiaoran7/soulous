@@ -92,14 +92,24 @@ Native 客户端（Android Flutter）专用。refresh token 走 body，不写 co
 
 吊销当前 refresh token。客户端同时清掉本地 access + refresh。
 
-## AI Sessions (Planner) / SSE
+## AI 拆解对话（Chat）/ SSE
 
-Planner 多轮对话拆解目标。详细事件协议见 `README.md` 的「AI 拆解对话流式输出」段。
+Gemini 式的分类 → 对话 → 消息聊天（取代旧的目标中心 Planner）。聊天里 AI 可输出 `<PLAN_JSON>` 计划草案，确认后落地为真实 `StudyTask`（不挂目标，`goalId` 为空）。附件（md/pdf/txt）由前端提取文本后拼进消息正文，无独立上传端点。
 
-- `POST /api/ai/sessions/new-goal` — 新目标开启 session（非流式，receive 建议 ≥ 3min）
-- `POST /api/ai/sessions/{id}/messages/stream` — 多轮对话，`text/event-stream`，事件：`token`（增量）/ `done`（含完整 `SessionViewDto`）/ `error`
-- `POST /api/ai/sessions/{id}/commit` — 把 pendingPlan 落地为真实 `StudyTasks`
-- `GET /api/ai/sessions/active-goals`、`GET /api/ai/sessions?goalId=...` — 列出活跃目标 / 某目标的历史 session
+分类与对话：
+- `GET /api/chat/tree` — 侧边栏树：全部分类 + 全部对话摘要（`categoryId` 为 null = 默认组）
+- `POST /api/chat/categories`、`PATCH /api/chat/categories/{id}`、`DELETE /api/chat/categories/{id}` — 分类增改删（删除后其下对话归默认组，不删对话）
+- `POST /api/chat/conversations`（可选 `{categoryId}`）、`GET /api/chat/conversations/{id}`、`PATCH /api/chat/conversations/{id}`（`{title?, categoryId?, clearCategory?}` 重命名/移动）、`DELETE /api/chat/conversations/{id}`
+
+消息与计划：
+- `POST /api/chat/conversations/{id}/messages` — 发消息（非流式）
+- `POST /api/chat/conversations/{id}/messages/stream` — 多轮对话，`text/event-stream`，事件：`token`（增量）/ `done`（含完整 `ConversationView`）/ `error`
+- `PATCH|DELETE /api/chat/conversations/{id}/plan/tasks/{index}` — 编辑/删除计划草案中的单条任务
+- `POST /api/chat/conversations/{id}/commit` — 把 pendingPlan 落地为真实 `StudyTask`
+
+涉及 LLM 的端点配置小时级（60/h）+ 天级（200/d）限流（按用户）。
+
+> 旧的 `/api/ai/sessions/*`（PlanningSession）与 `/api/goals/*`（Goal）REST 已下线删除；底层 `goal` / `planning_session` 表与服务暂时保留（RAG、每日复盘仍引用），但不再有对外接口。
 
 > SSE 服务端依赖 `spring.mvc.async.request-timeout`（默认 300000ms = 5min），反代如 nginx 需关 `proxy_buffering` + 抬 `proxy_read_timeout`，否则 token 流被攒在反代里或被切断。
 
@@ -237,7 +247,7 @@ MVP 中审核随任务提交自动触发，此接口返回说明消息。
 
 ## Timetable / 课表
 
-用户课表（一周课程网格），供前端展示，并作为背景画像注入 AI 拆解（见 `architecture.md` 的 `[COURSES]` 段）。导入走 LLM 解析：前端把教务系统导出的 `.xls`（用 SheetJS 在浏览器内转成 HTML 表格）或直接粘贴的课表 HTML 交给后端解析。全部接口需登录。
+用户课表（一周课程网格），供前端展示。导入走 LLM 解析：前端把教务系统导出的 `.xls`（用 SheetJS 在浏览器内转成 HTML 表格）或直接粘贴的课表 HTML 交给后端解析。全部接口需登录。（注：课表作为 `[COURSES]` 背景注入 AI 拆解的旧逻辑随 2026-06-01 的对话重构已移除。）
 
 ### `GET /api/timetable?semester=`
 

@@ -521,6 +521,7 @@ public class TaskService {
         if (request.taskType() != null) task.taskType = request.taskType();
         if (request.difficulty() != null) task.difficulty = request.difficulty();
         task.courseName = request.courseName();
+        task.category = normalizeCategory(request.category());
         if (request.estimatedMinutes() != null) task.estimatedMinutes = request.estimatedMinutes();
         if (request.baseExp() != null) task.baseExp = request.baseExp();
         task.deadline = request.deadline();
@@ -528,6 +529,19 @@ public class TaskService {
                 && request.scheduledWeekday() >= 1 && request.scheduledWeekday() <= 7) {
             task.scheduledWeekday = request.scheduledWeekday();
         }
+    }
+
+    /**
+     * 【规整大分类：去首尾空白，空串归一为 null，超长截断到 64（与列宽一致）。】
+     *
+     * @param raw 【原始分类名，可空】
+     * @return 【规整后的分类名，空白时返回 null】
+     */
+    private String normalizeCategory(String raw) {
+        if (raw == null) return null;
+        var trimmed = raw.trim();
+        if (trimmed.isEmpty()) return null;
+        return trimmed.length() > 64 ? trimmed.substring(0, 64) : trimmed;
     }
 
     /**

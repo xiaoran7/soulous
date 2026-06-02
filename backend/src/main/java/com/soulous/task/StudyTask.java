@@ -44,6 +44,11 @@ public class StudyTask {
     public Difficulty difficulty = Difficulty.NORMAL;
     /** 【课程名称，用于按课程维度对任务进行分组和筛选】 */
     public String courseName;
+    /** 【大分类，用于把任务归入更高一层的主题分组（如「考研数学」「期末复习」）。
+     *  与 AI 拆解的对话分类（{@link com.soulous.chat.ChatCategory}）共用同一套命名：
+     *  从 AI 拆解落地的任务会自动写入所在对话的分类名；手动任务可自定义。可空。】 */
+    @Column(length = 64)
+    public String category;
     /** 【预计学习时长（分钟），默认 30 分钟，用于任务规划和时间管理】 */
     public Integer estimatedMinutes = 30;
     /** 【实际学习时长（分钟），默认 0，由提交时的 studyMinutes 更新】 */

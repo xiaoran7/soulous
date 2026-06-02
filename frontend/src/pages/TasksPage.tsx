@@ -35,6 +35,7 @@ import { api } from '../api';
 import type { AiReview, StudyTask, Submission, SubmissionDetail } from '../types';
 import { Empty, TaskRow, statusLabel } from '../components/shared';
 import { ProofUploader, ProofThumbStrip, parseScreenshotUrls, type ProofImage } from '../components/ProofUploader';
+import { resetFocusCache } from './FocusPage';
 
 /**
  * 【任务表单状态类型】定义创建/编辑任务时表单的数据结构
@@ -43,6 +44,7 @@ import { ProofUploader, ProofThumbStrip, parseScreenshotUrls, type ProofImage } 
 type TaskFormState = {
   title: string;
   description: string;
+  category: string;
   courseName: string;
   estimatedMinutes: number;
   baseExp: number;
@@ -55,6 +57,7 @@ type TaskFormState = {
 const emptyTaskForm = (): TaskFormState => ({
   title: '',
   description: '',
+  category: '',
   courseName: '数据结构',
   estimatedMinutes: 30,
   baseExp: 20,
@@ -132,6 +135,7 @@ const PHASE_PROGRESS: Record<SubmitPhase, number> = {
 const taskToForm = (task: StudyTask): TaskFormState => ({
   title: task.title,
   description: task.description ?? '',
+  category: task.category ?? '',
   courseName: task.courseName ?? '',
   estimatedMinutes: task.estimatedMinutes ?? 30,
   baseExp: task.baseExp ?? 20,
@@ -158,6 +162,13 @@ export function TasksPage({ tasks, onRefresh }: { tasks: StudyTask[]; onRefresh:
   const [tab, setTab] = useState<TabKey>('list');
   const [listFilter, setListFilter] = useState<ListFilter>('all');
   const [courseFilter, setCourseFilter] = useState<string>('');
+  /** 【大分类筛选】列表按大分类过滤，'' 为全部 */
+  const [categoryFilter, setCategoryFilter] = useState<string>('');
+  /**
+   * 【AI 拆解对话分类名】用于在任务表单的「大分类」里提供可复用的候选，
+   * 让任务能关联到 AI 拆解的对话分类。仅做候选提示，挂载时拉取一次。
+   */
+  const [chatCategories, setChatCategories] = useState<string[]>([]);
 
   const [form, setForm] = useState<TaskFormState>(emptyTaskForm());
   /** 【编辑中的任务 ID】非 null 表示正在编辑已有任务 */
@@ -230,6 +241,33 @@ export function TasksPage({ tasks, onRefresh }: { tasks: StudyTask[]; onRefresh:
   }, [tasks]);
 
   /**
+   * 【大分类列表】从任务中提取不重复的大分类名称，用于列表筛选器
+   */
+  const categoryList = useMemo(() => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    tasks.forEach((t) => {
+      const name = (t.category ?? '').trim();
+      if (name && !seen.has(name)) { seen.add(name); out.push(name); }
+    });
+    return out;
+  }, [tasks]);
+
+  /**
+   * 【大分类候选】合并已用过的任务大分类与 AI 拆解对话分类，去重，
+   * 作为任务表单里「大分类」的快捷选项——把任务和 AI 拆解的对话分类打通。
+   */
+  const categorySuggestions = useMemo(() => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    [...categoryList, ...chatCategories].forEach((name) => {
+      const n = (name ?? '').trim();
+      if (n && !seen.has(n)) { seen.add(n); out.push(n); }
+    });
+    return out;
+  }, [categoryList, chatCategories]);
+
+  /**
    * 【最近课程】按创建时间倒序取前 6 个课程，用于表单中的快捷选择
    */
   const recentCourses = useMemo(() => {
@@ -251,10 +289,11 @@ export function TasksPage({ tasks, onRefresh }: { tasks: StudyTask[]; onRefresh:
     return tasks.filter((t) => {
       if (listFilter === 'todo' && t.status !== 'TODO') return false;
       if (listFilter === 'doing' && t.status !== 'DOING' && t.status !== 'PAUSED') return false;
+      if (categoryFilter && (t.category ?? '').trim() !== categoryFilter) return false;
       if (courseFilter && (t.courseName ?? '').trim() !== courseFilter) return false;
       return true;
     });
-  }, [tasks, listFilter, courseFilter]);
+  }, [tasks, listFilter, categoryFilter, courseFilter]);
 
   /** 【可提交任务列表】只包含允许提交凭证的状态的任务 */
   const submittableTasks = useMemo(
@@ -319,6 +358,21 @@ export function TasksPage({ tasks, onRefresh }: { tasks: StudyTask[]; onRefresh:
 
   // 【初始加载】组件挂载时获取提交记录
   useEffect(() => { void loadSubmissions(); }, []);
+
+  /**
+   * 【加载 AI 拆解对话分类】作为任务「大分类」的候选项，让任务能关联到
+   * AI 拆解的对话分类。失败静默——分类候选只是锦上添花，不阻塞任务表单。
+   */
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const tree = await api.chatTree();
+        if (!cancelled) setChatCategories(tree.categories.map((c) => c.name));
+      } catch { /* 候选项可选，失败忽略 */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   /**
    * 【SSE 通知监听】监听 NotificationBell 触发的自定义事件
@@ -407,6 +461,9 @@ export function TasksPage({ tasks, onRefresh }: { tasks: StudyTask[]; onRefresh:
         setDraftStatus('');
       }
       setForm(emptyTaskForm());
+      // 任务增改后，作废自习室的缓存任务列表：下次进入自习室会重新拉取一次，
+      // 让「关联任务」下拉里能看到新建/改名的任务（不做持续轮询）。
+      resetFocusCache();
       await onRefresh();
       setTab('list');
     } catch (err) {
@@ -658,10 +715,24 @@ export function TasksPage({ tasks, onRefresh }: { tasks: StudyTask[]; onRefresh:
             <button type="button" className={`chip${listFilter === 'todo' ? ' selected' : ''}`} onClick={() => setListFilter('todo')}>待完成</button>
             <button type="button" className={`chip${listFilter === 'doing' ? ' selected' : ''}`} onClick={() => setListFilter('doing')}>进行中</button>
           </div>
+          {/* 【大分类筛选器】按大分类过滤（关联 AI 拆解的对话分类），仅在有大分类时显示 */}
+          {categoryList.length > 0 && (
+            <div className="chip-group" style={{ marginBottom: 8 }}>
+              <button type="button" className={`chip small${categoryFilter === '' ? ' selected' : ''}`} onClick={() => setCategoryFilter('')}>全部大分类</button>
+              {categoryList.map((name) => (
+                <button
+                  key={name}
+                  type="button"
+                  className={`chip small${categoryFilter === name ? ' selected' : ''}`}
+                  onClick={() => setCategoryFilter(categoryFilter === name ? '' : name)}
+                >{name}</button>
+              ))}
+            </div>
+          )}
           {/* 【课程筛选器】按课程名称过滤，仅在有课程时显示 */}
           {courseList.length > 0 && (
             <div className="chip-group" style={{ marginBottom: 8 }}>
-              <button type="button" className={`chip small${courseFilter === '' ? ' selected' : ''}`} onClick={() => setCourseFilter('')}>全部分类</button>
+              <button type="button" className={`chip small${courseFilter === '' ? ' selected' : ''}`} onClick={() => setCourseFilter('')}>全部课程</button>
               {courseList.map((name) => (
                 <button
                   key={name}
@@ -760,6 +831,28 @@ export function TasksPage({ tasks, onRefresh }: { tasks: StudyTask[]; onRefresh:
               <span>任务描述</span>
               <textarea rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="简单写一下要做什么" />
             </label>
+
+            {/* 【大分类选择】合并任务已有大分类与 AI 拆解的对话分类作为快捷选项，
+                也可自定义输入——把任务归入与 AI 拆解一致的大分类下 */}
+            <div className="field-label">
+              <span>大分类</span>
+              <div className="chip-group">
+                {categorySuggestions.map((name) => (
+                  <button
+                    key={name}
+                    type="button"
+                    className={`chip${form.category === name ? ' selected' : ''}`}
+                    onClick={() => setForm({ ...form, category: form.category === name ? '' : name })}
+                  >{name}</button>
+                ))}
+                <input
+                  className="chip-input"
+                  value={form.category}
+                  onChange={(e) => setForm({ ...form, category: e.target.value })}
+                  placeholder={categorySuggestions.length ? '自定义大分类...' : '如 考研数学（关联 AI 拆解分类）'}
+                />
+              </div>
+            </div>
 
             {/* 【课程选择】显示最近使用的课程作为快捷选项，也可自定义输入 */}
             <div className="field-label">

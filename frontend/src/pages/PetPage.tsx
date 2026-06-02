@@ -1,16 +1,14 @@
 /**
  * 【宠物页面】PetPage
- * 本页面展示宠物的详细信息和互动功能：
- * - 宠物卡片：等级、阶段、状态、经验值、心情、饱食度
- * - 成长反馈：宠物状态文案、动画预览
- * - 喂食功能：增加饱食度
- * - 头像管理：上传/清除宠物自定义头像
- * - 经验趋势图：近 7 天的经验获取趋势
- * - 动作预览：预览宠物的不同动画状态
+ * 本页面展示宠物的详细信息和互动功能，三个模块自上而下：
+ * - 成长档案（合并原「宠物成长」+「成长反馈」）：身份信息（头像/动画、名字、
+ *   等级阶段状态、头像管理）+ 状态文案 + 经验/心情/饱食进度条 + 喂食
+ * - 成长动态（合并原「经验趋势」+「动作预览」）：近 7 天经验趋势图 + 动作预览
  * - 成长事件日志：展示宠物的成长历史记录
  *
  * 设计思路：宠物是学习成果的可视化载体，通过等级、心情、饱食度等维度
- * 反映用户的学习状态。喂食和头像管理增加互动性和个性化。
+ * 反映用户的学习状态。喂食和头像管理增加互动性和个性化。原本「宠物成长」
+ * 卡片与「成长反馈」面板在身份信息上高度重合，已合并为单一成长档案模块。
  */
 import React, { Suspense, lazy, useEffect, useState } from 'react';
 import { Cookie, PawPrint, RefreshCw, TrendingUp, Upload, X } from 'lucide-react';
@@ -18,7 +16,7 @@ import { api } from '../api';
 import { PetSprite } from '../PetSprite';
 import type { PetAnimationState } from '../PetSprite';
 import type { ExpLog, Pet } from '../types';
-import { ClickableAvatar, Empty, PetCard, StatBar, animationForPet } from '../components/shared';
+import { ClickableAvatar, Empty, StatBar, animationForPet } from '../components/shared';
 
 /** 【懒加载经验趋势图】仅在滚动到图表区域时加载 */
 const ExpTrendChart = lazy(() => import('../components/PetCharts'));
@@ -201,22 +199,29 @@ export function PetPage({ pet: initialPet, onFed }: { pet: Pet | null; onFed?: (
   }
 
   return (
-    <div className="two-column">
-      {/* 【宠物卡片】左侧的综合宠物信息卡片 */}
-      <PetCard pet={pet} />
-
-      {/* ===== 【成长反馈面板】宠物状态、动画、属性、喂食 ===== */}
-      <section className="panel pet-stage-panel">
-        <div className="panel-title"><h2>成长 <em style={{ fontStyle: 'italic', color: 'var(--ink-3)' }}>反馈</em></h2></div>
-        <div className="pet-stage">
-          {/* 【宠物形象展示区】头像或动画 + 头像管理按钮 */}
-          <div className="pet-figure">
+    <div className="page-stack">
+      {/* ===== 【成长档案】合并「宠物成长」与「成长反馈」：身份信息 + 状态属性 + 喂食 ===== */}
+      <section className="panel pet-profile full">
+        <div className="panel-title">
+          <h2>宠物 <em style={{ fontStyle: 'italic', color: 'var(--ink-3)' }}>成长档案</em></h2>
+          <PawPrint size={16} />
+        </div>
+        <div className="pet-profile-body">
+          {/* 【身份列】头像/动画 + 名字 + 等级阶段状态 + 头像管理 */}
+          <div className="pet-profile-identity">
             <div className="pet-avatar-frame">
               {pet?.avatarUrl ? (
                 <ClickableAvatar url={pet.avatarUrl} alt={`${pet.name ?? '宠物'} 头像`} />
               ) : (
-                <PetSprite state={previewState} size={176} />
+                <PetSprite state={previewState} size={140} />
               )}
+            </div>
+            <h3>{pet?.name ?? 'Soul'}</h3>
+            {/* 【宠物属性网格】等级、阶段、状态 */}
+            <div className="pet-state-grid">
+              <div><span>等级</span><strong>Lv.{pet?.level ?? 1}</strong></div>
+              <div><span>阶段</span><strong>{pet?.growthStage ?? 'EGG'}</strong></div>
+              <div><span>状态</span><strong>{pet?.status ?? 'NORMAL'}</strong></div>
             </div>
             {/* 【头像操作按钮】上传/更换/恢复默认 */}
             <div className="pet-avatar-actions">
@@ -234,96 +239,97 @@ export function PetPage({ pet: initialPet, onFed }: { pet: Pet | null; onFed?: (
             {avatarError && <div className="form-error" style={{ marginTop: 6 }}>{avatarError}</div>}
           </div>
 
-          {/* 【状态文案】展示宠物当前的情感状态 */}
-          <div className="pet-state-copy">
-            <span>{statusCopy.title}</span>
-            <p>{statusCopy.body}</p>
-          </div>
+          {/* 【反馈列】状态文案 + 属性进度条 + 喂食 */}
+          <div className="pet-profile-detail">
+            {/* 【状态文案】展示宠物当前的情感状态 */}
+            <div className="pet-state-copy">
+              <span>{statusCopy.title}</span>
+              <p>{statusCopy.body}</p>
+            </div>
 
-          {/* 【宠物属性网格】等级、阶段、状态 */}
-          <div className="pet-state-grid">
-            <div><span>等级</span><strong>Lv.{pet?.level ?? 1}</strong></div>
-            <div><span>阶段</span><strong>{pet?.growthStage ?? 'EGG'}</strong></div>
-            <div><span>状态</span><strong>{pet?.status ?? 'NORMAL'}</strong></div>
-          </div>
+            {/* 【属性进度条】经验、心情、饱食度 */}
+            <div className="pet-stat-bars">
+              <StatBar
+                label="经验"
+                value={pet?.currentExp ?? 0}
+                max={pet?.nextLevelExp ?? 100}
+                tone="primary"
+                valueLabel={`${pet?.currentExp ?? 0} / ${pet?.nextLevelExp ?? 100}`}
+              />
+              <StatBar
+                label="心情"
+                value={pet?.mood ?? 0}
+                max={100}
+                tone="warm"
+                valueLabel={`${pet?.mood ?? 0}`}
+              />
+              <StatBar
+                label="饱食"
+                value={pet?.satiety ?? 0}
+                max={100}
+                tone="cool"
+                valueLabel={`${pet?.satiety ?? 0}`}
+              />
+            </div>
 
-          {/* 【属性进度条】经验、心情、饱食度 */}
-          <div className="pet-stat-bars">
-            <StatBar
-              label="经验"
-              value={pet?.currentExp ?? 0}
-              max={pet?.nextLevelExp ?? 100}
-              tone="primary"
-              valueLabel={`${pet?.currentExp ?? 0} / ${pet?.nextLevelExp ?? 100}`}
-            />
-            <StatBar
-              label="心情"
-              value={pet?.mood ?? 0}
-              max={100}
-              tone="warm"
-              valueLabel={`${pet?.mood ?? 0}`}
-            />
-            <StatBar
-              label="饱食"
-              value={pet?.satiety ?? 0}
-              max={100}
-              tone="cool"
-              valueLabel={`${pet?.satiety ?? 0}`}
-            />
-          </div>
-
-          {/* 【喂食按钮】点击增加 20 饱食度 */}
-          <button className="secondary-button" onClick={feed} disabled={feeding} style={{ marginTop: 12 }}>
-            <Cookie size={16} />{feeding ? '喂食中...' : '喂食 (+20 饱食)'}
-          </button>
-          {feedError && <div className="form-error" style={{ marginTop: 8 }}>{feedError}</div>}
-        </div>
-      </section>
-
-      {/* ===== 【经验趋势图】近 7 天的经验获取趋势 ===== */}
-      <section className="panel full">
-        <div className="panel-title"><h2>近 7 天 <em style={{ fontStyle: 'italic', color: 'var(--ink-3)' }}>经验趋势</em></h2><TrendingUp size={16} /></div>
-        <Suspense fallback={<div className="muted">加载图表中...</div>}>
-          <ExpTrendChart logs={logs} days={7} />
-        </Suspense>
-      </section>
-
-      {/* ===== 【动作预览】点击切换主展示区的动画状态 ===== */}
-      <section className="panel full">
-        <div className="panel-title"><h2>动作 <em style={{ fontStyle: 'italic', color: 'var(--ink-3)' }}>预览</em></h2></div>
-        <div className="pet-action-grid">
-          {petActionPreviews.map((action) => (
-            <button
-              key={action.state}
-              className={`pet-action ${previewState === action.state ? 'selected' : ''}`}
-              onClick={() => setPreviewState(action.state)}
-            >
-              <PetSprite state={action.state} size={82} label={`Feixue ${action.label}`} />
-              <strong>{action.label}</strong>
-              <span>{action.description}</span>
+            {/* 【喂食按钮】点击增加 20 饱食度 */}
+            <button className="secondary-button" onClick={feed} disabled={feeding} style={{ marginTop: 4, alignSelf: 'flex-start' }}>
+              <Cookie size={16} />{feeding ? '喂食中...' : '喂食 (+20 饱食)'}
             </button>
-          ))}
+            {feedError && <div className="form-error" style={{ marginTop: 8 }}>{feedError}</div>}
+          </div>
+        </div>
+
+        {/* ===== 【成长动态】合并「经验趋势」+「动作预览」，并入成长档案 ===== */}
+        <div className="pet-dynamics">
+          {/* 【经验趋势图】近 7 天的经验获取趋势 */}
+          <div className="pet-dynamics-block">
+            <div className="pet-subhead"><TrendingUp size={13} /> 近 7 天经验趋势</div>
+            <Suspense fallback={<div className="muted">加载图表中...</div>}>
+              <ExpTrendChart logs={logs} days={7} />
+            </Suspense>
+          </div>
+
+          {/* 【动作预览】点击切换主展示区的动画状态 */}
+          <div className="pet-dynamics-block">
+            <div className="pet-subhead">动作预览</div>
+            <div className="pet-action-grid">
+              {petActionPreviews.map((action) => (
+                <button
+                  key={action.state}
+                  className={`pet-action ${previewState === action.state ? 'selected' : ''}`}
+                  onClick={() => setPreviewState(action.state)}
+                >
+                  <PetSprite state={action.state} size={52} label={`Feixue ${action.label}`} />
+                  <strong>{action.label}</strong>
+                  <span>{action.description}</span>
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       </section>
 
-      {/* ===== 【成长事件日志】展示宠物的经验获取历史 ===== */}
+      {/* ===== 【成长事件日志】仿任务列表（task-card）样式展示成长历史 ===== */}
       <section className="panel full">
         <div className="panel-title">
           <h2>成长 <em style={{ fontStyle: 'italic', color: 'var(--ink-3)' }}>事件</em></h2>
           <button className="icon-button" onClick={loadLogs} title="刷新经验记录"><RefreshCw size={14} /></button>
         </div>
         {logsError && <div className="form-error">{logsError}</div>}
-        <div className="pet-log-list">
-          {logs.slice(0, 8).map((log) => (
-            <div className="pet-log-item" key={log.id}>
-              <div>
-                <strong>{petEventTitle(log)}</strong>
-                <p className="muted">{formatDateTime(log.createdAt)} · {log.reason || '成长事件'}</p>
+        <div className="task-list">
+          {logs.slice(0, 6).map((log) => (
+            <div className="task-card" key={log.id}>
+              <div className="task-row">
+                <div>
+                  <strong>{petEventTitle(log)}</strong>
+                  <p>{formatDateTime(log.createdAt)} · {log.reason || '成长事件'}</p>
+                </div>
+                {/* 【经验值变化】正数显示 +N EXP 徽章，否则显示事件标签 */}
+                <span className={`badge ${log.expAmount > 0 ? 'badge-completed' : ''}`}>
+                  {log.expAmount > 0 ? `+${log.expAmount} EXP` : petEventLabels[log.eventType ?? ''] ?? '反馈'}
+                </span>
               </div>
-              {/* 【经验值变化】正数显示 +N，否则显示事件标签 */}
-              <span className={log.expAmount > 0 ? '' : 'neutral'}>
-                {log.expAmount > 0 ? `+${log.expAmount}` : petEventLabels[log.eventType ?? ''] ?? '反馈'}
-              </span>
             </div>
           ))}
           {logs.length === 0 && (
