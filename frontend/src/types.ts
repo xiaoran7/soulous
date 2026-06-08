@@ -72,10 +72,11 @@ export interface CourseEntry {
   semester?: string | null;
 }
 
-/** 【课表导入结果】 */
-export interface TimetableImportResult {
+/** 【课表同步结果】 */
+export interface TimetableSyncResult {
   count: number;
-  semester?: string | null;
+  semester: string;
+  weekStart: string;
   courses: CourseEntry[];
 }
 
@@ -326,6 +327,8 @@ export interface PendingPlanTask {
  */
 export interface PendingPlan {
   goalTitle?: string;
+  /** AI 为这组任务起的「大类」归类名；落地任务时自动写入 task.category，用户无需手动建分类。 */
+  category?: string;
   tasks?: PendingPlanTask[];
   goalStatusChange?: string | null;
 }

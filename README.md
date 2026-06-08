@@ -24,12 +24,13 @@ Turn fragmented learning into a quantifiable, traceable, and positive feedback c
 - **Timetable**: Import course timetables from university academic systems (SheetJS parsing of `.xls` in-browser → LLM structured format, or copy-pasting HTML), single/double week displays, manual entries, and semester start week alignment.
 - **AI Hub**:
   - AI Decompose Chat (continuous messaging + `PLAN_JSON` to task conversion).
-  - Credential Verification Engine (multi-dimensional assessment: relevance, completeness, and quality score, with automated experience points reward).
+  - Credential Verification Engine (multi-dimensional assessment: relevance, completeness, and quality score, with automated experience points reward). Reviews are delegated to the memory-aware **Companion Pet** (external Anima agent) first, with automatic fallback to the local LLM/rule engine — see `docs/ai-review-rules.md`.
   - Daily Review (dynamic summaries based on user activity logs).
   - RAG Long-term Memory + Time-decay Retrieval:
     $$\text{Score} = \text{CosineSimilarity} \times 0.5^{\frac{\text{AgeDays}}{\text{HalfLife}}}$$
     (Default half-life of 90 days). Indexes cover `GOAL_MEMORY`, `SESSION_SUMMARY`, `COMPLETED_TASK`, and `DAILY_REVIEW`. The memory is retrieved and injected into system prompts during AI Reviews (`AiService.review`), task follow-ups (`generateQuestion`), goal decomposition (`decompose`), and daily reviews (`DailyReviewService`), giving the AI a personalized "memory" of the user.
   - Context-aware Content Moderation (bidirectional input/output wind control: PASS/FLAG/BLOCK verdicts, violating records saved to `moderation_log`).
+- **Companion Pet**: A memory-aware chat surface where the pet (Feixue) remembers you across sessions and reviews your submitted work in-character. Its brain runs in a standalone **Anima** agent service (Python/FastAPI: self-written orchestration loop + layered memory + persona), called over HTTP from the `companion` package; degrades gracefully when unavailable.
 - **Pet & Analytics**: Experience level-up, pet mood reflecting user activity, customizable avatars, pet spritesheet animations ([`frontend/public/pets/`](frontend/public/pets/)). Interactive dashboard for daily metrics, 7-day heatmaps, category distributions, and study trends.
 - **Admin Dashboard**: Site-wide submissions queue, manual override of AI audit results (approve / reject / request additions), appeal handling, admin user provisioning, and role assignment. All operations logged in `admin_audit_log`.
 - **Notification Center**: AI review events, appeal statuses, and other alerts logged to `notification`. Real-time delivery via SSE (`GET /api/notifications/stream`) on the frontend, falling back to 60s polling. Optional email notification sink (`soulous.notification.email.enabled`).

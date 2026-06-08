@@ -1,14 +1,10 @@
 /**
  * 【课表页面】TimetablePage
  * 1. 课表展示（置顶）：周一~周日网格，可手动增删单节课；多学期时顶部下拉切换。
- * 2. 导入课表（底部）：主路径上传教务系统导出的 .xls；折叠区保留"粘贴 HTML"为高级备选。
- *
- * 取数据说明：教务系统可直接导出 .xls（学期课表）。前端用 SheetJS 解析 .xls → 转成 HTML 表格
- * → 复用后端 /api/timetable/import 的 AI 解析链路落库；学期自动从表头单元格识别，无需手填。
- * 粘贴 HTML 仍作为兜底（老用户 / 无法导出 xls 的系统）。
+ * 2. 同步课表（底部）：通过输入学号密码从学校教务系统爬取。
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { CalendarRange, ChevronDown, ChevronLeft, ChevronRight, FileSpreadsheet, Settings2, Trash2, Upload } from 'lucide-react';
+import { CalendarRange, ChevronDown, ChevronLeft, ChevronRight, Settings2, Trash2 } from 'lucide-react';
 import { api } from '../api';
 import type { CourseCreateInput, CourseEntry } from '../types';
 import { TimetableGrid } from '../components/TimetableGrid';
@@ -74,9 +70,9 @@ export function TimetablePage({ onRefresh, importState, setImportState }: {
   const [editingStart, setEditingStart] = useState(false);
   const [managing, setManaging] = useState(false);
 
-  // 导入区
-  const [html, setHtml] = useState('');
-  // 导入状态优先用外部（App 层）持有，未提供时回退内部，保证组件可独立使用
+  // 同步状态与输入项
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [internalImport, setInternalImport] = useState<TimetableImportState>(EMPTY_IMPORT);
   const impState = importState ?? internalImport;
   const updateImport = setImportState ?? setInternalImport;
@@ -86,8 +82,6 @@ export function TimetablePage({ onRefresh, importState, setImportState }: {
   const setImporting = (v: boolean) => updateImport((prev) => ({ ...prev, importing: v }));
   const setImportMsg = (v: string) => updateImport((prev) => ({ ...prev, msg: v }));
   const setImportErr = (v: string) => updateImport((prev) => ({ ...prev, err: v }));
-  const [showAdvanced, setShowAdvanced] = useState(false);
-  const [showGuide, setShowGuide] = useState(false);
 
   async function loadCourses() {
     setLoading(true);
@@ -170,44 +164,27 @@ export function TimetablePage({ onRefresh, importState, setImportState }: {
     onRefresh();
   }
 
-  /** 用解析好的 HTML + 学期调后端 AI 解析导入 */
-  async function importFromHtml(htmlSource: string, semester?: string) {
-    setImportErr('');
-    setImportMsg('');
-    setImporting(true);
-    try {
-      const res = await api.importTimetable(htmlSource, semester, true);
-      await refreshAll(res.semester ?? semester);
-      setImportMsg(`导入成功：识别到 ${res.count} 节课${res.semester ? `（${res.semester}）` : ''}。`);
-      setHtml('');
-    } catch (err) {
-      setImportErr(err instanceof Error ? err.message : '导入失败');
-    } finally {
-      setImporting(false);
+  /** 通过账号密码调用爬虫抓取同步 */
+  async function handleSync(e: React.FormEvent) {
+    e.preventDefault();
+    if (!username.trim() || !password.trim()) {
+      setImportErr('请输入学号和教务系统密码');
+      return;
     }
-  }
-
-  /** 选中 .xls/.xlsx → SheetJS 解析 → 转 HTML 表格 + 识别学期 → 走 AI 导入 */
-  async function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = ''; // 允许重复选同一文件
-    if (!file) return;
     setImportErr('');
     setImportMsg('');
     setImporting(true);
     try {
-      // 动态加载 SheetJS：xlsx 体积较大，只有真正导入 Excel 时才拉取，避免进主包
-      const XLSX = await import('xlsx');
-      const buf = await file.arrayBuffer();
-      const wb = XLSX.read(buf, { type: 'array' });
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      if (!ws) throw new Error('表格为空或无法读取');
-      const tableHtml = XLSX.utils.sheet_to_html(ws);
-      const csvText = XLSX.utils.sheet_to_csv(ws);
-      const semester = detectSemester(csvText) ?? detectSemester(file.name);
-      await importFromHtml(tableHtml, semester);
+      const res = await api.syncTimetable(username.trim(), password);
+      if (res.weekStart) {
+        saveWeekStart(res.semester, res.weekStart);
+      }
+      await refreshAll(res.semester);
+      setImportMsg(`同步成功：拉取到 ${res.count} 节课（学期：${res.semester}）`);
+      setPassword(''); // 成功后清除密码
     } catch (err) {
-      setImportErr(err instanceof Error ? `解析 Excel 失败：${err.message}` : '解析 Excel 失败');
+      setImportErr(err instanceof Error ? err.message : '同步失败');
+    } finally {
       setImporting(false);
     }
   }
@@ -375,76 +352,63 @@ export function TimetablePage({ onRefresh, importState, setImportState }: {
         />
       )}
 
-      {/* ===== 导入课表（底部）===== */}
+      {/* ===== 同步课表（底部）===== */}
       <div className="panel-title" style={{ marginTop: 26 }}>
-        <h3 style={{ margin: 0 }}><Upload size={15} style={{ verticalAlign: '-2px' }} /> 导入课表</h3>
+        <h3 style={{ margin: 0 }}><CalendarRange size={15} style={{ verticalAlign: '-2px' }} /> 同步教务系统课表</h3>
       </div>
-      <div className="muted small" style={{ marginBottom: 10 }}>
-        在教务系统导出学期课表（.xls），上传到这里，AI 会自动识别课程、教师、地点、节次与学期。
+      <div className="muted small" style={{ marginBottom: 12, lineHeight: 1.5 }}>
+        通过教务系统账号密码直接拉取最新课表，不再需要手动导出文件。首次同步时系统会自动安装所需运行环境，耗时可能较长（1~2分钟），请耐心等待。
       </div>
 
-      <label className="primary-button" style={{ display: 'inline-flex', cursor: importing ? 'default' : 'pointer', opacity: importing ? 0.6 : 1 }}>
-        <FileSpreadsheet size={14} /> {importing ? '解析中…' : '选择 .xls 课表文件'}
-        <input type="file" accept=".xls,.xlsx" onChange={onPickFile} disabled={importing} style={{ display: 'none' }} />
-      </label>
+      <form onSubmit={handleSync} style={{ maxWidth: 400, display: 'grid', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <label style={{ display: 'grid', gap: 4, fontSize: 12 }}>
+            <span className="muted">学号/账号</span>
+            <input
+              type="text"
+              required
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="请输入学号"
+              disabled={importing}
+              style={{ fontSize: 13, padding: '6px 10px', borderRadius: 4, border: '1px solid var(--line, #eee)' }}
+            />
+          </label>
+          <label style={{ display: 'grid', gap: 4, fontSize: 12 }}>
+            <span className="muted">教务系统密码</span>
+            <input
+              type="password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="请输入密码"
+              disabled={importing}
+              style={{ fontSize: 13, padding: '6px 10px', borderRadius: 4, border: '1px solid var(--line, #eee)' }}
+            />
+          </label>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button
+            type="submit"
+            className="primary-button"
+            disabled={importing}
+            style={{ width: 'fit-content' }}
+          >
+            {importing ? '正在同步中...' : '开始同步'}
+          </button>
+        </div>
+      </form>
 
       {importing && (
         <div style={{ marginTop: 12 }}>
-          <div className="muted small" style={{ marginBottom: 6 }}>✨ AI 正在解析课表，请稍候…</div>
+          <div className="muted small" style={{ marginBottom: 6 }}>✨ 正在登录学校统一身份认证并同步课表...</div>
           <div className="progress-indeterminate" />
         </div>
       )}
 
       {importErr && <div className="form-error" style={{ marginTop: 8 }}>{importErr}</div>}
       {importMsg && <div className="notice" style={{ marginTop: 8 }}>{importMsg}</div>}
-
-      {/* 高级：粘贴 HTML（兜底） */}
-      <button
-        className="ghost-button"
-        onClick={() => setShowAdvanced((s) => !s)}
-        style={{ marginTop: 12 }}
-      >
-        {showAdvanced ? <ChevronDown size={14} /> : <ChevronRight size={14} />} 其它导入方式：粘贴课表 HTML（高级）
-      </button>
-
-      {showAdvanced && (
-        <div style={{ marginTop: 8 }}>
-          <button className="ghost-button" onClick={() => setShowGuide((s) => !s)} style={{ marginBottom: 8 }}>
-            {showGuide ? <ChevronDown size={14} /> : <ChevronRight size={14} />} 怎么拿到课表 HTML？（点开看教程）
-          </button>
-
-          {showGuide && (
-            <div className="muted small" style={{ background: 'var(--surface-2)', borderRadius: 6, padding: 12, marginBottom: 10, lineHeight: 1.7 }}>
-              <strong>方式 A（推荐）：保存网页</strong>
-              <ol style={{ margin: '4px 0 8px', paddingLeft: 18 }}>
-                <li>电脑浏览器登录学校<b>教务系统</b>，打开「课程表 / 我的课表」页面；</li>
-                <li>按 <b>Ctrl+S</b> 保存网页（保存为「网页，仅 HTML」）；</li>
-                <li>用<b>记事本</b>打开保存的 .html 文件，<b>Ctrl+A 全选、Ctrl+C 复制</b>；</li>
-                <li>粘贴到下面的输入框，点「导入」。</li>
-              </ol>
-              <strong>方式 B：开发者工具复制</strong>
-              <ol style={{ margin: '4px 0 8px', paddingLeft: 18 }}>
-                <li>在课表页按 <b>F12</b> 打开开发者工具 → Elements；</li>
-                <li>找到课表所在的 <code>&lt;table&gt;</code>（或 body），右键 → Copy → <b>Copy outerHTML</b>；</li>
-                <li>粘贴进来，点「导入」。</li>
-              </ol>
-            </div>
-          )}
-
-          <textarea
-            value={html}
-            onChange={(e) => setHtml(e.target.value)}
-            placeholder="把教务系统课表页的 HTML 粘贴到这里…"
-            rows={6}
-            style={{ width: '100%', fontFamily: 'monospace', fontSize: 12, resize: 'vertical' }}
-          />
-          <div className="row-actions" style={{ marginTop: 8 }}>
-            <button className="primary-button" disabled={importing || !html.trim()} onClick={() => importFromHtml(html, detectSemester(html))}>
-              <Upload size={14} /> {importing ? 'AI 解析中…' : '导入 HTML'}
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

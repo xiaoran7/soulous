@@ -106,6 +106,16 @@ soulous:
     enabled: ${SOULOUS_CAPTCHA_ENABLED:true}
     # 【中文：验证码有效期（秒），过期后需重新获取】
     ttl-seconds: 120
+  # —— 陪伴宠物（大脑跑在独立的 Anima agent 服务，Soulous 通过 HTTP 调；与 /api/chat 拆计划互不相干）——
+  companion:
+    # 【总开关。关闭后 /api/companion/chat 返回兜底文案，不调用 Anima】
+    enabled: ${SOULOUS_COMPANION_ENABLED:true}
+    # 【Anima 服务基础地址。本地默认 8090；生产走 VPS 内网地址】
+    base-url: ${ANIMA_BASE_URL:http://localhost:8090}
+    # 【人格 ID，对应 Anima personas/*.yaml 里的 id】
+    persona-id: ${SOULOUS_COMPANION_PERSONA:soulous_pet}
+    # 【调用 Anima 的超时（秒）】
+    timeout-seconds: ${SOULOUS_COMPANION_TIMEOUT:120}
   llm:
     # —— 单 provider 模式（向后兼容）——
     # provider: mock | anthropic | openai (openai 兼容 DeepSeek/Moonshot/通义/Ollama 等)

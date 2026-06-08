@@ -4,8 +4,8 @@ import com.soulous.auth.UserService;
 import com.soulous.common.ratelimit.RateLimit;
 import com.soulous.common.web.BaseController;
 import com.soulous.timetable.TimetableDtos.CourseView;
-import com.soulous.timetable.TimetableDtos.ImportRequest;
-import com.soulous.timetable.TimetableDtos.ImportResult;
+import com.soulous.timetable.TimetableDtos.SyncRequest;
+import com.soulous.timetable.TimetableDtos.SyncResult;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -42,16 +42,16 @@ class TimetableController extends BaseController {
     }
 
     /**
-     * 【导入课表：粘贴教务系统 HTML，AI 解析后落库。
-     *  LLM 较重，限流每小时 30 次、每天 100 次（按用户）。】
+     * 【同步课表：输入教务系统账号密码爬取获取数据。
+     *  爬虫涉及教务登录，限流每小时 10 次、每天 50 次以防频繁重试或滥用。】
      */
-    @PostMapping("/import")
-    @RateLimit(name = "timetable-import-hourly", capacity = 30, refillTokens = 30, refillPeriod = 1,
+    @PostMapping("/sync")
+    @RateLimit(name = "timetable-sync-hourly", capacity = 10, refillTokens = 10, refillPeriod = 1,
             refillUnit = TimeUnit.HOURS, key = RateLimit.KeyType.USER)
-    @RateLimit(name = "timetable-import-daily", capacity = 100, refillTokens = 100, refillPeriod = 1,
+    @RateLimit(name = "timetable-sync-daily", capacity = 50, refillTokens = 50, refillPeriod = 1,
             refillUnit = TimeUnit.DAYS, key = RateLimit.KeyType.USER)
-    ImportResult importTimetable(HttpServletRequest request, @Valid @RequestBody ImportRequest body) {
-        return service.importHtml(current(request), body);
+    SyncResult syncTimetable(HttpServletRequest request, @Valid @RequestBody SyncRequest body) {
+        return service.syncFromCrawler(current(request), body);
     }
 
     /** 【手动新增一节课（不走 LLM，无需限流）】 */
