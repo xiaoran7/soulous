@@ -7,7 +7,7 @@
  *
  * 所有 API 方法均返回 Promise，调用方无需关心认证刷新和错误重试细节。
  */
-import type { ChatCategory, ChatConversationView, ChatTree, CourseCreateInput, CourseEntry, DailyReview, ExpLog, FocusSession, MetricsSnapshot, Pet, StudyTask, SubmissionDetail, Summary, TimetableImportResult, User } from './types';
+import type { ChatCategory, ChatConversationView, ChatTree, CourseCreateInput, CourseEntry, DailyReview, ExpLog, FocusSession, MetricsSnapshot, Pet, StudyTask, SubmissionDetail, Summary, TimetableSyncResult, User } from './types';
 
 /** 【API 基础路径，可通过环境变量 VITE_API_BASE 覆盖，空字符串表示同源请求】 */
 const API_BASE = import.meta.env.VITE_API_BASE ?? '';
@@ -474,6 +474,15 @@ export const api = {
   }),
   /** 【确认计划草案，落地为真实任务（不挂目标）】 */
   chatCommit: (id: number) => request<ChatConversationView>(`/api/chat/conversations/${id}/commit`, { method: 'POST' }),
+  /** 【陪伴宠物聊天：发一句话给宠物（大脑跑在独立 Anima agent 服务，带记忆/人格）】 */
+  companionChat: (message: string) => request<{ reply: string }>('/api/companion/chat', {
+    method: 'POST',
+    body: JSON.stringify({ message })
+  }),
+  /** 【拉宠物会话历史（含审核留下的"提交+反馈"），聊天框打开时加载】 */
+  companionHistory: () => request<{ messages: { role: string; text: string }[] }>('/api/companion/history'),
+  /** 【拉宠物「记得你」的结构化记忆（画像事实），侧边栏展示用】 */
+  companionMemory: () => request<{ facts: { category: string; text: string }[] }>('/api/companion/memory'),
   /** 【获取宠物信息】 */
   pet: () => request<Pet>('/api/pet'),
   /** 【喂食宠物（增加饱食度）】 */
@@ -551,11 +560,11 @@ export const api = {
   /** 【获取当前用户课表，可选 semester 过滤】 */
   timetable: (semester?: string) =>
     request<CourseEntry[]>(`/api/timetable${semester ? `?semester=${encodeURIComponent(semester)}` : ''}`),
-  /** 【导入课表：粘贴教务系统 HTML，AI 解析后落库】 */
-  importTimetable: (html: string, semester?: string, replace = true) =>
-    request<TimetableImportResult>('/api/timetable/import', {
+  /** 【同步课表：输入账号密码通过爬虫获取】 */
+  syncTimetable: (username: string, password: string) =>
+    request<{ count: number; semester: string; weekStart: string; courses: CourseEntry[] }>('/api/timetable/sync', {
       method: 'POST',
-      body: JSON.stringify({ html, semester: semester || null, replace })
+      body: JSON.stringify({ username, password })
     }),
   /** 【手动新增一节课（不走 LLM）】 */
   createCourse: (body: CourseCreateInput) =>

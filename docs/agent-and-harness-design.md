@@ -2,6 +2,8 @@
 
 This document outlines the architectural proposal and roadmap for integrating autonomous AI Agents and a dedicated Evaluation Harness into the **Soulous** platform. These additions will evolve Soulous from an AI-assisted gamified learning system into an agent-centric educational ecosystem with built-in evaluation capabilities.
 
+> **实现现状（2026-06-03）**：本文是前瞻**提案**。其中的 "Study Companion Agent" 已落地，但实现路线与本文设想的 in-Java ReAct agent **不同**——改为一个**独立的 Python/FastAPI agent 服务 Anima**（自写编排 loop + 多层记忆 + 人格 + 工具），Soulous 的 `companion` 包通过 HTTP 调用它（聊天 + 把任务审核委托给宠物）。代码在独立仓库 `Desktop/anima`。本文第 2 节的 ReAct/RAG/工具构想仍是有效的概念参考，但具体形态以 Anima 为准。第 3 节评估 Harness 尚未实现。
+
 ---
 
 ## 1. System Vision & Goals

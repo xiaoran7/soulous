@@ -6,6 +6,14 @@ backend/*.log
 backend/*.err
 backend-run.log
 
+# Scratch / temp work
+backend/scratch/
+scratch/
+
+# Python cache (resource scripts)
+__pycache__/
+*.pyc
+
 # Node / Vite
 frontend/node_modules/
 frontend/dist/
@@ -37,6 +45,9 @@ Defense_Presentation_Clean.pptx
 
 # TypeScript incremental build cache
 frontend/tsconfig.tsbuildinfo
+
+# Archive / backup blobs
+*.zip
 
 # Claude Code harness state
 .claude/scheduled_tasks.lock

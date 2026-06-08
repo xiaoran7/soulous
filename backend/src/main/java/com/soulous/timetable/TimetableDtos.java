@@ -18,19 +18,20 @@ public final class TimetableDtos {
      *  semester：可选学期标识，如 "2025-2026-2"；
      *  replace：true 时先清空旧课表（指定 semester 则只清该学期）再写入。】
      */
-    public record ImportRequest(
-            /** 【教务系统课表 HTML，必填】 */
-            @NotBlank String html,
-            /** 【学期标识，可空】 */
-            String semester,
-            /** 【是否覆盖旧课表（默认前端传 true）】 */
-            boolean replace
-    ) {}
+    /**
+     * 【课表同步请求。
+     *  username：学号/账号；
+     *  password：密码。】
+     */
+    public record SyncRequest(
+            @NotBlank String username,
+            @NotBlank String password
+     ) {}
 
     /**
      * 【手动新增一节课的请求。
      *  用户在课表网格上手工补一节课（如临时调课、活动占用时段）。
-     *  courseName 与 dayOfWeek 必填，其余可空——字段对齐 {@link CourseView}。】
+     *  courseName与dayOfWeek必填，其余可空——字段对齐 {@link CourseView}。】
      */
     public record CourseCreateRequest(
             /** 【课程名称，必填】 */
@@ -75,7 +76,7 @@ public final class TimetableDtos {
     }
 
     /**
-     * 【导入结果：写入条数 + 学期 + 解析出的课表（便于前端导入后立即渲染）。】
+     * 【同步结果：写入条数 + 学期 + 开学日期 + 解析出的课表。】
      */
-    public record ImportResult(int count, String semester, List<CourseView> courses) {}
+    public record SyncResult(int count, String semester, String weekStart, List<CourseView> courses) {}
 }

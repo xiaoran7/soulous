@@ -113,6 +113,15 @@ Gemini 式的分类 → 对话 → 消息聊天（取代旧的目标中心 Plann
 
 > SSE 服务端依赖 `spring.mvc.async.request-timeout`（默认 300000ms = 5min），反代如 nginx 需关 `proxy_buffering` + 抬 `proxy_read_timeout`，否则 token 流被攒在反代里或被切断。
 
+## 陪伴宠物（Companion）
+
+与「AI 拆解」完全独立的产品表面：有记忆、会陪伴的宠物（飞雪）。大脑跑在**独立的 Anima agent 服务**（Python/FastAPI，带多层记忆 + 人格），Soulous 通过 HTTP 调它（配置见 `soulous.companion.*`，默认 `ANIMA_BASE_URL=http://localhost:8090`）。记忆按登录用户隔离（`user_id`/`session` 由服务端从用户 id 派生，客户端传不进来）。
+
+- `POST /api/companion/chat` — 发一句话给宠物，body `{message}`，返回 `{reply}`。每用户固定一条长期会话 `pet-{userId}`，记忆随它累积。
+- `GET /api/companion/history` — 拉宠物会话最近消息（含审核留下的「提交 + 飞雪反馈」），返回 `{messages:[{role:"user"|"pet", text}]}`，聊天框打开时加载。
+
+Anima 不可用时聊天返回兜底文案、审核回退本地逻辑（见 `ai-review-rules.md`），不影响主流程。涉及 LLM 的端点同样配置小时/天级限流。
+
 ## Notifications / SSE
 
 - `GET /api/notifications` — 列表（分页）

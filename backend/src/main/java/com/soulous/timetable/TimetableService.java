@@ -1,18 +1,33 @@
 package com.soulous.timetable;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.soulous.ai.LlmService;
 import com.soulous.auth.UserAccount;
 import com.soulous.common.exception.BadRequestException;
 import com.soulous.common.exception.ForbiddenException;
 import com.soulous.common.exception.NotFoundException;
 import com.soulous.timetable.TimetableDtos.CourseView;
-import com.soulous.timetable.TimetableDtos.ImportRequest;
-import com.soulous.timetable.TimetableDtos.ImportResult;
+import com.soulous.timetable.TimetableDtos.SyncRequest;
+import com.soulous.timetable.TimetableDtos.SyncResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.io.BufferedReader;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -33,78 +48,313 @@ public class TimetableService {
     /** 【送给 LLM 的 HTML 最大长度，超出截断，防止超大页面烧 token / 超上下文】 */
     private static final int MAX_HTML_CHARS = 48_000;
 
+    /**
+     * 【全局并发闸：同时最多允许 N 个教务爬虫子进程在跑。
+     *  每个爬虫会拉起一个 Chromium（Playwright），单进程数百 MB，
+     *  仅靠 per-user 限流挡不住"多用户同时点同步"打爆内存，这里做全局上限。】
+     */
+    private static final int MAX_CONCURRENT_CRAWLERS = 3;
+    private static final Semaphore CRAWLER_SLOTS = new Semaphore(MAX_CONCURRENT_CRAWLERS);
+    /** 【等待并发槽位的最长时间，拿不到就快速失败返回"繁忙"，不让请求线程长时间堆积】 */
+    private static final long SLOT_WAIT_SECONDS = 5;
+    /** 【单个爬虫子进程的总超时，超时强杀整棵进程树】 */
+    private static final long CRAWLER_TIMEOUT_SECONDS = 120;
+
     private final CourseEntryRepository repo;
     private final LlmService llm;
+
+    /** 【脚本只在 JVM 内解压一次到固定路径，之后所有请求复用，
+     *  避免并发请求各自 copy 同一文件造成读到半截脚本的竞争（见 getScriptPath）。】 */
+    private volatile Path cachedScriptPath;
 
     public TimetableService(CourseEntryRepository repo, LlmService llm) {
         this.repo = repo;
         this.llm = llm;
     }
 
-    // ===================== 导入 =====================
+    // ===================== 同步 (爬虫) =====================
 
     /**
-     * 【导入课表：清洗 HTML → LLM 解析 → 落库。
-     *  replace=true 时先按学期（无学期则整表）清空旧数据再写。】
-     *
-     * @throws BadRequestException HTML 为空、AI 不可用或解析不出任何课程时
+     * 【把 classpath 里的爬虫脚本解压到固定临时路径并返回。
+     *  整个 JVM 生命周期只解压一次（首个请求触发，后续直接复用缓存路径），
+     *  从而消除"多个并发请求同时 REPLACE_EXISTING 覆写同一文件、而别的线程的
+     *  python 正在读 → 读到半截脚本"的竞争。脚本内容是静态的，没必要每次请求都 copy。】
      */
+    protected Path getScriptPath() throws IOException {
+        Path cached = cachedScriptPath;
+        if (cached != null) {
+            return cached;
+        }
+        synchronized (this) {
+            if (cachedScriptPath != null) {
+                return cachedScriptPath;
+            }
+            String scriptName = "hut_schedule.py";
+            Path tempDir = Paths.get(System.getProperty("java.io.tmpdir"), "soulous");
+            Files.createDirectories(tempDir);
+            Path scriptPath = tempDir.resolve(scriptName);
+
+            // 从 classpath 解压脚本到固定路径，仅在此处、且仅一次（持锁）写盘。
+            try (InputStream is = resolveScriptStream(scriptName)) {
+                if (is == null) {
+                    throw new FileNotFoundException("Cannot find " + scriptName + " in classpath resources.");
+                }
+                Files.copy(is, scriptPath, StandardCopyOption.REPLACE_EXISTING);
+            }
+            cachedScriptPath = scriptPath;
+            return scriptPath;
+        }
+    }
+
+    /** 【优先 scripts/ 子目录，回退到 classpath 根，找不到返回 null】 */
+    private InputStream resolveScriptStream(String scriptName) {
+        InputStream is = getClass().getClassLoader().getResourceAsStream("scripts/" + scriptName);
+        if (is == null) {
+            is = getClass().getClassLoader().getResourceAsStream(scriptName);
+        }
+        return is;
+    }
+
+    /** 【可配置的 Python 解释器：优先环境变量 SOULOUS_PYTHON（VPS 上常是 python3），默认 python】 */
+    private static String pythonExecutable() {
+        String exe = System.getenv("SOULOUS_PYTHON");
+        return (exe == null || exe.isBlank()) ? "python" : exe;
+    }
+
+    /** 【杀掉子进程及其全部后代（Playwright 会拉起 Chromium 等子进程），
+     *  避免超时强杀时只杀了 python 根进程、残留一堆孤儿浏览器进程。】 */
+    private static void killProcessTree(Process process) {
+        process.descendants().forEach(ProcessHandle::destroyForcibly);
+        process.destroyForcibly();
+    }
+
+    //根据爬虫输出的日志（output）提取更友好的错误信息
+    private String parseErrorMsg(String output) {
+        if (output == null || output.isBlank()) {
+            return "未知异常";
+        }
+        String[] lines = output.split("\n");
+        for (int i = lines.length - 1; i >= 0; i--) {
+            String line = lines[i].trim();
+            if (line.startsWith("[!]")) {
+                return line.substring(3).trim();
+            }
+            if (line.contains("Error:")) {
+                return line.substring(line.indexOf("Error:")).trim();
+            }
+        }
+        return "请检查账号密码或学校教务系统状态";
+    }
+
+    /**
+     * 【通过输入账号密码调用 Playwright/Requests 爬虫同步课表】
+     */
+
+    //把学生在学校教务系统里的课表，一键同步到你的系统数据库中
     @Transactional
-    public ImportResult importHtml(UserAccount user, ImportRequest req) {
-        if (req == null || req.html() == null || req.html().isBlank()) {
-            throw new BadRequestException("课表内容为空，请粘贴教务系统课表页的 HTML。");
-        }
-        if (!llm.isAvailable()) {
-            throw new BadRequestException("AI 解析服务当前不可用，请稍后再试或联系管理员检查 LLM 配置。");
-        }
-        var cleaned = sanitizeHtml(req.html());
-        var semester = blankToNull(req.semester());
+    public SyncResult syncFromCrawler(UserAccount user, SyncRequest req) {
 
-        var json = llm.completeJsonValidated(
-                "u" + user.id, null,
-                parseSystemPrompt(),
-                "课表 HTML：\n" + cleaned,
-                TimetableService::hasUsableCourses
-        ).orElseThrow(() -> new BadRequestException(
-                "AI 没能从这段内容里解析出课程。请确认粘贴的是课表页的 HTML（含课程表格），而不是登录页或空白页。"));
-
-        var parsed = new ArrayList<CourseEntry>();
-        var seen = new java.util.HashSet<String>();
-        for (var item : json.path("courses")) {
-            var name = safe(item.path("courseName").asText("")).trim();
-            if (name.isBlank()) continue;
-            int day = clampDay(item.path("dayOfWeek").asInt(0));
-            if (day == 0) continue; // 周几无法确定的条目跳过（如底部备注里无固定星期的课）
-            // 去重：同一门课在 tooltip/弹层里常重复出现。按 课程名+星期+节次 去重，
-            // 同名课在不同天/不同节次（如一周多节高数）是不同条目，不会被误删。
-            var dedupKey = name + "|" + day + "|" + optInt(item.path("startSection")) + "|" + optInt(item.path("endSection"));
-            if (!seen.add(dedupKey)) continue;
-            var c = new CourseEntry();
-            c.user = user;
-            c.courseName = trunc(name, 200);
-            c.teacher = trunc(blankToNull(item.path("teacher").asText(null)), 100);
-            c.location = trunc(blankToNull(item.path("location").asText(null)), 120);
-            c.dayOfWeek = day;
-            c.startSection = optInt(item.path("startSection"));
-            c.endSection = optInt(item.path("endSection"));
-            c.startTime = trunc(normalizeTime(item.path("startTime").asText(null)), 8);
-            c.endTime = trunc(normalizeTime(item.path("endTime").asText(null)), 8);
-            c.weeks = trunc(blankToNull(item.path("weeks").asText(null)), 60);
-            c.weekParity = parseParity(item.path("weekParity").asText(null));
-            c.semester = semester;
-            parsed.add(c);
-        }
-        if (parsed.isEmpty()) {
-            throw new BadRequestException("解析结果为空——没有识别到任何有效课程，请检查粘贴内容。");
+        //参数校验
+        if (req == null || req.username() == null || req.username().isBlank() ||
+                req.password() == null || req.password().isBlank()) {
+            throw new BadRequestException("账号或密码不能为空。");
         }
 
-        if (req.replace()) {
-            if (semester != null) repo.deleteByUserAndSemester(user, semester);
-            else repo.deleteByUser(user);
+        //为脚本返回的数据准备一个json文件
+        Path scriptPath;
+        Path tempJsonOutput;
+        try {
+            scriptPath = getScriptPath();
+            tempJsonOutput = Files.createTempFile("timetable_sync_", ".json");
+        } catch (IOException e) {
+            log.error("Failed to prepare python script or temp file", e);
+            throw new BadRequestException("系统内部错误：无法初始化课表爬虫环境。");
         }
-        var saved = repo.saveAll(parsed);
-        log.info("Timetable imported: user={} semester={} courses={}", user.id, semester, saved.size());
-        return new ImportResult(saved.size(), semester, toViews(saved));
+
+        //把爬取的json数据读入内存，解析成课程列表，写入数据库
+        boolean slotAcquired = false;
+        try {
+            // 全局并发闸：拿不到槽位（已有 N 个爬虫在跑）就快速返回繁忙，避免 Chromium 进程无限堆积。
+            if (!CRAWLER_SLOTS.tryAcquire(SLOT_WAIT_SECONDS, TimeUnit.SECONDS)) {
+                throw new BadRequestException("课表同步繁忙，请稍后重试。");
+            }
+            slotAcquired = true;
+
+            List<String> command = List.of(
+                pythonExecutable(),
+                scriptPath.toString(),
+                "--user", req.username(),
+                "--pwd-stdin",          // 密码改走 stdin，命令行/进程列表/日志均不含明文
+                "--relogin",            // 服务端强制每次重新登录，杜绝共享 cookie 缓存导致的跨用户串号
+                "--term", "auto",
+                "--mode", "schedule",
+                "--out", tempJsonOutput.toString()
+            );
+
+            // command 已不含密码，可安全记录；密码下面单独经 stdin 传入。
+            log.info("Starting schedule crawler for user={}", user.id);
+            ProcessBuilder pb = new ProcessBuilder(command);
+            pb.environment().put("PYTHONIOENCODING", "utf-8");
+            // 服务端模式开关：跳过运行时自动装依赖、强制无头、禁用 scratch 调试落盘、不持久化 cookie。
+            pb.environment().put("SOULOUS_SERVER_MODE", "1");
+            pb.redirectErrorStream(true);
+            Process process = pb.start();
+
+            // 密码一次性写入 stdin 后立即关闭，进程列表/日志/环境变量都看不到。
+            try (OutputStream stdin = process.getOutputStream()) {
+                stdin.write((req.password() + "\n").getBytes(StandardCharsets.UTF_8));
+                stdin.flush();
+            } catch (IOException ignore) {
+                // 子进程可能已提前退出（如启动失败），交由下面的退出码逻辑处理。
+            }
+
+            // 在独立线程里 drain stdout：既防止管道缓冲填满导致死锁，
+            // 也保证下面的 waitFor 超时真正生效（否则会一直阻塞在 readLine 上）。
+            StringBuilder processOutput = new StringBuilder();
+            Thread drainThread = new Thread(() -> {
+                try (var reader = new BufferedReader(
+                        new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        synchronized (processOutput) {
+                            processOutput.append(line).append("\n");
+                        }
+                    }
+                } catch (IOException ignore) {
+                    // 进程被强杀时读流抛错属正常，忽略。
+                }
+            }, "timetable-crawler-drain-" + user.id);
+            drainThread.setDaemon(true);
+            drainThread.start();
+
+            boolean finished = process.waitFor(CRAWLER_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            if (!finished) {
+                killProcessTree(process);
+                throw new BadRequestException("教务系统同步超时，请稍后重试。");
+            }
+            // 进程已退出，等 drain 线程收尾以拿到完整输出。
+            drainThread.join(TimeUnit.SECONDS.toMillis(5));
+
+            int exitCode = process.exitValue();
+            String outputStr;
+            synchronized (processOutput) {
+                outputStr = processOutput.toString();
+            }
+            if (exitCode != 0) {
+                log.warn("Crawler process exited with error code {}. Output:\n{}", exitCode, outputStr);
+                if (outputStr.contains("密码错误") || outputStr.contains("RuntimeError: 密码错误")) {
+                    throw new BadRequestException("同步失败：教务系统登录密码错误。");
+                }
+                if (outputStr.contains("TimeoutError")) {
+                    throw new BadRequestException("同步失败：登录教务系统超时。这通常是学校教务系统繁忙或需要滑块验证导致，请稍后重试。");
+                }
+                throw new BadRequestException("同步失败：教务系统访问异常。错误详情：" + parseErrorMsg(outputStr));
+            }
+
+            //准备写进内存
+            byte[] jsonData = Files.readAllBytes(tempJsonOutput);
+            if (jsonData.length == 0) {
+                throw new BadRequestException("同步失败：未能获取到有效的课表数据。");
+            }
+
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode root = mapper.readTree(jsonData);
+
+            String semester = root.path("学期").asText(null);
+            if (semester == null || semester.isBlank()) {
+                throw new BadRequestException("同步失败：未能获取到课表学期。");
+            }
+
+            // 清空旧课表
+            repo.deleteByUserAndSemester(user, semester);
+
+            JsonNode coursesNode = root.path("课程");
+            List<CourseEntry> parsed = new ArrayList<>();
+            var seen = new java.util.HashSet<String>();
+            for (JsonNode item : coursesNode) {
+                String name = item.path("课程名").asText("").trim();
+                if (name.isBlank()) continue;
+
+                int day = item.path("星期序号").asInt(0);
+                if (day < 1 || day > 7) continue;
+
+                // 节次解析，例如 "1-2"
+                String jc = item.path("节次").asText("").trim();
+                var dedupKey = name + "|" + day + "|" + jc;
+                if (!seen.add(dedupKey)) continue;
+
+                CourseEntry c = new CourseEntry();
+                c.user = user;
+                c.courseName = trunc(name, 200);
+                c.teacher = trunc(blankToNull(item.path("教师").asText(null)), 100);
+                c.location = trunc(blankToNull(item.path("地点").asText(null)), 120);
+                c.dayOfWeek = day;
+
+                if (!jc.isEmpty()) {
+                    String[] parts = jc.split("[-~]");
+                    if (parts.length > 0) {
+                        try {
+                            c.startSection = Integer.parseInt(parts[0].trim());
+                            c.endSection = parts.length > 1 ? Integer.parseInt(parts[1].trim()) : c.startSection;
+                        } catch (NumberFormatException e) {
+                            // ignore
+                        }
+                    }
+                }
+
+                // 时间解析，例如 "08:00~09:40"
+                String timeRange = item.path("上课时间").asText("").trim();
+                if (!timeRange.isEmpty()) {
+                    String[] times = timeRange.split("[~-]");
+                    if (times.length > 0) {
+                        c.startTime = trunc(normalizeTime(times[0].trim()), 8);
+                        c.endTime = times.length > 1 ? trunc(normalizeTime(times[1].trim()), 8) : null;
+                    }
+                }
+
+                c.weeks = trunc(blankToNull(item.path("周次").asText(null)), 60);
+
+                // 单双周简单判断
+                String weeksRaw = item.path("周次").asText("");
+                if (weeksRaw.contains("单")) {
+                    c.weekParity = WeekParity.ODD;
+                } else if (weeksRaw.contains("双")) {
+                    c.weekParity = WeekParity.EVEN;
+                } else {
+                    c.weekParity = WeekParity.ALL;
+                }
+
+                c.semester = semester;
+                parsed.add(c);
+            }
+
+            if (parsed.isEmpty()) {
+                throw new BadRequestException("未能在该学期中识别到任何有效课程，请检查您的教务课表。");
+            }
+
+            List<CourseEntry> saved = repo.saveAll(parsed);
+            log.info("Timetable synced via crawler: user={} semester={} courses={}", user.id, semester, saved.size());
+
+            String weekStart = root.path("学期信息").path("开学日期").asText("");
+
+            return new SyncResult(saved.size(), semester, weekStart, toViews(saved));
+
+        } catch (IOException | InterruptedException e) {
+            log.error("Failed to execute schedule crawler", e);
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+            throw new BadRequestException("系统同步出错，请稍后再试。错误：" + e.getMessage());
+        } finally {
+            if (slotAcquired) {
+                CRAWLER_SLOTS.release();
+            }
+            try {
+                Files.deleteIfExists(tempJsonOutput);
+            } catch (IOException e) {
+                // ignore
+            }
+        }
     }
 
     // ===================== 查询 / 删除 =====================
@@ -169,55 +419,6 @@ public class TimetableService {
         if (sem == null) repo.deleteByUser(user);
         else repo.deleteByUserAndSemester(user, sem);
         return rows.size();
-    }
-
-    // ===================== Prompt 构建 =====================
-
-    private static String parseSystemPrompt() {
-        return "你是教务系统课程表解析器。用户会给你某高校教务系统课表页面的 HTML 源码。"
-                + "请从中抽取出所有课程，返回 JSON 对象，格式 {\"courses\":[...]}。"
-                + "courses 数组每项字段："
-                + "courseName(课程名,必填)、teacher(任课教师,可空)、location(上课地点/教室,可空)、"
-                + "dayOfWeek(星期几,整数 1-7，周一=1、周日=7)、"
-                + "startSection(起始节次,整数,可空)、endSection(结束节次,整数,可空)、"
-                + "startTime(上课开始时间,\"HH:mm\"格式,可空)、endTime(\"HH:mm\",可空)、"
-                + "weeks(开课周次原文,如\"1-16\"或\"1-8,10-16\",可空)、"
-                + "weekParity(\"ALL\"全周|\"ODD\"单周|\"EVEN\"双周，默认 ALL)。"
-                + "结构提示：课表常见为【行=大节，列=星期】。上课时间段（如 08:00~09:40）通常写在每一行行首的"
-                + "大节标签里（如\"第一大节 (01、02小节) 08:00~09:40\"），而具体课程格子里可能只写了节次（如\"01~02小节\"）；"
-                + "请把课程按其节次所属的大节行，补出对应的 startTime/endTime。"
-                + "星期请以课程文字中的\"星期X\"为准（星期一=1…星期日/星期天=7），不要只靠列的位置。"
-                + "同一门课可能在悬浮提示(tooltip)里重复出现，请【不要重复输出】同一门课（同课名+同星期+同节次只输出一条）。"
-                + "规则：同一格子里多门课拆成多条；一门课在不同天/不同节次出现属于不同条目，要各输出一条；"
-                + "底部\"备注\"里没有明确星期/节次的课程可忽略；无法确定的字段省略或置 null；绝对不要编造课表里不存在的课程。";
-    }
-
-    // ===================== 校验谓词 =====================
-
-    /** 【{"courses":[...]} 至少有一项带非空 courseName 才算可用】 */
-    private static boolean hasUsableCourses(JsonNode json) {
-        if (json == null) return false;
-        var arr = json.path("courses");
-        if (!arr.isArray() || arr.isEmpty()) return false;
-        for (var item : arr) if (!item.path("courseName").asText("").isBlank()) return true;
-        return false;
-    }
-
-    // ===================== 辅助方法 =====================
-
-    /** 【清洗 HTML：去脚本/样式/注释，压缩空白，截断到上限。保留标签结构便于 LLM 理解表格】 */
-    static String sanitizeHtml(String html) {
-        var s = html;
-        s = s.replaceAll("(?is)<script[^>]*>.*?</script>", " ");
-        s = s.replaceAll("(?is)<style[^>]*>.*?</style>", " ");
-        s = s.replaceAll("(?s)<!--.*?-->", " ");
-        s = s.replaceAll("[\\t\\x0B\\f\\r]+", " ");
-        s = s.replaceAll(" {2,}", " ");
-        s = s.replaceAll("(?m)^\\s+", "");
-        s = s.replaceAll("\\n{3,}", "\n\n");
-        s = s.trim();
-        if (s.length() > MAX_HTML_CHARS) s = s.substring(0, MAX_HTML_CHARS);
-        return s;
     }
 
     private List<CourseView> toViews(List<CourseEntry> rows) {

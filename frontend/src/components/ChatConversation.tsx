@@ -301,7 +301,7 @@ export function ChatConversation({ conversation: initial, onChanged, initialMess
       {plan && plan.tasks && plan.tasks.length > 0 && (
         <div className="panel chat-inset">
           <div className="panel-title">
-            <h4>计划草案</h4>
+            <h4>计划草案{plan.category ? <span className="muted small" style={{ marginLeft: 6, fontWeight: 400 }}>· 大类：{plan.category}</span> : null}</h4>
             <span className="muted small">可编辑/删除后再确认落地为任务</span>
           </div>
           {plan.tasks.map((t, i) => (

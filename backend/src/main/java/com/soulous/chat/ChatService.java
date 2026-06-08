@@ -319,8 +319,22 @@ public class ChatService {
         var plan = extractPlanEnvelope(reply);
         if (plan != null && hasUsablePlanTasks(plan)) {
             conv.pendingPlanJson = plan.toString();
-        } else if (plan != null) {
-            log.warn("Conversation {} got a PLAN_JSON envelope with no usable tasks; ignoring.", conv.id);
+        } else {
+            if (plan != null) {
+                log.warn("Conversation {} got a PLAN_JSON envelope with no usable tasks; ignoring.", conv.id);
+            }
+            // Harness repair: the model sometimes claims "已生成计划草案" in prose but forgets the
+            // machine-readable <PLAN_JSON> envelope, so no plan card ever renders (user pain point).
+            // When the reply reads like a plan claim yet carries neither a usable PLAN nor a CLARIFY
+            // envelope, fire one focused follow-up that converts the just-described plan into a strict
+            // envelope. Recovers the card without making the user re-ask.
+            if (extractClarifyEnvelope(reply) == null && looksLikePlanClaim(reply)) {
+                var repaired = repairPlanEnvelope(conv, reply);
+                if (repaired != null && hasUsablePlanTasks(repaired)) {
+                    conv.pendingPlanJson = repaired.toString();
+                    log.info("Conversation {}: recovered a missing PLAN_JSON envelope via repair pass.", conv.id);
+                }
+            }
         }
         appendMessage(conv, ChatRole.ASSISTANT, reply);
     }
@@ -413,18 +427,18 @@ public class ChatService {
                 行为规则：
                 1. 平时用简洁、有条理的中文正常对话答疑，不要无故强行拆任务。
                 2. 当用户明确想「把它拆成任务 / 给我一个学习计划 / 制定计划」，或当前诉求确实适合落地为一组可执行学习任务时，在回复末尾输出 <PLAN_JSON> 信封。
-                3. 计划必须有 3–7 个任务，每个任务字段：title（≤40字）、description、estimatedMinutes（15–90）、difficulty（EASY/NORMAL/HARD）、taskType（STUDY/CODING/NOTE/MEMORY/REVIEW/SIMPLE）。由易到难、循序渐进。
+                3. 计划必须包含一个 category（这组任务的「大类」归类名，必填，≤12 字，如「数据结构」「考研数学」「英语口语」）和 3–7 个任务；每个任务字段：title（≤40字）、description、estimatedMinutes（15–90）、difficulty（EASY/NORMAL/HARD）、taskType（STUDY/CODING/NOTE/MEMORY/REVIEW/SIMPLE）。由易到难、循序渐进。你必须主动起好这个大类名，让用户落地后任务自动归类，绝不要把分类留空让用户自己补。
                 4. 信息不足以拆解、且关键空白会实质影响任务编排时，可用 <CLARIFY_JSON> 信封提问（≤2 题、每题 2–4 个可直接点选的完整选项），不要用纯文字问。一条回复里 CLARIFY_JSON 与 PLAN_JSON 二选一。
-                5. 你"问问题"必须通过 <CLARIFY_JSON>...</CLARIFY_JSON>、"给计划"必须通过 <PLAN_JSON>...</PLAN_JSON>，且必须真的输出对应标签包裹的合法 JSON；标签外可有简短自然语言说明，但 JSON 必须完整。
+                5. 你"问问题"必须通过 <CLARIFY_JSON>...</CLARIFY_JSON>、"给计划"必须通过 <PLAN_JSON>...</PLAN_JSON>，且必须真的输出对应标签包裹的合法 JSON。绝对禁止只在文字里声称「已生成计划草案 / 计划如下 / 已为你拆好 N 个任务」却不输出对应的 <PLAN_JSON> 信封——只要你打算让用户看到一份计划，就必须在同一条回复里给出完整的 <PLAN_JSON>。标签外可有简短自然语言说明，但 JSON 必须完整。
 
                 <CLARIFY_JSON> 格式（每题 2–4 个 options，单选 multiSelect:false，多选 true）：
                 <CLARIFY_JSON>
                 {"questions":[{"id":"tool","question":"你打算用什么工具或语言？","multiSelect":false,"options":[{"label":"Python","hint":"适合数据/AI"},{"label":"JavaScript"}]}]}
                 </CLARIFY_JSON>
 
-                <PLAN_JSON> 格式：
+                <PLAN_JSON> 格式（category 必填，是这组任务的大类归类名）：
                 <PLAN_JSON>
-                {"tasks":[{"title":"...","description":"...","estimatedMinutes":30,"difficulty":"NORMAL","taskType":"STUDY"}]}
+                {"category":"数据结构","tasks":[{"title":"...","description":"...","estimatedMinutes":30,"difficulty":"NORMAL","taskType":"STUDY"}]}
                 </PLAN_JSON>
                 """;
     }
@@ -464,6 +478,54 @@ public class ChatService {
         var inner = reply.substring(open + "<PLAN_JSON>".length(), close).trim();
         try { return mapper.readTree(inner); }
         catch (Exception ex) { log.warn("Plan envelope parse failed: {}", ex.getMessage()); return null; }
+    }
+
+    /**
+     * 【启发式判断：这段回复是不是「声称给了计划但没给信封」】。
+     * 仅当回复既提到计划/任务，又用了「草案 / 已生成 / 计划如下 / ↓ / 为你定制 / 拆成…个任务」等
+     * 表示「我已经把计划摆出来了」的措辞时才返回 true，用来触发补救式的信封重抽，尽量不误伤普通答疑。
+     */
+    private static boolean looksLikePlanClaim(String reply) {
+        if (reply == null || reply.isBlank()) return false;
+        boolean mentionsPlan = reply.contains("计划") || reply.contains("任务")
+                || reply.contains("plan") || reply.contains("PLAN");
+        if (!mentionsPlan) return false;
+        return reply.contains("草案") || reply.contains("已生成") || reply.contains("如下")
+                || reply.contains("↓") || reply.contains("PLAN_JSON") || reply.contains("为你定制")
+                || reply.contains("已为你") || reply.contains("制定了") || reply.contains("帮你拆")
+                || reply.contains("拆成") || reply.contains("拆解为") || reply.contains("个任务");
+    }
+
+    /**
+     * 【补救式信封重抽：把模型刚才用自然语言描述的计划，二次调用 LLM 转成严格的 PLAN_JSON】。
+     * 用带一次自纠重试的 JSON 校验调用（要求至少一个有效任务），失败返回 null，调用方据此放弃补救。
+     * 走可被测试桩覆写的 {@link LlmService#completeJsonValidated(String, String, java.util.function.Predicate)}，
+     * 让脚本化 LLM 能在测试里直接喂回一份修好的计划 JSON。
+     */
+    private JsonNode repairPlanEnvelope(ChatConversation conv, String prose) {
+        if (!llm.isAvailable()) return null;
+        var user = "你刚才对用户说的下面这段话里描述了一份学习计划，但你忘了输出机器可读的计划数据，"
+                + "导致用户看不到可确认的计划卡片。请把你刚才描述的这份计划严格转换成约定的 JSON。\n\n"
+                + "你刚才的话：\n" + safe(prose);
+        try {
+            return llm.completeJsonValidated(planRepairSystemPrompt(), user, ChatService::hasUsablePlanTasks)
+                    .orElse(null);
+        } catch (Exception ex) {
+            log.warn("Plan-envelope repair failed for conversation {}: {}", conv.id, ex.getMessage());
+            return null;
+        }
+    }
+
+    private String planRepairSystemPrompt() {
+        return """
+                你是一个把自然语言学习计划转写成结构化 JSON 的助手。只输出一个 JSON 对象，禁止任何解释、Markdown 围栏或多余文字。
+                Schema：
+                {"category":"这组任务的大类归类名（必填，≤12字，如「数据结构」「考研数学」）","tasks":[{"title":"≤40字","description":"...","estimatedMinutes":30,"difficulty":"EASY|NORMAL|HARD","taskType":"STUDY|CODING|NOTE|MEMORY|REVIEW|SIMPLE"}]}
+                要求：
+                - 忠实还原用户那段话里描述的任务，3–7 个，不要凭空新增或删减成完全不同的计划。
+                - category 必须自己起好，绝不能留空。
+                - 字段缺失时按合理默认补全（estimatedMinutes 取 15–90，difficulty 默认 NORMAL，taskType 默认 STUDY）。
+                """;
     }
 
     private JsonNode extractClarifyEnvelope(String reply) {
@@ -518,6 +580,13 @@ public class ChatService {
         var tasksJson = plan.path("tasks");
         if (!tasksJson.isArray() || tasksJson.isEmpty()) throw new BadRequestException("Plan has no tasks to commit");
 
+        // 大分类：优先用对话所属分类；对话未分类时，退回到 AI 在计划信封里起好的 category 大类，
+        // 这样「新对话」里直接拆出来的任务也自带归类，用户不必再手动建分类、逐个改任务。
+        var planCategory = plan.path("category").asText("").trim();
+        String category = conv.category != null ? conv.category.name
+                : (planCategory.isBlank() ? null
+                        : (planCategory.length() > 60 ? planCategory.substring(0, 60) : planCategory));
+
         var created = new ArrayList<StudyTask>();
         for (var node : tasksJson) {
             var title = node.path("title").asText("").trim();
@@ -532,9 +601,9 @@ public class ChatService {
             task.baseExp = clampInt(node.path("baseExp").asInt(20), 5, 100);
             task.status = TaskStatus.TODO;
             task.goalId = null; // 聊天落地的任务不挂目标
-            // 大分类：落地任务自动继承所在对话的分类名（未分类对话则为 null），
-            // 让「任务」页能按 AI 拆解的对话分类聚合这些任务。
-            task.category = conv.category != null ? conv.category.name : null;
+            // 大分类：对话分类优先，否则用 AI 计划信封里给出的 category，
+            // 让「任务」页能按 AI 拆解的大类聚合这些任务。
+            task.category = category;
             created.add(task);
             if (created.size() >= 8) break;
         }

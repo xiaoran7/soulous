@@ -1,29 +1,26 @@
 package com.soulous;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.soulous.ai.LlmService;
 import com.soulous.auth.RegisterRequest;
 import com.soulous.auth.UserAccount;
 import com.soulous.auth.UserService;
 import com.soulous.common.exception.BadRequestException;
 import com.soulous.timetable.CourseEntryRepository;
-import com.soulous.timetable.TimetableDtos.ImportRequest;
+import com.soulous.timetable.TimetableDtos.SyncRequest;
 import com.soulous.timetable.TimetableService;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
-import java.util.Optional;
-import java.util.function.Predicate;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * 【TimetableService 集成测试：用 H2 内存库 + 桩 LLM（返回固定 JSON）确定性验证
- *  课表导入解析→落库→查询、AI 按课表排周计划、以及关键的失败分支（空内容、无课表）。
- *  不依赖真实 DeepSeek，也不走登录验证码，离线可重复。】
+ * 【TimetableService 集成测试：用 H2 内存库 + 模拟 Python 爬虫脚本进行验证】
  */
 @SpringBootTest(properties = {
         "spring.datasource.url=jdbc:h2:mem:soulous-timetable-test;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE",
@@ -34,32 +31,90 @@ class TimetableServiceTests {
     @Autowired UserService users;
     @Autowired CourseEntryRepository repo;
 
-    /** 【桩 LLM：可用且 completeJsonValidated 返回预设 JSON，记录最近 prompt】 */
-    static class StubLlm extends LlmService {
-        private final ObjectMapper mapper = new ObjectMapper();
-        String jsonResponse;
-        boolean available = true;
-        String lastUser;
+    private Path mockScript;
 
-        StubLlm() {
-            super("openai", "stub-key", "stub-model", "", 30, false, 16, 60);
+    private static final String SEMESTER_INFO = """
+        "学期信息": {
+            "当前周次": 1,
+            "起始周": 1,
+            "结束周": 18,
+            "总周数": 18,
+            "开学日期": "2026-03-02"
         }
+        """;
 
-        @Override public boolean isAvailable() { return available; }
+    private static final String COURSES_JSON = """
+        {
+          "学期": "2025-2026-2",
+          "课程": [
+            {"课程名": "高等数学", "教师": "张老师", "地点": "A101", "星期序号": 1, "节次": "1-2", "上课时间": "08:00~09:40", "周次": "1-16"},
+            {"课程名": "大学英语", "教师": "李老师", "地点": "B202", "星期序号": 3, "节次": "3-4", "上课时间": "10:00~11:40", "周次": "1-16周(单)"}
+          ],
+          %s
+        }
+        """.formatted(SEMESTER_INFO);
+
+    private static final String COURSES_JSON_DUP = """
+        {
+          "学期": "2025-2026-2",
+          "课程": [
+            {"课程名": "数据结构", "星期序号": 2, "节次": "1-2", "上课时间": "08:00~09:40", "周次": "1-16"},
+            {"课程名": "数据结构", "星期序号": 2, "节次": "1-2", "上课时间": "08:00~09:40", "周次": "1-16"},
+            {"课程名": "高等数学A2", "星期序号": 2, "节次": "5-6", "上课时间": "14:00~15:40", "周次": "1-16"},
+            {"课程名": "高等数学A2", "星期序号": 5, "节次": "7-8", "上课时间": "16:00~17:40", "周次": "1-16"},
+            {"课程名": "高等数学A2", "星期序号": 1, "节次": "9-10", "上课时间": "19:00~20:40", "周次": "1-16"}
+          ],
+          %s
+        }
+        """.formatted(SEMESTER_INFO);
+
+    static class TestTimetableService extends TimetableService {
+        private final Path scriptPath;
+
+        public TestTimetableService(CourseEntryRepository repo, Path scriptPath) {
+            super(repo, null);
+            this.scriptPath = scriptPath;
+        }
 
         @Override
-        public Optional<JsonNode> completeJsonValidated(String namespace, String providerName,
-                                                        String systemPrompt, String userPrompt,
-                                                        Predicate<JsonNode> valid) {
-            lastUser = userPrompt;
-            if (!available || jsonResponse == null) return Optional.empty();
-            try {
-                var node = mapper.readTree(jsonResponse);
-                return (valid == null || valid.test(node)) ? Optional.of(node) : Optional.empty();
-            } catch (Exception e) {
-                return Optional.empty();
-            }
+        protected Path getScriptPath() throws IOException {
+            return scriptPath;
         }
+    }
+
+    private Path createMockPythonScript(String jsonContent) throws IOException {
+        Path script = Files.createTempFile("mock_crawler_", ".py");
+        String content = """
+            import sys
+            import json
+            
+            # Find --out parameter
+            out_file = None
+            for i in range(len(sys.argv)):
+                if sys.argv[i] == '--out' and i + 1 < len(sys.argv):
+                    out_file = sys.argv[i+1]
+                    break
+            
+            if out_file:
+                with open(out_file, 'w', encoding='utf-8') as f:
+                    f.write('''%s''')
+                sys.exit(0)
+            else:
+                sys.exit(1)
+            """.formatted(jsonContent);
+        Files.writeString(script, content);
+        return script;
+    }
+
+    private Path createErrorPythonScript() throws IOException {
+        Path script = Files.createTempFile("mock_crawler_err_", ".py");
+        String content = """
+            import sys
+            print("RuntimeError: 密码错误")
+            sys.exit(1)
+            """;
+        Files.writeString(script, content);
+        return script;
     }
 
     private UserAccount newUser() {
@@ -68,25 +123,24 @@ class TimetableServiceTests {
         return users.byToken(auth.token());
     }
 
-    private static final String COURSES_JSON = """
-        {"courses":[
-          {"courseName":"高等数学","teacher":"张老师","location":"A101","dayOfWeek":1,
-           "startSection":1,"endSection":2,"startTime":"08:00","endTime":"09:40","weeks":"1-16","weekParity":"ALL"},
-          {"courseName":"大学英语","teacher":"李老师","location":"B202","dayOfWeek":3,
-           "startSection":3,"endSection":4,"startTime":"10:00","endTime":"11:40","weeks":"1-16","weekParity":"ODD"}
-        ]}""";
+    @AfterEach
+    void cleanup() throws IOException {
+        if (mockScript != null) {
+            Files.deleteIfExists(mockScript);
+        }
+    }
 
     @Test
-    void importParsesAndPersists() {
-        var llm = new StubLlm();
-        llm.jsonResponse = COURSES_JSON;
-        var svc = new TimetableService(repo, llm);
+    void syncParsesAndPersists() throws IOException {
+        mockScript = createMockPythonScript(COURSES_JSON);
+        var svc = new TestTimetableService(repo, mockScript);
         var user = newUser();
 
-        var result = svc.importHtml(user, new ImportRequest("<table>...</table>", "2025-2026-2", true));
+        var result = svc.syncFromCrawler(user, new SyncRequest("test_user", "test_pass"));
 
         assertThat(result.count()).isEqualTo(2);
         assertThat(result.semester()).isEqualTo("2025-2026-2");
+        assertThat(result.weekStart()).isEqualTo("2026-03-02");
 
         var list = svc.list(user, null);
         assertThat(list).hasSize(2);
@@ -96,51 +150,28 @@ class TimetableServiceTests {
         assertThat(list.get(0).startTime()).isEqualTo("08:00");
         assertThat(list.get(1).courseName()).isEqualTo("大学英语");
         assertThat(list.get(1).weekParity()).isEqualTo("ODD");
-        // HTML 应被送进 LLM 解析
-        assertThat(llm.lastUser).contains("课表 HTML");
     }
 
     @Test
-    void importWithReplaceOverwritesOld() {
-        var llm = new StubLlm();
-        llm.jsonResponse = COURSES_JSON;
-        var svc = new TimetableService(repo, llm);
+    void syncHandlesPasswordError() throws IOException {
+        mockScript = createErrorPythonScript();
+        var svc = new TestTimetableService(repo, mockScript);
         var user = newUser();
 
-        svc.importHtml(user, new ImportRequest("<table>a</table>", null, true));
-        svc.importHtml(user, new ImportRequest("<table>b</table>", null, true));
-
-        // replace=true 整表覆盖，仍应只有 2 条而非 4 条
-        assertThat(svc.list(user, null)).hasSize(2);
+        assertThatThrownBy(() -> svc.syncFromCrawler(user, new SyncRequest("test_user", "wrong_pass")))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("登录密码错误");
     }
 
     @Test
-    void importRejectsBlankHtml() {
-        var svc = new TimetableService(repo, new StubLlm());
-        var user = newUser();
-        assertThatThrownBy(() -> svc.importHtml(user, new ImportRequest("   ", null, true)))
-                .isInstanceOf(BadRequestException.class);
-    }
-
-    @Test
-    void importDedupesTooltipDuplicatesButKeepsDistinctSameName() {
-        var llm = new StubLlm();
-        // 模拟青果教务格式：数据结构出现两次（courselist + tooltip 重复）；
-        // 高等数学A2 出现 3 次但分属不同星期/节次，应全部保留。
-        llm.jsonResponse = """
-            {"courses":[
-              {"courseName":"数据结构","dayOfWeek":2,"startSection":1,"endSection":2,"startTime":"08:00","endTime":"09:40"},
-              {"courseName":"数据结构","dayOfWeek":2,"startSection":1,"endSection":2,"startTime":"08:00","endTime":"09:40"},
-              {"courseName":"高等数学A2","dayOfWeek":2,"startSection":5,"endSection":6},
-              {"courseName":"高等数学A2","dayOfWeek":5,"startSection":7,"endSection":8},
-              {"courseName":"高等数学A2","dayOfWeek":1,"startSection":9,"endSection":10}
-            ]}""";
-        var svc = new TimetableService(repo, llm);
+    void syncDedupesTooltipDuplicatesButKeepsDistinctSameName() throws IOException {
+        mockScript = createMockPythonScript(COURSES_JSON_DUP);
+        var svc = new TestTimetableService(repo, mockScript);
         var user = newUser();
 
-        var result = svc.importHtml(user, new ImportRequest("<table>...</table>", null, true));
+        var result = svc.syncFromCrawler(user, new SyncRequest("test_user", "test_pass"));
 
-        // 5 条输入 → 去掉 1 条数据结构重复 = 4 条
+        // 5 courses in mock JSON, but one (数据结构) is duplicate in day/section, so it should keep 4 entries
         assertThat(result.count()).isEqualTo(4);
         var math = svc.list(user, null).stream().filter(c -> c.courseName().equals("高等数学A2")).toList();
         assertThat(math).hasSize(3); // 三节高数都在

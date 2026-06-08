@@ -37,12 +37,13 @@ frontend http://localhost:5173
 - 学习凭证提交：文字、学习时长、代码片段、链接、截图 URL。
 - 截图上传：`POST /api/files/screenshots`，本地保存并通过 `/uploads/**` 访问。
   - 限制：最大 5MB；MIME 白名单 jpeg/png/gif/webp；扩展名白名单。
-- 提交后同步触发模拟 AI 审核。
+- 提交后**异步**触发 AI 审核：首选委托宠物（Anima/飞雪，带记忆），失败回退本地 LLM、再回退规则（详见 `docs/ai-review-rules.md`）。
 - 用户可查看提交记录，并打开单条"审核反馈"，看到 AI 分数、原因、建议、关联任务以及管理员复核意见（`adminComment` 字段）。
 - 被打回或要求补充的提交可发起申诉。
 - AI 任务拆解：输入学习目标，生成可加入任务列表的任务。
 - AI 每日复盘：根据今日任务、提交、学习时长、经验日志、宠物状态生成总结；同页展示今日完成度、课程分布、近 7 天学习时长趋势（原独立统计页已并入此页）。
 - 宠物成长页：宠物状态、动作预览、成长事件日志。
+- 陪伴宠物聊天（「陪伴」页）：跟宠物（飞雪）对话，它记得你（跨会话记忆）；任务审核的反馈也出现在这里。大脑跑在**独立的 Anima agent 服务**，Soulous 经 `companion` 包 HTTP 调它，不可用则降级。
 - 自习室：选场景 + 环境音/音乐 + **正计时**专注（非倒计时，时间往上加），点进入即全屏沉浸（隐藏侧栏/顶栏，抽屉唤回）；支持自定义上传场景图/音乐。后端会话沿用开始/暂停/继续/完成/中止。
 
 管理员侧：
@@ -148,6 +149,11 @@ AI：
 
 - `GET /api/pet`、`POST /api/pet/feed`、`GET /api/pet/logs`
 - `GET /api/stats/summary`
+
+陪伴（Companion，调外部 Anima 服务）：
+
+- `POST /api/companion/chat`、`GET /api/companion/history`（见 `docs/api.md` 的「陪伴宠物（Companion）」段）
+- 代码在 `com.soulous.companion` 包（`AnimaClient`/`CompanionService`/`CompanionController`）；前端 `pages/CompanionPage.tsx`。Anima 服务独立仓库 `Desktop/anima`。
 
 专注：
 

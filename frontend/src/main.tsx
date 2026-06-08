@@ -21,6 +21,7 @@ import {
   CalendarCheck,
   CalendarRange,
   ClipboardList,
+  Heart,
   LogOut,
   Menu,
   PanelLeftClose,
@@ -41,6 +42,7 @@ import { TasksPage } from './pages/TasksPage';
 import { ChatPage } from './pages/ChatPage';
 import { DailyReviewPage } from './pages/DailyReviewPage';
 import { PetPage } from './pages/PetPage';
+import { CompanionPage } from './pages/CompanionPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { SettingsPage } from './pages/SettingsPage';
 import { AdminPage } from './pages/AdminPage';
@@ -50,7 +52,7 @@ import { type AppPreferences, loadPreferences, savePreferences } from './prefere
 import './styles.css';
 
 /** 【页面路由类型】 */
-type Page = 'dashboard' | 'tasks' | 'timetable' | 'chat' | 'review' | 'pet' | 'focus' | 'profile' | 'settings' | 'admin';
+type Page = 'dashboard' | 'tasks' | 'timetable' | 'chat' | 'companion' | 'review' | 'pet' | 'focus' | 'profile' | 'settings' | 'admin';
 
 /** 【侧边栏收起状态存储键】纯前端 localStorage，记住用户上次的收起/展开选择 */
 const SIDEBAR_COLLAPSE_KEY = 'soulous.sidebar.collapsed.v1';
@@ -214,6 +216,7 @@ function App() {
             <div className="nav-group">
               <div className="nav-group-label">Tools · 工具</div>
               <NavButton active={page === 'chat'} icon={<Bot size={16} />} label="AI 拆解" onClick={() => setPage('chat')} />
+              <NavButton active={page === 'companion'} icon={<Heart size={16} />} label="陪伴" onClick={() => setPage('companion')} />
             </div>
           </>
         )}
@@ -258,6 +261,7 @@ function App() {
         {page === 'tasks' && <TasksPage tasks={tasks} onRefresh={bootstrap} />}
         {page === 'timetable' && <TimetablePage onRefresh={bootstrap} importState={timetableImport} setImportState={setTimetableImport} />}
         {page === 'chat' && <ChatPage />}
+        {page === 'companion' && <CompanionPage pet={pet} />}
         {page === 'review' && <DailyReviewPage summary={summary} review={dailyReview} onReviewChange={setDailyReview} />}
         {page === 'pet' && <PetPage pet={pet} />}
         {page === 'profile' && <ProfilePage user={user} />}

@@ -15,7 +15,7 @@ nginx（端口 80/443）
   └── /*, /assets/**       → React SPA (dist/)
 ```
 
-- **frontend**：React 19 + Vite + TypeScript，SPA，页面路由：工作台 / 任务 / 课表 / 复盘（含近 7 天趋势，原统计页已并入）/ 自习室 / AI 拆解 / 宠物 / 管理后台。
+- **frontend**：React 19 + Vite + TypeScript，SPA，页面路由：工作台 / 任务 / 课表 / 复盘（含近 7 天趋势，原统计页已并入）/ 自习室 / AI 拆解 / 陪伴（宠物聊天）/ 宠物 / 管理后台。
 - **backend**：Spring Boot 3 + Java 21 + JPA + Spring Security，提供业务 REST API；feature-package 拆分（`com.soulous.{admin,auth,focus,goal,task,pet,...}`）。
 - **DB**：默认 H2 文件库（`backend/data/soulous.mv.db`），可切 MySQL。**Flyway 管理迁移**（h2 / mysql 各一套，`db/migration/{vendor}/V*.sql`）。
 
@@ -25,7 +25,7 @@ nginx（端口 80/443）
 
 ```
 创建任务 → 开始任务 → 上传截图/填写凭证 → 提交
-  → AI 初审（LLM 或规则兜底）
+  → AI 初审（首选宠物审核 Anima/飞雪，回退本地 LLM，再回退规则；详见 docs/ai-review-rules.md）
       ├── APPROVED：写 exp_log，宠物增长
       ├── NEED_MORE / AI_REJECTED：任务停留，用户可补交
       ├── MODERATION_BLOCKED：内容审核拦截，可申诉
@@ -60,6 +60,7 @@ nginx（端口 80/443）
 | `goal` / `aisession` | 旧的目标中心拆解（**已下线**，2026-06-01 重构）：REST 接口删除，表与服务暂留，仅 RAG 目标记忆 / 每日复盘 / `study_task.goal_id` 仍引用 |
 | `timetable` | 课表：LLM 解析导入（HTML/教务 .xls）、手动增删、按学期/周次组织 |
 | `pet` | 宠物成长、经验、心情；心情加权 EXP |
+| `companion` | 陪伴宠物聊天 + 把任务审核委托给宠物；HTTP 调外部 **Anima** agent 服务（带记忆/人格），不可用则降级。记忆按用户隔离 |
 | `stats` | 今日指标、近 7 天趋势、课程占比 |
 | `review` | 管理员提交队列、人工复核 |
 | `appeal` | 内容审核误拦申诉流程 |
