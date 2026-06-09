@@ -21,7 +21,6 @@ import {
   CalendarCheck,
   CalendarRange,
   ClipboardList,
-  Heart,
   LogOut,
   Menu,
   PanelLeftClose,
@@ -37,13 +36,13 @@ import { api, UnauthorizedError } from './api';
 import { NavButton, SidebarPet } from './components/shared';
 import type { DailyReview, Pet, StudyTask, Summary, User } from './types';
 import { AuthScreen } from './pages/AuthScreen';
-import { Dashboard } from './pages/Dashboard';
+import { LandingPage } from './pages/LandingPage';
+import { Dashboard, resetCheckinCache } from './pages/Dashboard';
 import { TasksPage } from './pages/TasksPage';
-import { ChatPage } from './pages/ChatPage';
+import { ChatPage, resetChatCache } from './pages/ChatPage';
 import { DailyReviewPage } from './pages/DailyReviewPage';
-import { PetPage } from './pages/PetPage';
-import { CompanionPage } from './pages/CompanionPage';
-import { ProfilePage } from './pages/ProfilePage';
+import { PetPage, resetPetLogsCache } from './pages/PetPage';
+import { ProfilePage, resetProfileCache } from './pages/ProfilePage';
 import { SettingsPage } from './pages/SettingsPage';
 import { AdminPage } from './pages/AdminPage';
 import { FocusPage, resetFocusCache } from './pages/FocusPage';
@@ -52,7 +51,7 @@ import { type AppPreferences, loadPreferences, savePreferences } from './prefere
 import './styles.css';
 
 /** 【页面路由类型】 */
-type Page = 'dashboard' | 'tasks' | 'timetable' | 'chat' | 'companion' | 'review' | 'pet' | 'focus' | 'profile' | 'settings' | 'admin';
+type Page = 'dashboard' | 'tasks' | 'timetable' | 'chat' | 'review' | 'pet' | 'focus' | 'profile' | 'settings' | 'admin';
 
 /** 【侧边栏收起状态存储键】纯前端 localStorage，记住用户上次的收起/展开选择 */
 const SIDEBAR_COLLAPSE_KEY = 'soulous.sidebar.collapsed.v1';
@@ -76,6 +75,10 @@ function App() {
   const [page, setPage] = useState<Page>(() => loadPreferences().defaultPage);
   /** 【沉浸态】自习室进行中时全屏：隐藏侧边栏与顶栏 */
   const [immersive, setImmersive] = useState(false);
+  /** 【未登录时是否已点「开始使用」进入登录页】false 时展示落地页 */
+  const [showAuth, setShowAuth] = useState(false);
+  /** 【进入登录页时的默认标签】login=登录 / register=注册 */
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   /** 【侧边栏抽屉】沉浸态下从左侧滑出导航 */
   const [navDrawerOpen, setNavDrawerOpen] = useState(false);
   /** 【侧边栏收起态】普通模式下手动收起侧边栏，主工作区自适应铺满 */
@@ -150,8 +153,17 @@ function App() {
     setTasks([]);
     setPet(null);
     setSummary(null);
+    resetAllCaches();
+  }
+
+  /** 【清空所有模块级缓存】登出/切号共用，防止下一个账号看到上一个账号的数据 */
+  function resetAllCaches() {
     resetTimetableCache();
     resetFocusCache();
+    resetProfileCache();
+    resetChatCache();
+    resetPetLogsCache();
+    resetCheckinCache();
   }
 
   async function handleLogout() {
@@ -170,7 +182,10 @@ function App() {
   useEffect(() => { if (!immersive) setNavDrawerOpen(false); }, [immersive]);
 
   if (!user) {
-    return <AuthScreen onAuthed={() => { resetTimetableCache(); resetFocusCache(); void bootstrap(); }} message={message} />;
+    if (!showAuth) {
+      return <LandingPage onStart={(mode) => { setAuthMode(mode); setShowAuth(true); }} />;
+    }
+    return <AuthScreen initialMode={authMode} onAuthed={() => { resetAllCaches(); void bootstrap(); }} message={message} />;
   }
 
   const isAdmin = user.role === 'ADMIN';
@@ -216,7 +231,6 @@ function App() {
             <div className="nav-group">
               <div className="nav-group-label">Tools · 工具</div>
               <NavButton active={page === 'chat'} icon={<Bot size={16} />} label="AI 拆解" onClick={() => setPage('chat')} />
-              <NavButton active={page === 'companion'} icon={<Heart size={16} />} label="陪伴" onClick={() => setPage('companion')} />
             </div>
           </>
         )}
@@ -257,16 +271,15 @@ function App() {
         {loading && <div className="notice">正在同步数据...</div>}
         {message && <div className="notice">{message}</div>}
 
-        {page === 'dashboard' && <Dashboard tasks={tasks} pet={pet} summary={summary} onRefresh={bootstrap} onOpenTasks={() => setPage('tasks')} onOpenReview={() => setPage('review')} onOpenPet={() => setPage('pet')} />}
+        {page === 'dashboard' && <Dashboard tasks={tasks} pet={pet} summary={summary} onRefresh={bootstrap} onPetSync={setPet} onOpenTasks={() => setPage('tasks')} onOpenReview={() => setPage('review')} onOpenPet={() => setPage('pet')} />}
         {page === 'tasks' && <TasksPage tasks={tasks} onRefresh={bootstrap} />}
         {page === 'timetable' && <TimetablePage onRefresh={bootstrap} importState={timetableImport} setImportState={setTimetableImport} />}
         {page === 'chat' && <ChatPage />}
-        {page === 'companion' && <CompanionPage pet={pet} />}
         {page === 'review' && <DailyReviewPage summary={summary} review={dailyReview} onReviewChange={setDailyReview} />}
-        {page === 'pet' && <PetPage pet={pet} />}
+        {page === 'pet' && <PetPage pet={pet} onRefresh={bootstrap} onFed={setPet} />}
         {page === 'profile' && <ProfilePage user={user} />}
         {page === 'settings' && <SettingsPage user={user} onUpdated={setUser} onPetUpdated={setPet} prefs={prefs} onPrefsChange={updatePreferences} onSessionEnded={clearSession} />}
-        {page === 'focus' && <FocusPage onImmersiveChange={setImmersive} />}
+        {page === 'focus' && <FocusPage userId={user.id} onImmersiveChange={setImmersive} />}
         {page === 'admin' && <AdminPage user={user} onRefresh={bootstrap} />}
       </main>
     </div>

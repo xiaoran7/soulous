@@ -111,7 +111,7 @@ public class DailyReviewService {
         var rejected = taskList.stream().filter(task -> task.status == TaskStatus.AI_REJECTED || task.status == TaskStatus.NEED_MORE || task.status == TaskStatus.MANUAL_REJECTED).toList();
         var minutes = todayRecords.stream().mapToInt(record -> record.studyMinutes == null ? 0 : record.studyMinutes).sum();
         var exp = todayLogs.stream().mapToInt(log -> log.expAmount == null ? 0 : log.expAmount).sum();
-        var pet = pets.findByUser(user).orElse(null);
+        var pet = pets.findByUserAndActiveTrue(user).orElse(null);
 
         // 【构建学习亮点】
         var highlights = new ArrayList<String>();
@@ -335,7 +335,7 @@ public class DailyReviewService {
         var rejected = taskList.stream().filter(t -> t.status == TaskStatus.AI_REJECTED || t.status == TaskStatus.NEED_MORE || t.status == TaskStatus.MANUAL_REJECTED).toList();
         var minutes = todayRecords.stream().mapToInt(r -> r.studyMinutes == null ? 0 : r.studyMinutes).sum();
         var exp = todayLogs.stream().mapToInt(l -> l.expAmount == null ? 0 : l.expAmount).sum();
-        var pet = pets.findByUser(user).orElse(null);
+        var pet = pets.findByUserAndActiveTrue(user).orElse(null);
         var ragBlock = buildRetrievedBlock(user, completed, rejected, taskList);
 
         // System prompt: ask the LLM to narrate THEN emit envelope. Same envelope schema

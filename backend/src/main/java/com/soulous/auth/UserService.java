@@ -2,8 +2,6 @@ package com.soulous.auth;
 
 import com.soulous.common.exception.BadRequestException;
 import com.soulous.common.exception.UnauthorizedException;
-import com.soulous.pet.Pet;
-import com.soulous.pet.PetRepository;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,16 +21,13 @@ import java.util.Map;
 public class UserService {
     /** 用户持久化仓库 */
     private final UserRepository users;
-    /** 宠物持久化仓库，用于为新用户自动创建宠物 */
-    private final PetRepository pets;
     /** JWT 服务，用于颁发和解析访问令牌 */
     private final JwtService jwt;
     /** BCrypt 密码编码器，使用默认强度（10 轮） */
     private final BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
 
-    UserService(UserRepository users, PetRepository pets, JwtService jwt) {
+    UserService(UserRepository users, JwtService jwt) {
         this.users = users;
-        this.pets = pets;
         this.jwt = jwt;
     }
 
@@ -63,8 +58,7 @@ public class UserService {
             user.nickname = nickname;
             user.role = role;
             users.save(user);
-            ensurePet(user);
-            return user;
+                return user;
         });
     }
 
@@ -94,7 +88,6 @@ public class UserService {
         user.nickname = (nickname == null || nickname.isBlank()) ? trimmed : nickname.trim();
         user.role = role == null ? UserRole.USER : role;
         users.save(user);
-        ensurePet(user);
         return user;
     }
 
@@ -131,8 +124,7 @@ public class UserService {
             user.nickname = (nickname == null || nickname.isBlank()) ? username : nickname;
             user.role = UserRole.ADMIN;
             users.save(user);
-            ensurePet(user);
-            return user;
+                return user;
         });
     }
 
@@ -162,9 +154,8 @@ public class UserService {
         user.username = name;
         user.password = encoder.encode(request.password());
         user.nickname = request.nickname() == null || request.nickname().isBlank() ? name : request.nickname().trim();
-        user.email = request.email();
+        user.email = normalizeEmail(request.email());
         users.save(user);
-        ensurePet(user);
         return new AuthResponse(jwt.issue(user), view(user));
     }
 
@@ -184,7 +175,6 @@ public class UserService {
                 .orElseThrow(() -> new UnauthorizedException("用户名或密码错误"));
         user.updatedAt = LocalDateTime.now();
         users.save(user);
-        ensurePet(user);
         return new AuthResponse(jwt.issue(user), view(user));
     }
 
@@ -296,7 +286,7 @@ public class UserService {
     @Transactional
     public UserAccount updateProfile(UserAccount user, ProfileRequest request) {
         if (request.nickname() != null) user.nickname = request.nickname();
-        if (request.email() != null) user.email = request.email();
+        if (request.email() != null) user.email = normalizeEmail(request.email());
         user.updatedAt = LocalDateTime.now();
         return users.save(user);
     }
@@ -317,22 +307,26 @@ public class UserService {
         return users.save(fresh);
     }
 
+    /** 【邮箱格式正则】与前端校验保持一致：非空白、含 @ 与域名点 */
+    private static final java.util.regex.Pattern EMAIL_RE =
+            java.util.regex.Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
+
     /**
-     * 确保用户拥有宠物实例。
-     * 如果用户已有宠物则直接返回，否则以用户名作为宠物名创建新宠物。
-     * 在用户注册、登录、引导管理员等场景中调用。
+     * 规范化并校验邮箱：trim 后空串视为未填写（返回 null）；非空但格式非法则抛 400。
+     * 邮箱可选，但一旦填写就必须合法——后续每日提醒邮件依赖它能真正投递。
      *
-     * @param user 【目标用户】
-     * @return 【用户的宠物实体】
+     * @param email 【原始邮箱输入，可为 null】
+     * @return 【规范化后的邮箱，或 null 表示未填写】
+     * @throws BadRequestException 【邮箱非空但格式不合法时抛出】
      */
-    @Transactional
-    public Pet ensurePet(UserAccount user) {
-        return pets.findByUser(user).orElseGet(() -> {
-            var pet = new Pet();
-            pet.user = user;
-            pet.name = user.username;
-            return pets.save(pet);
-        });
+    private static String normalizeEmail(String email) {
+        if (email == null) return null;
+        var trimmed = email.trim();
+        if (trimmed.isEmpty()) return null;
+        if (trimmed.length() > 254 || !EMAIL_RE.matcher(trimmed).matches()) {
+            throw new BadRequestException("邮箱格式不正确");
+        }
+        return trimmed;
     }
 
     /**
@@ -350,7 +344,8 @@ public class UserService {
                 "nickname", user.nickname == null ? user.username : user.nickname,
                 "email", user.email == null ? "" : user.email,
                 "avatarUrl", user.avatarUrl == null ? "" : user.avatarUrl,
-                "role", user.role
+                "role", user.role,
+                "coinBalance", user.coinBalance
         );
     }
 }

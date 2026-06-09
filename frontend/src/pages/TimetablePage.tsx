@@ -4,10 +4,11 @@
  * 2. 同步课表（底部）：通过输入学号密码从学校教务系统爬取。
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { CalendarRange, ChevronDown, ChevronLeft, ChevronRight, Settings2, Trash2 } from 'lucide-react';
+import { CalendarRange, ChevronLeft, ChevronRight, ClipboardList, GraduationCap, Settings2, Trash2 } from 'lucide-react';
 import { api } from '../api';
-import type { CourseCreateInput, CourseEntry } from '../types';
+import type { CourseCreateInput, CourseEntry, ExamEntry, GradeEntry } from '../types';
 import { TimetableGrid } from '../components/TimetableGrid';
+import { ExamPanel, GradePanel } from './ExamGrade';
 import { ModalShell } from '../components/Modal';
 import { currentWeekOf, dateForWeekday, fmtMonthDay, maxWeekOf, mondayOf, parseISODate, toISODate } from '../timetableWeeks';
 
@@ -50,19 +51,33 @@ const EMPTY_IMPORT: TimetableImportState = { importing: false, msg: '', err: '' 
  * 登出/重新登录时由 resetTimetableCache() 清空，避免串户看到上一个账号的课表。
  */
 let coursesCache: CourseEntry[] | null = null;
-export function resetTimetableCache() { coursesCache = null; }
+let examsCache: ExamEntry[] | null = null;
+let gradesCache: GradeEntry[] | null = null;
+export function resetTimetableCache() { coursesCache = null; examsCache = null; gradesCache = null; }
 
 export function TimetablePage({ onRefresh, importState, setImportState }: {
   onRefresh: () => void;
   importState?: TimetableImportState;
   setImportState?: React.Dispatch<React.SetStateAction<TimetableImportState>>;
 }) {
-  // 有缓存则直接渲染，零顿挫；仅缓存为空时才需要首次加载
+  // 有缓存则直接渲染，零顿挫；仅缓存为空时才需要首次加载。
+  // 课表 / 考试 / 成绩三份数据各自模块级缓存，切 tab 不重新拉取、不闪「加载中」。
   const [courses, setCourses] = useState<CourseEntry[]>(() => coursesCache ?? []);
+  const [exams, setExams] = useState<ExamEntry[]>(() => examsCache ?? []);
+  const [grades, setGrades] = useState<GradeEntry[]>(() => gradesCache ?? []);
   const [loading, setLoading] = useState(coursesCache === null);
+  const [examsLoading, setExamsLoading] = useState(examsCache === null);
+  const [gradesLoading, setGradesLoading] = useState(gradesCache === null);
   // 在任何 effect 改写缓存之前，于渲染期捕获"是否需要首次拉取"，避免竞态
   const needInitialLoad = useRef(coursesCache === null);
+  const needExams = useRef(examsCache === null);
+  const needGrades = useRef(gradesCache === null);
+  // 学期为三视图共享：选定后课表、考试、成绩同时切到该学期。
+  // 课表固定显示「本学期」，不再有「全部学期」混合视图；旧学期通过下拉单独查看。
   const [selectedSemester, setSelectedSemester] = useState<string>('');
+
+  // 课表页内的子视图：课表 / 考试安排 / 成绩。考试与成绩随课表同步一并抓取，分学期展示。
+  const [view, setView] = useState<'schedule' | 'exam' | 'grade'>('schedule');
 
   // 周次导航
   const [weekStartISO, setWeekStartISO] = useState<string>('');   // 第 1 周周一（yyyy-mm-dd），按学期持久化
@@ -95,25 +110,74 @@ export function TimetablePage({ onRefresh, importState, setImportState }: {
     }
   }
 
-  // 课表变化时同步回模块缓存（加载完成、增删、导入后都会经过这里）
+  async function loadExams() {
+    setExamsLoading(true);
+    try {
+      const list = await api.exams();
+      setExams(Array.isArray(list) ? list : []);
+    } catch {
+      /* ignore */
+    } finally {
+      setExamsLoading(false);
+    }
+  }
+
+  async function loadGrades() {
+    setGradesLoading(true);
+    try {
+      const list = await api.grades();
+      setGrades(Array.isArray(list) ? list : []);
+    } catch {
+      /* ignore */
+    } finally {
+      setGradesLoading(false);
+    }
+  }
+
+  // 数据变化时同步回各自模块缓存（加载完成、增删、导入后都会经过这里）
   useEffect(() => { coursesCache = courses; }, [courses]);
+  useEffect(() => { examsCache = exams; }, [exams]);
+  useEffect(() => { gradesCache = grades; }, [grades]);
 
   useEffect(() => {
-    if (needInitialLoad.current) void loadCourses(); // 仅首次进入拉取；有缓存直接复用
+    // 三份数据各自仅首次进入拉取；有缓存直接复用，切 tab 零顿挫
+    if (needInitialLoad.current) void loadCourses();
+    if (needExams.current) void loadExams();
+    if (needGrades.current) void loadGrades();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 已导入课表里出现过的学期（去重、排序），用于顶部切换
+  // 三视图共享的学期集合：课表 + 考试 + 成绩里出现过的学期并集（去重、倒序）
   const semesters = useMemo(() => {
     const set = new Set<string>();
     for (const c of courses) if (c.semester) set.add(c.semester);
+    for (const e of exams) if (e.semester) set.add(e.semester);
+    for (const g of grades) if (g.semester) set.add(g.semester);
     return Array.from(set).sort().reverse();
-  }, [courses]);
+  }, [courses, exams, grades]);
 
-  // 当前展示的课程：选了学期则过滤，否则全部
+  // 课表固定「本学期」：学期数据就绪后，若未选或所选学期已不存在，自动落到最新学期。
+  // 这取代了旧的「全部学期」默认值，杜绝上学期成绩混进本学期课表。
+  useEffect(() => {
+    if (semesters.length === 0) return;
+    setSelectedSemester((cur) => (cur && semesters.includes(cur) ? cur : semesters[0]));
+  }, [semesters]);
+
+  // 有效学期：始终是一个具体学期（默认最新），下拉切换即可单独查看旧学期。
+  const effectiveSemester = selectedSemester || (semesters[0] ?? '');
+
+  // 当前展示的课程/考试/成绩：始终按有效学期过滤（不再有「全部学期」混排）
   const shownCourses = useMemo(
-    () => (selectedSemester ? courses.filter((c) => c.semester === selectedSemester) : courses),
-    [courses, selectedSemester]
+    () => (effectiveSemester ? courses.filter((c) => c.semester === effectiveSemester) : courses),
+    [courses, effectiveSemester]
+  );
+  const shownExams = useMemo(
+    () => (effectiveSemester ? exams.filter((e) => e.semester === effectiveSemester) : exams),
+    [exams, effectiveSemester]
+  );
+  const shownGrades = useMemo(
+    () => (effectiveSemester ? grades.filter((g) => g.semester === effectiveSemester) : grades),
+    [grades, effectiveSemester]
   );
 
   const maxWeek = useMemo(() => maxWeekOf(shownCourses), [shownCourses]);
@@ -157,9 +221,10 @@ export function TimetablePage({ onRefresh, importState, setImportState }: {
     return `${fmtMonthDay(mon)} – ${fmtMonthDay(sun)}`;
   }, [weekStart, selectedWeek]);
 
-  /** 落库后统一刷新；导入/新增/删除/清空共用 */
-  async function refreshAll(focusSemester?: string) {
+  /** 落库后统一刷新；导入/新增/删除/清空共用。同步会一并带回考试/成绩，故一起刷新 */
+  async function refreshAll(focusSemester?: string, includeExamGrade = false) {
     await loadCourses();
+    if (includeExamGrade) await Promise.all([loadExams(), loadGrades()]);
     if (focusSemester) setSelectedSemester(focusSemester);
     onRefresh();
   }
@@ -179,8 +244,12 @@ export function TimetablePage({ onRefresh, importState, setImportState }: {
       if (res.weekStart) {
         saveWeekStart(res.semester, res.weekStart);
       }
-      await refreshAll(res.semester);
-      setImportMsg(`同步成功：拉取到 ${res.count} 节课（学期：${res.semester}）`);
+      await refreshAll(res.semester, true); // true：同步带回了考试/成绩，一并刷新
+      const extra = [
+        res.examCount ? `${res.examCount} 场考试` : '',
+        res.gradeCount ? `${res.gradeCount} 门成绩` : ''
+      ].filter(Boolean).join('、');
+      setImportMsg(`同步成功：拉取到 ${res.count} 节课${extra ? `，并顺带 ${extra}` : ''}（学期：${res.semester}）`);
       setPassword(''); // 成功后清除密码
     } catch (err) {
       setImportErr(err instanceof Error ? err.message : '同步失败');
@@ -258,22 +327,26 @@ export function TimetablePage({ onRefresh, importState, setImportState }: {
 
   return (
     <div className="panel">
-      {/* ===== 课表展示（置顶）===== */}
+      {/* ===== 课表 / 考试 / 成绩（置顶）===== */}
       <div className="panel-title">
-        <h2><CalendarRange size={18} style={{ verticalAlign: '-3px' }} /> 我的课表 {hasCourses ? `（${shownCourses.length} 节）` : ''}</h2>
+        <h2>
+          <CalendarRange size={18} style={{ verticalAlign: '-3px' }} />{' '}
+          {view === 'schedule' ? `我的课表 ${hasCourses ? `（${shownCourses.length} 节）` : ''}`
+            : view === 'exam' ? '考试安排' : '成绩'}
+        </h2>
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+          {/* 学期选择三视图共享：切学期后课表/考试/成绩同时切换 */}
           {semesters.length > 1 && (
             <select
-              value={selectedSemester}
+              value={effectiveSemester}
               onChange={(e) => setSelectedSemester(e.target.value)}
               style={{ fontSize: 13 }}
-              title="切换学期"
+              title="切换学期（课表 / 考试 / 成绩同步切换）"
             >
-              <option value="">全部学期</option>
               {semesters.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
           )}
-          {hasCourses && (
+          {view === 'schedule' && hasCourses && (
             <button className="ghost-button small" onClick={() => setManaging(true)} title="管理已导入的课表">
               <Settings2 size={14} /> 管理课表
             </button>
@@ -281,10 +354,31 @@ export function TimetablePage({ onRefresh, importState, setImportState }: {
         </div>
       </div>
 
+      {/* 子视图切换：课表 / 考试安排 / 成绩 */}
+      <div className="chip-group" style={{ marginBottom: 14 }}>
+        <button className={`chip${view === 'schedule' ? ' selected' : ''}`} onClick={() => setView('schedule')}>
+          <CalendarRange size={13} style={{ verticalAlign: '-2px' }} /> 课表
+        </button>
+        <button className={`chip${view === 'exam' ? ' selected' : ''}`} onClick={() => setView('exam')}>
+          <ClipboardList size={13} style={{ verticalAlign: '-2px' }} /> 考试安排
+        </button>
+        <button className={`chip${view === 'grade' ? ' selected' : ''}`} onClick={() => setView('grade')}>
+          <GraduationCap size={13} style={{ verticalAlign: '-2px' }} /> 成绩
+        </button>
+      </div>
+
+      {view === 'exam' && (
+        <ExamPanel exams={shownExams} loading={examsLoading} selectedSemester={effectiveSemester} />
+      )}
+      {view === 'grade' && (
+        <GradePanel grades={shownGrades} loading={gradesLoading} selectedSemester={effectiveSemester} />
+      )}
+
+      {view === 'schedule' && (<>
       {loading && <div className="muted small">加载中…</div>}
       {!loading && !hasCourses && (
         <div className="muted small" style={{ padding: '8px 0' }}>
-          还没有课表。可在下方上传教务系统导出的 .xls 课表，或用"添加课程"手动补一节。
+          还没有课表。可在下方输入教务系统账号密码同步，或用"添加课程"手动补一节。
         </div>
       )}
 
@@ -331,7 +425,7 @@ export function TimetablePage({ onRefresh, importState, setImportState }: {
           courses={shownCourses}
           onDelete={removeCourse}
           onAdd={addCourse}
-          semester={selectedSemester || (semesters.length === 1 ? semesters[0] : null)}
+          semester={effectiveSemester || null}
           selectedWeek={selectedWeek}
           weekStart={weekStart}
           currentWeek={currentWeek}
@@ -351,22 +445,23 @@ export function TimetablePage({ onRefresh, importState, setImportState }: {
           onClose={() => setManaging(false)}
         />
       )}
+      </>)}
 
       {/* ===== 同步课表（底部）===== */}
       <div className="panel-title" style={{ marginTop: 26 }}>
         <h3 style={{ margin: 0 }}><CalendarRange size={15} style={{ verticalAlign: '-2px' }} /> 同步教务系统课表</h3>
       </div>
-      <div className="muted small" style={{ marginBottom: 12, lineHeight: 1.5 }}>
-        通过教务系统账号密码直接拉取最新课表，不再需要手动导出文件。首次同步时系统会自动安装所需运行环境，耗时可能较长（1~2分钟），请耐心等待。
-      </div>
 
-      <form onSubmit={handleSync} style={{ maxWidth: 400, display: 'grid', gap: 12 }}>
+      {/* autoComplete 关掉浏览器自动填充：否则会把登录 Soulous 时存的账号密码塞进教务字段，误导用户拿错凭证去同步 */}
+      <form onSubmit={handleSync} autoComplete="off" style={{ maxWidth: 400, display: 'grid', gap: 12 }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
           <label style={{ display: 'grid', gap: 4, fontSize: 12 }}>
             <span className="muted">学号/账号</span>
             <input
               type="text"
               required
+              name="jw-username"
+              autoComplete="off"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               placeholder="请输入学号"
@@ -379,6 +474,8 @@ export function TimetablePage({ onRefresh, importState, setImportState }: {
             <input
               type="password"
               required
+              name="jw-password"
+              autoComplete="new-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="请输入密码"

@@ -2,7 +2,7 @@
 
 这份文档给接手 Soulous MVP 的 Claude 使用。请先读本文件，再按需查看 `README.md`、`docs/api.md`、`docs/architecture.md`、`docs/database.md`、`docs/user-guide.md`。
 
-最近一次更新：2026-05-16。
+最近一次更新：2026-06-09。
 
 > **注意**：本文件容易过时。**真实状态以 `git status` + `mvn test` + `npm test` 实跑结果为准**，本文件只描述设计意图与高层结构。
 
@@ -21,12 +21,7 @@ backend  http://localhost:8080
 frontend http://localhost:5173
 ```
 
-默认账号：
-
-```text
-普通用户：demo / demo123
-管理员：admin / admin123
-```
+**无默认种子账号**：任何环境都不自动播种 demo/admin。首个管理员通过 `SOULOUS_BOOTSTRAP_ADMIN_USERNAME/PASSWORD` 创建（见 `DEPLOY.md` §2），普通用户走注册流程（邮箱验证码）。
 
 ## 已实现功能
 
@@ -37,14 +32,19 @@ frontend http://localhost:5173
 - 学习凭证提交：文字、学习时长、代码片段、链接、截图 URL。
 - 截图上传：`POST /api/files/screenshots`，本地保存并通过 `/uploads/**` 访问。
   - 限制：最大 5MB；MIME 白名单 jpeg/png/gif/webp；扩展名白名单。
-- 提交后**异步**触发 AI 审核：首选委托宠物（Anima/飞雪，带记忆），失败回退本地 LLM、再回退规则（详见 `docs/ai-review-rules.md`）。
+- 提交后**异步**触发 AI 审核：本地 LLM 审核，不可用回退规则兜底（详见 `docs/ai-review-rules.md`）。
 - 用户可查看提交记录，并打开单条"审核反馈"，看到 AI 分数、原因、建议、关联任务以及管理员复核意见（`adminComment` 字段）。
 - 被打回或要求补充的提交可发起申诉。
 - AI 任务拆解：输入学习目标，生成可加入任务列表的任务。
 - AI 每日复盘：根据今日任务、提交、学习时长、经验日志、宠物状态生成总结；同页展示今日完成度、课程分布、近 7 天学习时长趋势（原独立统计页已并入此页）。
-- 宠物成长页：宠物状态、动作预览、成长事件日志。
-- 陪伴宠物聊天（「陪伴」页）：跟宠物（飞雪）对话，它记得你（跨会话记忆）；任务审核的反馈也出现在这里。大脑跑在**独立的 Anima agent 服务**，Soulous 经 `companion` 包 HTTP 调它，不可用则降级。
-- 自习室：选场景 + 环境音/音乐 + **正计时**专注（非倒计时，时间往上加），点进入即全屏沉浸（隐藏侧栏/顶栏，抽屉唤回）；支持自定义上传场景图/音乐。后端会话沿用开始/暂停/继续/完成/中止。
+- 宠物成长页：宠物状态、按等级解锁的动作（满级 Lv30 全解锁）、成长事件日志。
+- **宠物市场**：新用户默认无宠物，先免费领养入门款；金币购买更多品种、切换出战；每只宠物独立等级/经验（不共享）。
+- 自习室：**独享**（选场景 + 环境音/音乐 + 正计时专注，全屏沉浸）/ **共享**（房间广场、建房/进房、在线成员与各自专注计时，心跳轮询）。
+- **金币 & 每日签到**：完成任务/专注/打卡赚金币；每日签到发金币+经验，连续 streak 放大；「我的」页展示金币/连续打卡/宠物收藏/流水。
+- 注册改用**邮箱验证码**（邮箱必填）；未登录先看营销**落地页**。
+- 后台定时：每日未打卡**邮件提醒**、宠物**断签衰减**惩罚。
+
+> 本轮（2026-06）大优化详见 `docs/optimization-plan.md`；新模块速查见架构文档「主要模块」表。
 
 管理员侧：
 
@@ -55,27 +55,16 @@ frontend http://localhost:5173
 
 ## 关键文件
 
-后端（`backend/src/main/java/com/soulous/`）：
-
-- `Entities.java`：JPA 实体。`UserAccount.token` 字段已废弃，由 JWT 替代。
-- `Enums.java`：任务、提交、AI、宠物、申诉等枚举。
-- `Dto.java`：请求/响应 record。
-- `Repositories.java`：JPA repository。
-- `Services.java`：核心服务，含 `JwtService`、`UserService`、`TaskService`、`AiService`、`PetService`、`FileStorageService`、`AdminService`、`AppealService`、`StatsService`、`FocusService`。
-- `DailyReviewService.java`：每日复盘服务和 `/api/ai/daily-review` 控制器（接入 LLM，失败时使用规则版兜底）。
-- `LlmService.java`：LLM 抽象层。`provider=mock` 不发请求；`anthropic` / `openai` 走 java.net.http。`completeJson` 自动清掉 Markdown 围栏。
-- `PetGrowthRules.java`：宠物成长状态规则。
-- `Controllers.java`：REST API 控制器。
-- `Support.java`：异常、`SecurityConfig`（Spring Security filter chain + CORS）、`JwtAuthenticationFilter`、默认账号初始化、H2 兼容迁移、静态上传映射。
+后端（`backend/src/main/java/com/soulous/`）已按 **feature-package** 拆分（不再是早期的 `Entities.java`/`Services.java` 单文件）。各包职责见 `docs/architecture.md`「主要模块」表。常用包：`auth`（含 `EmailCodeService` 邮箱验证码）、`task`、`focus`、`pet`（含 `PetGrowthRules` 成长规则、`PetService` 市场/出战、`PetMaintenanceService` 断签衰减）、`wallet`（金币）、`checkin`（打卡）、`room`（共享自习室）、`reminder`（邮件提醒）、`timetable`、`chat`、`ai`（`LlmService` 抽象，mock/anthropic/openai）、`review`、`admin`、`notification`、`audit`、`moderation`、`rag`、`storage`、`common`。
 
 测试：
 
-- `backend/src/test/java/com/soulous/`：50 个测试（SoulousApplicationTests 8 / PetGrowthRulesTests 5 / PasswordPolicyTests 10 / LlmServiceTests 12 / AiServiceTests 13 / ProdProfileTests 2）。具体数量以 `mvn test` 输出为准。
+- `backend/src/test/java/com/soulous/`：238 个测试，0 失败。具体数量以 `mvn test` 输出为准（每加功能会增长）。
 
 前端（`frontend/src/`）：
 
 - `main.tsx`：应用外壳；按 page 调度子页面，含全局侧边栏收起/展开（localStorage `soulous.sidebar.collapsed.v1`，收起后主区自适应铺满）。顶栏已精简（移除通知铃铛与用户卡片，仅工作台保留「新建任务」）。
-- `pages/`：`AuthScreen`、`Dashboard`、`TasksPage`、`TimetablePage`、`ChatPage`（AI 拆解对话）、`DailyReviewPage`（已并入近 7 天趋势图，原独立统计页下线）、`PetPage`、`FocusPage`、`ProfilePage`、`SettingsPage`、`AdminPage`。`ChatPage` 配 `components/ChatConversation` + `components/ChatComposer`。
+- `pages/`：`LandingPage`（未登录营销页）、`AuthScreen`、`Dashboard`（含每日签到卡）、`TasksPage`、`TimetablePage`、`ChatPage`（AI 拆解对话）、`DailyReviewPage`、`PetPage`（含 `components/PetMarket` 市场弹层）、`FocusPage`（独享 + `studyroom/SharedRooms` 共享）、`ProfilePage`（金币/打卡/收藏/流水）、`SettingsPage`、`AdminPage`。
 - `components/shared.tsx`：跨页面共享组件（NavButton、Metric、TaskRow、PetCard、Empty、ProgressRing、SidebarPet、animationForPet 等）。
 - `components/TrendChart.tsx`：Recharts 趋势图，独立 chunk，被 Dashboard 和 DailyReviewPage 通过 `React.lazy` 懒加载。
 - `api.ts`：API 客户端。
@@ -116,11 +105,11 @@ npm test          # 当前 14 测试 (Vitest)
 npm run build     # 应无 chunk size 警告
 ```
 
-最近一次本地验证（2026-05-16）：
+最近一次本地验证（2026-06-09）：
 
-- `mvn test`：50 通过。
-- `npm test`：14 通过。
-- `npm run build`：之前通过，无 chunk size 警告。主 bundle 约 266 KB，TrendChart 独立 chunk 约 394 KB（首次进入复盘/工作台页才下载）。
+- `mvn test`：238 通过。
+- `npm test`：41 通过。
+- 数值以实跑为准，每加功能会增长。
 
 ## 重要 API
 
@@ -149,11 +138,6 @@ AI：
 
 - `GET /api/pet`、`POST /api/pet/feed`、`GET /api/pet/logs`
 - `GET /api/stats/summary`
-
-陪伴（Companion，调外部 Anima 服务）：
-
-- `POST /api/companion/chat`、`GET /api/companion/history`（见 `docs/api.md` 的「陪伴宠物（Companion）」段）
-- 代码在 `com.soulous.companion` 包（`AnimaClient`/`CompanionService`/`CompanionController`）；前端 `pages/CompanionPage.tsx`。Anima 服务独立仓库 `Desktop/anima`。
 
 专注：
 

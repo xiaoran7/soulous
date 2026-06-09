@@ -7,7 +7,7 @@
  *
  * 所有 API 方法均返回 Promise，调用方无需关心认证刷新和错误重试细节。
  */
-import type { ChatCategory, ChatConversationView, ChatTree, CourseCreateInput, CourseEntry, DailyReview, ExpLog, FocusSession, MetricsSnapshot, Pet, StudyTask, SubmissionDetail, Summary, TimetableSyncResult, User } from './types';
+import type { ChatCategory, ChatConversationView, ChatTree, CourseCreateInput, CourseEntry, DailyReview, ExamEntry, ExpLog, FocusSession, GradeEntry, MetricsSnapshot, Pet, PetSpecies, RoomDetail, RoomSummary, StudyTask, SubmissionDetail, Summary, TimetableSyncResult, User } from './types';
 
 /** 【API 基础路径，可通过环境变量 VITE_API_BASE 覆盖，空字符串表示同源请求】 */
 const API_BASE = import.meta.env.VITE_API_BASE ?? '';
@@ -66,6 +66,7 @@ async function refreshAccessToken(): Promise<boolean> {
 function isAuthEndpoint(path: string): boolean {
   return path.startsWith('/api/auth/login')
       || path.startsWith('/api/auth/register')
+      || path.startsWith('/api/auth/email-code')
       || path.startsWith('/api/auth/refresh');
 }
 
@@ -317,11 +318,17 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ username, password, captchaId, captchaCode })
     }),
-  /** 【用户注册】 */
-  register: (username: string, password: string, confirmPassword: string, nickname: string, captchaId: string, captchaCode: string) =>
+  /** 【发送注册邮箱验证码】向邮箱发送一次性 6 位验证码，注册时提交校验 */
+  sendEmailCode: (email: string) =>
+    request<{ ok: boolean }>('/api/auth/email-code', {
+      method: 'POST',
+      body: JSON.stringify({ email })
+    }),
+  /** 【用户注册】注册改用邮箱验证码（替代图形验证码），email 必填 */
+  register: (username: string, password: string, confirmPassword: string, nickname: string, email: string, emailCode: string) =>
     request<{ token: string; user: unknown }>('/api/auth/register', {
       method: 'POST',
-      body: JSON.stringify({ username, password, confirmPassword, nickname, captchaId, captchaCode })
+      body: JSON.stringify({ username, password, confirmPassword, nickname, email, emailCode })
     }),
   /** 【管理员创建用户】 */
   adminCreateUser: (username: string, password: string, nickname: string, role: 'USER' | 'ADMIN') =>
@@ -348,6 +355,12 @@ export const api = {
   }),
   /** 【获取当前用户信息】 */
   me: () => request('/api/users/me'),
+  /** 【今日打卡状态】是否已打卡 + 当前连续天数 + 金币余额 */
+  checkinStatus: () => request<{ checkedInToday: boolean; streak: number; balance: number }>('/api/checkin'),
+  /** 【执行每日打卡领奖（幂等）】响应含更新后的出战宠物快照，前端据此局部刷新 */
+  checkin: () => request<{ claimed: boolean; streak: number; expReward: number; coinReward: number; balance: number; pet: Pet | null }>('/api/checkin', { method: 'POST' }),
+  /** 【钱包：金币余额 + 最近流水】 */
+  wallet: () => request<{ balance: number; ledger: Array<{ id: number; amount: number; balanceAfter: number; source: string; reason: string; createdAt: string }> }>('/api/wallet'),
   /** 【更新个人资料】 */
   updateMe: (profile: Partial<Pick<User, 'nickname' | 'email'>>) => request<User>('/api/users/me', {
     method: 'PUT',
@@ -474,21 +487,35 @@ export const api = {
   }),
   /** 【确认计划草案，落地为真实任务（不挂目标）】 */
   chatCommit: (id: number) => request<ChatConversationView>(`/api/chat/conversations/${id}/commit`, { method: 'POST' }),
-  /** 【陪伴宠物聊天：发一句话给宠物（大脑跑在独立 Anima agent 服务，带记忆/人格）】 */
-  companionChat: (message: string) => request<{ reply: string }>('/api/companion/chat', {
-    method: 'POST',
-    body: JSON.stringify({ message })
-  }),
-  /** 【拉宠物会话历史（含审核留下的"提交+反馈"），聊天框打开时加载】 */
-  companionHistory: () => request<{ messages: { role: string; text: string }[] }>('/api/companion/history'),
-  /** 【拉宠物「记得你」的结构化记忆（画像事实），侧边栏展示用】 */
-  companionMemory: () => request<{ facts: { category: string; text: string }[] }>('/api/companion/memory'),
-  /** 【获取宠物信息】 */
-  pet: () => request<Pet>('/api/pet'),
+  /** 【获取出战宠物信息（未领养时返回 null）】 */
+  pet: () => request<Pet | null>('/api/pet'),
   /** 【喂食宠物（增加饱食度）】 */
   feedPet: () => request('/api/pet/feed', { method: 'POST' }),
   /** 【获取宠物经验值变动日志】 */
   petLogs: () => request<ExpLog[]>('/api/pet/logs'),
+  /** 【共享自习室：房间广场】 */
+  rooms: () => request<RoomSummary[]>('/api/rooms'),
+  /** 【创建并进入房间】 */
+  createRoom: (name: string) => request<RoomDetail>('/api/rooms', { method: 'POST', body: JSON.stringify({ name }) }),
+  /** 【房间详情（在线成员）】 */
+  roomDetail: (id: number) => request<RoomDetail>(`/api/rooms/${id}`),
+  /** 【加入房间】 */
+  joinRoom: (id: number) => request<RoomDetail>(`/api/rooms/${id}/join`, { method: 'POST' }),
+  /** 【心跳：刷新在线 + 上报专注状态/秒数】 */
+  roomHeartbeat: (id: number, focusing: boolean, focusSeconds: number) =>
+    request<RoomDetail>(`/api/rooms/${id}/heartbeat`, { method: 'POST', body: JSON.stringify({ focusing, focusSeconds }) }),
+  /** 【退出房间】 */
+  leaveRoom: (id: number) => request(`/api/rooms/${id}/leave`, { method: 'DELETE' }),
+  /** 【宠物市场：全部上架品种】 */
+  petSpecies: () => request<PetSpecies[]>('/api/pet/species'),
+  /** 【当前用户拥有的全部宠物】 */
+  petOwned: () => request<Pet[]>('/api/pet/owned'),
+  /** 【免费领养首只入门款宠物】 */
+  adoptPet: (slug: string) => request<Pet>('/api/pet/adopt', { method: 'POST', body: JSON.stringify({ slug }) }),
+  /** 【金币购买宠物】 */
+  buyPet: (slug: string) => request<Pet>('/api/pet/buy', { method: 'POST', body: JSON.stringify({ slug }) }),
+  /** 【切换出战宠物】 */
+  setActivePet: (petId: number) => request<Pet>('/api/pet/active', { method: 'POST', body: JSON.stringify({ petId }) }),
   /** 【获取学习统计摘要】 */
   summary: () => request<Summary>('/api/stats/summary'),
   /** 【创建申诉（对 AI 审核结果不满意时发起）】 */
@@ -560,12 +587,18 @@ export const api = {
   /** 【获取当前用户课表，可选 semester 过滤】 */
   timetable: (semester?: string) =>
     request<CourseEntry[]>(`/api/timetable${semester ? `?semester=${encodeURIComponent(semester)}` : ''}`),
-  /** 【同步课表：输入账号密码通过爬虫获取】 */
+  /** 【同步课表：输入账号密码通过爬虫获取。同一会话顺带抓回考试安排与成绩】 */
   syncTimetable: (username: string, password: string) =>
-    request<{ count: number; semester: string; weekStart: string; courses: CourseEntry[] }>('/api/timetable/sync', {
+    request<TimetableSyncResult>('/api/timetable/sync', {
       method: 'POST',
       body: JSON.stringify({ username, password })
     }),
+  /** 【获取考试安排，可选 semester 过滤】 */
+  exams: (semester?: string) =>
+    request<ExamEntry[]>(`/api/timetable/exams${semester ? `?semester=${encodeURIComponent(semester)}` : ''}`),
+  /** 【获取课程成绩，可选 semester 过滤】 */
+  grades: (semester?: string) =>
+    request<GradeEntry[]>(`/api/timetable/grades${semester ? `?semester=${encodeURIComponent(semester)}` : ''}`),
   /** 【手动新增一节课（不走 LLM）】 */
   createCourse: (body: CourseCreateInput) =>
     request<CourseEntry>('/api/timetable', {

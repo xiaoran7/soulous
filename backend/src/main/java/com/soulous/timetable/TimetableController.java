@@ -41,6 +41,18 @@ class TimetableController extends BaseController {
         return service.list(current(request), semester);
     }
 
+    /** 【列出当前用户的考试安排，可选 ?semester= 过滤。数据随课表同步一并抓取】 */
+    @GetMapping("/exams")
+    List<TimetableDtos.ExamView> exams(HttpServletRequest request, @RequestParam(required = false) String semester) {
+        return service.listExams(current(request), semester);
+    }
+
+    /** 【列出当前用户的课程成绩，可选 ?semester= 过滤。数据随课表同步一并抓取】 */
+    @GetMapping("/grades")
+    List<TimetableDtos.GradeView> grades(HttpServletRequest request, @RequestParam(required = false) String semester) {
+        return service.listGrades(current(request), semester);
+    }
+
     /**
      * 【同步课表：输入教务系统账号密码爬取获取数据。
      *  爬虫涉及教务登录，限流每小时 10 次、每天 50 次以防频繁重试或滥用。】

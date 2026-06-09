@@ -28,11 +28,15 @@ public class FocusService {
     private final PetService pets;
     /** 【任务数据仓库，用于关联学习任务和更新实际用时】 */
     private final TaskRepository tasks;
+    /** 【金币服务，专注完成时发放金币奖励】 */
+    private final com.soulous.wallet.CoinService coins;
 
-    FocusService(FocusSessionRepository sessions, PetService pets, TaskRepository tasks) {
+    FocusService(FocusSessionRepository sessions, PetService pets, TaskRepository tasks,
+                 com.soulous.wallet.CoinService coins) {
         this.sessions = sessions;
         this.pets = pets;
         this.tasks = tasks;
+        this.coins = coins;
     }
 
     /**
@@ -162,6 +166,8 @@ public class FocusService {
             // 【经验公式：min(60, max(5, 分钟数))，鼓励长时间专注但有上限】
             int exp = Math.min(60, Math.max(5, minutes));
             pets.addFocusExp(user, exp, "专注完成：" + session.title + "（" + minutes + " 分钟）");
+            // 专注完成发放金币：约为经验的三成，至少 3 枚
+            coins.grant(user, Math.max(3, (int) Math.round(exp * 0.3)), "FOCUS", "FOCUS", session.id, "专注完成：" + session.title);
             // 【如果关联了学习任务且有专注时长，累加到任务的实际用时】
             if (session.taskId != null && minutes > 0) {
                 tasks.findById(session.taskId).ifPresent(task -> {

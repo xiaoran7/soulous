@@ -92,6 +92,7 @@ class SoulousApplicationTests {
         var unique = "tester" + System.nanoTime();
         var auth = users.register(new RegisterRequest(unique, "Passw0rd!","测试用户", unique + "@example.com"));
         var user = users.byToken(auth.token());
+        pets.adoptStarter(user, "feixue");
         var task = tasks.create(user, new TaskRequest("复习数据结构栈和队列", "总结栈和队列的区别", TaskType.STUDY, Difficulty.NORMAL, "数据结构", null, 30, 30, null, null));
         tasks.start(user, task.id);
         var result = tasks.submit(user, task.id, new SubmitTaskRequest("我复习了栈的后进先出、队列的先进先出，并整理了循环队列判满条件。", "", "", 35, "", null));
@@ -109,6 +110,7 @@ class SoulousApplicationTests {
         var unique = "rejecter" + System.nanoTime();
         var auth = users.register(new RegisterRequest(unique, "Passw0rd!","反馈用户", unique + "@example.com"));
         var user = users.byToken(auth.token());
+        pets.adoptStarter(user, "feixue");
         var task = tasks.create(user, new TaskRequest("学习二叉树遍历", "提交学习总结", TaskType.STUDY, Difficulty.NORMAL, "数据结构", null, 30, 30, null, null));
         tasks.start(user, task.id);
 
@@ -133,6 +135,7 @@ class SoulousApplicationTests {
         var unique = "manual" + System.nanoTime();
         var auth = users.register(new RegisterRequest(unique, "Passw0rd!","人工复核用户", unique + "@example.com"));
         var user = users.byToken(auth.token());
+        pets.adoptStarter(user, "feixue");
         var task = tasks.create(user, new TaskRequest("补交学习凭证", "等待管理员确认", TaskType.STUDY, Difficulty.NORMAL, "数学", null, 20, 30, null, null));
         tasks.start(user, task.id);
         var result = tasks.submit(user, task.id, new SubmitTaskRequest("短", "", "", 5, "", null));
@@ -211,6 +214,7 @@ class SoulousApplicationTests {
         var unique = "worker" + System.nanoTime();
         var auth = users.register(new RegisterRequest(unique, "Passw0rd!","工作用户", unique + "@example.com"));
         var user = users.byToken(auth.token());
+        pets.adoptStarter(user, "feixue");
         var task = tasks.create(user, new TaskRequest("完成算法练习", "写一段练习总结", TaskType.CODING, Difficulty.NORMAL, "算法", null, 30, 30, null, null));
 
         tasks.start(user, task.id);

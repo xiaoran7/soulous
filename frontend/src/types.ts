@@ -19,6 +19,8 @@ export interface User {
   email: string;
   avatarUrl: string;
   role: UserRole;
+  /** 【金币余额】账号级共享，完成任务/打卡/专注赚取，用于宠物市场购买 */
+  coinBalance?: number;
 }
 
 /**
@@ -72,12 +74,63 @@ export interface CourseEntry {
   semester?: string | null;
 }
 
-/** 【课表同步结果】 */
+/** 【课表同步结果】课表节数 + 学期 + 开学日期 + 课表；外加同步时顺带抓到的考试场次/成绩门数。 */
 export interface TimetableSyncResult {
   count: number;
   semester: string;
   weekStart: string;
   courses: CourseEntry[];
+  examCount: number;
+  gradeCount: number;
+}
+
+/**
+ * 【考试安排条目接口】ExamEntry
+ * 同步课表时由教务爬虫一并抓取的一场考试。对应后端 /api/timetable/exams 返回的视图。
+ * 考试接口本身不带学期，由后端用同步的学期标识 semester 打上，前端据此分学期展示。
+ */
+export interface ExamEntry {
+  id: number;
+  semester?: string | null;
+  courseName?: string | null;
+  courseCode?: string | null;
+  teacher?: string | null;
+  /** 考试时间原文，如 "2026-06-20 09:00~11:00" */
+  examTime?: string | null;
+  room?: string | null;
+  campus?: string | null;
+  seatNo?: string | null;
+  /** 考试场次，如 "第1场" */
+  session?: string | null;
+  admissionNo?: string | null;
+  remark?: string | null;
+}
+
+/**
+ * 【课程成绩条目接口】GradeEntry
+ * 同步课表时由教务爬虫一并抓取的一门课成绩。对应后端 /api/timetable/grades 返回的视图。
+ * 成绩查询天然跨学期，每条自带「开课学期」semester。学分/绩点保留原始字符串（可能为「优秀」等非数值）。
+ */
+export interface GradeEntry {
+  id: number;
+  semester?: string | null;
+  courseCode?: string | null;
+  courseName?: string | null;
+  department?: string | null;
+  /** 成绩原文，如 "88" / "优秀" */
+  score?: string | null;
+  scoreFlag?: string | null;
+  /** 学分原文 */
+  credit?: string | null;
+  /** 绩点原文 */
+  gpa?: string | null;
+  totalHours?: string | null;
+  assessMethod?: string | null;
+  /** 考试性质：初修 / 补考 / 重修 */
+  examNature?: string | null;
+  /** 课程属性：必修 / 选修 */
+  courseAttr?: string | null;
+  courseNature?: string | null;
 }
 
 /**
@@ -105,6 +158,45 @@ export interface CourseCreateInput {
  * 描述用户成长宠物的完整状态，包括等级、经验值、心情值、饱食度、
  * 成长阶段和当前情绪状态。宠物状态会随任务完成情况动态变化。
  */
+/** 【共享自习室：房间广场摘要】 */
+export interface RoomSummary {
+  id: number;
+  name: string;
+  ownerName: string;
+  onlineCount: number;
+}
+
+/** 【共享自习室：在线成员】 */
+export interface RoomMemberView {
+  userId: number;
+  name: string;
+  focusing: boolean;
+  focusSeconds: number;
+  self: boolean;
+}
+
+/** 【共享自习室：房间详情】 */
+export interface RoomDetail {
+  id: number;
+  name: string;
+  ownerName: string;
+  members: RoomMemberView[];
+  onlineCount: number;
+  joined: boolean;
+}
+
+/** 【宠物品种（市场目录项）】 */
+export interface PetSpecies {
+  id: number;
+  slug: string;
+  name: string;
+  rarity?: string | null;
+  price: number;
+  starter: boolean;
+  spritePath?: string | null;
+  description?: string | null;
+}
+
 export interface Pet {
   id: number;
   name: string;
@@ -116,6 +208,10 @@ export interface Pet {
   satiety: number;
   growthStage: string;
   status: string;
+  /** 【是否出战】 */
+  active?: boolean;
+  /** 【所属品种】 */
+  species?: PetSpecies | null;
 }
 
 /**

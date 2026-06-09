@@ -41,7 +41,7 @@
 | `SOULOUS_BOOTSTRAP_ADMIN_USERNAME` | 空 | 首次启动指定 → 自动确保该账户为 ADMIN |
 | `SOULOUS_BOOTSTRAP_ADMIN_PASSWORD` | 空 | 仅当 username 对应用户**不存在时**用作初始密码；已存在用户不会被改密 |
 | `SOULOUS_BOOTSTRAP_ADMIN_NICKNAME` | 空 | 可选昵称 |
-| `SOULOUS_CAPTCHA_ENABLED` | `true` | 登录/注册图形验证码开关；只在自动化测试或脚本批量操作时设 `false` |
+| `SOULOUS_CAPTCHA_ENABLED` | `true` | **登录**图形验证码开关（注册改用邮箱验证码，见 §3.5）；只在自动化测试或脚本批量操作时设 `false` |
 
 > **Bootstrap 行为**：用户存在 → 仅升级角色为 ADMIN；用户不存在 → 用 password 创建（必须通过 PasswordPolicy：8-72 位、字母/数字/符号至少两类、不含用户名、不含空格）。密码不会被覆写，所以 env 长期挂着也不算后门——只是个角色升级开关。
 >
@@ -58,6 +58,24 @@
 | `SOULOUS_LLM_TIMEOUT_SECONDS` | `30`（默认）| LLM 单次调用超时秒数；reasoning 模型建议设 `120` |
 
 LLM 调用全部失败时自动回落到规则版，不会让接口报错。
+
+## 3.5 邮件（注册验证码 + 每日提醒，可选）
+
+注册改用**邮箱验证码**，每日提醒也走邮件。**不配 SMTP 时验证码/提醒只打到后端日志**（开发期够用，但生产注册体验需要真发邮件）。默认预置 Gmail（`smtp.gmail.com:587` STARTTLS）。
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `SOULOUS_MAIL_HOST` | 空 | SMTP 主机，如 `smtp.gmail.com`。**留空 = 不发真实邮件，验证码进日志** |
+| `SOULOUS_MAIL_PORT` | `587` | STARTTLS 端口 |
+| `SOULOUS_MAIL_USERNAME` | 空 | 发信邮箱账号 |
+| `SOULOUS_MAIL_PASSWORD` | 空 | **Gmail 用「应用专用密码」，不是账号密码** |
+| `SOULOUS_NOTIFICATION_EMAIL_ENABLED` | `false` | 置 `true` 才真正把通知/提醒发邮件（需上面 SMTP 配好） |
+| `SOULOUS_NOTIFICATION_EMAIL_FROM` | `no-reply@soulous.local` | 发件人地址 |
+| `SOULOUS_EMAIL_CODE_ENABLED` | `true` | 注册邮箱验证码开关（关闭仅用于自动化测试） |
+| `SOULOUS_REMINDER_ENABLED` / `_CRON` | `true` / `0 0 20 * * *` | 每日未打卡提醒开关与时间 |
+| `SOULOUS_PET_DECAY_ENABLED` / `_INACTIVE_DAYS` / `_CRON` | `true` / `2` / `0 0 4 * * *` | 宠物断签衰减开关、断签天数阈值、定时 |
+
+> 注：`mail` 健康探测已关闭（`management.health.mail.enabled=false`），否则配了 SMTP 后 `/actuator/health` 会因探测 SMTP 连通性而变 DOWN。
 
 ## 4. 对象存储（可选，默认本地）
 
@@ -174,12 +192,10 @@ server {
 
 ---
 
-## 7.1 登录验证码
+## 7.1 验证码（登录图形码 / 注册邮箱码）
 
-- `GET /api/auth/captcha` → `{ id, image }`，image 是 base64 SVG，120s 有效期，一次性消费
-- 登录/注册请求体必须带 `captchaId` + `captchaCode`，缺失或错误返回 400
-- 前端 AuthScreen 自带刷新按钮（点图片即可换一张），失败后自动换图
-- 关闭方式（仅限本地/CI）：`SOULOUS_CAPTCHA_ENABLED=false`
+- **登录**：`GET /api/auth/captcha` → `{ id, image }`（base64 SVG，120s 有效，一次性）；登录体带 `captchaId` + `captchaCode`。前端 AuthScreen 自带刷新（点图换一张）。关闭仅限本地/CI：`SOULOUS_CAPTCHA_ENABLED=false`。
+- **注册**：改用邮箱验证码——`POST /api/auth/email-code` 发 6 位码（10 分钟有效，60s 重发冷却），register 体带 `email` + `emailCode`（邮箱必填）。真发邮件需配 SMTP（见 §3.5），未配时码进后端日志。关闭仅限测试：`SOULOUS_EMAIL_CODE_ENABLED=false`。
 
 ## 8. 已知边界
 

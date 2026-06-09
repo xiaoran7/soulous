@@ -11,15 +11,23 @@
  * 卡片与「成长反馈」面板在身份信息上高度重合，已合并为单一成长档案模块。
  */
 import React, { Suspense, lazy, useEffect, useState } from 'react';
-import { Cookie, PawPrint, RefreshCw, TrendingUp, Upload, X } from 'lucide-react';
+import { Cookie, Lock, RefreshCw, Store, TrendingUp } from 'lucide-react';
 import { api } from '../api';
 import { PetSprite } from '../PetSprite';
 import type { PetAnimationState } from '../PetSprite';
 import type { ExpLog, Pet } from '../types';
-import { ClickableAvatar, Empty, StatBar, animationForPet } from '../components/shared';
+import { Empty, StatBar, animationForPet } from '../components/shared';
+import { PetMarket } from '../components/PetMarket';
 
 /** 【懒加载经验趋势图】仅在滚动到图表区域时加载 */
 const ExpTrendChart = lazy(() => import('../components/PetCharts'));
+
+/**
+ * 【宠物成长日志模块级缓存】记住上次拉取的成长事件，跨页面切回宠物页时先渲染旧数据、
+ * 后台静默刷新，消除每次重进的列表/图表卡顿。登出由 resetPetLogsCache() 清空。
+ */
+let petLogsCache: ExpLog[] | null = null;
+export function resetPetLogsCache() { petLogsCache = null; }
 
 /**
  * 【宠物状态文案映射】每种宠物状态对应一个标题和描述文案
@@ -49,15 +57,20 @@ const petEventLabels: Record<string, string> = {
 };
 
 /**
- * 【动作预览配置】定义宠物的 5 种动画状态预览
- * 用户点击可切换主展示区的动画
+ * 【动作解锁配置】宠物全部 9 个动画动作，各自有解锁等级。
+ * 升级逐步解锁，满级（Lv30）解锁全部——最后一个动作恰好在满级解锁。
+ * 未达解锁等级的动作在预览区显示为锁定态，不可选中。
  */
-const petActionPreviews: { state: PetAnimationState; label: string; description: string }[] = [
-  { state: 'idle', label: '待机', description: '日常陪伴' },
-  { state: 'running', label: '工作', description: '任务进行中' },
-  { state: 'review', label: '复核', description: '等待审核' },
-  { state: 'waving', label: '开心', description: '获得认可' },
-  { state: 'failed', label: '低落', description: '需要补充' }
+const PET_ACTIONS: { state: PetAnimationState; label: string; description: string; unlockLevel: number }[] = [
+  { state: 'idle', label: '待机', description: '日常陪伴', unlockLevel: 1 },
+  { state: 'waiting', label: '等待', description: '耐心等你', unlockLevel: 1 },
+  { state: 'waving', label: '招呼', description: '挥手问好', unlockLevel: 3 },
+  { state: 'failed', label: '低落', description: '需要补充', unlockLevel: 5 },
+  { state: 'running', label: '奔跑', description: '元气满满', unlockLevel: 8 },
+  { state: 'running-right', label: '右奔', description: '向右冲刺', unlockLevel: 12 },
+  { state: 'running-left', label: '左奔', description: '向左冲刺', unlockLevel: 16 },
+  { state: 'jumping', label: '跳跃', description: '兴奋雀跃', unlockLevel: 22 },
+  { state: 'review', label: '复核', description: '专注审阅', unlockLevel: 30 }
 ];
 
 /**
@@ -93,22 +106,48 @@ function formatDateTime(value: string) {
  * - logs: 成长事件日志
  * - feeding/avatarUploading: 操作忙碌状态
  */
-export function PetPage({ pet: initialPet, onFed }: { pet: Pet | null; onFed?: (pet: Pet) => void }) {
+export function PetPage({ pet: initialPet, onFed, onRefresh }: { pet: Pet | null; onFed?: (pet: Pet) => void; onRefresh?: () => void }) {
   const [pet, setPet] = useState<Pet | null>(initialPet);
+  /** 【宠物市场弹层开关】 */
+  const [marketOpen, setMarketOpen] = useState(false);
   /** 【宠物动画状态】根据宠物数据自动计算的动画状态 */
   const petState = animationForPet(pet);
   /** 【预览动画状态】用户手动选择的预览状态，默认跟随宠物状态 */
   const [previewState, setPreviewState] = useState<PetAnimationState>(petState);
-  /** 【成长事件日志】宠物的经验获取历史 */
-  const [logs, setLogs] = useState<ExpLog[]>([]);
-  const [loadingLogs, setLoadingLogs] = useState(false);
+  /** 【成长事件日志】宠物的经验获取历史，初值从模块缓存 seed */
+  const [logs, setLogs] = useState<ExpLog[]>(() => petLogsCache ?? []);
+  const [loadingLogs, setLoadingLogs] = useState(petLogsCache === null);
   const [feeding, setFeeding] = useState(false);
   const [feedError, setFeedError] = useState('');
   const [logsError, setLogsError] = useState('');
-  const [avatarUploading, setAvatarUploading] = useState(false);
-  const [avatarError, setAvatarError] = useState('');
   /** 【状态文案】根据当前宠物状态获取对应的标题和描述 */
   const statusCopy = petStatusCopy[pet?.status ?? 'NORMAL'] ?? petStatusCopy.NORMAL;
+  /** 【当前等级】驱动动作解锁判断 */
+  const petLevel = pet?.level ?? 1;
+  /** 【已解锁动作数】用于动作区小标题展示 X/9 */
+  const unlockedCount = PET_ACTIONS.filter((a) => a.unlockLevel <= petLevel).length;
+
+  /** 【市场弹层】领养/购买/切换出战后刷新全局数据 */
+  const marketModal = marketOpen && (
+    <PetMarket onClose={() => setMarketOpen(false)} onChanged={() => { onRefresh?.(); }} />
+  );
+
+  // 未领养任何宠物：展示领养引导，去市场领养首只
+  if (!pet) {
+    return (
+      <div className="page-stack">
+        {marketModal}
+        <section className="panel pet-empty">
+          <div className="pet-empty-frame"><PetSprite state="waving" size={120} /></div>
+          <h2>领养你的第一只伙伴</h2>
+          <p className="muted">完成学习任务、每日打卡能赚取金币。先去宠物市场免费领养一只入门伙伴，陪你一起成长吧。</p>
+          <button className="primary-button" onClick={() => setMarketOpen(true)}>
+            <Store size={15} /> 去宠物市场
+          </button>
+        </section>
+      </div>
+    );
+  }
 
   /**
    * 【同步父组件数据】当父组件的 pet 数据变化时更新本地状态
@@ -130,7 +169,9 @@ export function PetPage({ pet: initialPet, onFed }: { pet: Pet | null; onFed?: (
     setLogsError('');
     try {
       const data = await api.petLogs();
-      setLogs(Array.isArray(data) ? data : []);
+      const next = Array.isArray(data) ? data : [];
+      petLogsCache = next;
+      setLogs(next);
     } catch (err) {
       setLogsError(err instanceof Error ? err.message : '加载成长事件失败');
     } finally {
@@ -139,46 +180,6 @@ export function PetPage({ pet: initialPet, onFed }: { pet: Pet | null; onFed?: (
   }
 
   useEffect(() => { void loadLogs(); }, []);
-
-  /**
-   * 【上传宠物头像】两步流程：
-   * 1. 上传图片文件到服务器，获取 URL
-   * 2. 调用 setPetAvatar 设置宠物头像
-   * 成功后更新本地宠物状态并通知父组件
-   */
-  async function uploadAvatar(file?: File) {
-    if (!file) return;
-    setAvatarError('');
-    setAvatarUploading(true);
-    try {
-      const result = await api.uploadScreenshot(file);
-      const updated = await api.setPetAvatar(result.url) as Pet;
-      setPet(updated);
-      onFed?.(updated);
-    } catch (err) {
-      setAvatarError(err instanceof Error ? err.message : '上传宠物头像失败');
-    } finally {
-      setAvatarUploading(false);
-    }
-  }
-
-  /**
-   * 【清除宠物头像】将头像重置为默认（使用 PetSprite 动画）
-   * 传入 null 表示清除自定义头像
-   */
-  async function clearAvatar() {
-    setAvatarError('');
-    setAvatarUploading(true);
-    try {
-      const updated = await api.setPetAvatar(null) as Pet;
-      setPet(updated);
-      onFed?.(updated);
-    } catch (err) {
-      setAvatarError(err instanceof Error ? err.message : '清除头像失败');
-    } finally {
-      setAvatarUploading(false);
-    }
-  }
 
   /**
    * 【喂食宠物】增加宠物的饱食度
@@ -200,21 +201,20 @@ export function PetPage({ pet: initialPet, onFed }: { pet: Pet | null; onFed?: (
 
   return (
     <div className="page-stack">
+      {marketModal}
       {/* ===== 【成长档案】合并「宠物成长」与「成长反馈」：身份信息 + 状态属性 + 喂食 ===== */}
       <section className="panel pet-profile full">
         <div className="panel-title">
           <h2>宠物 <em style={{ fontStyle: 'italic', color: 'var(--ink-3)' }}>成长档案</em></h2>
-          <PawPrint size={16} />
+          <button className="ghost-button small" onClick={() => setMarketOpen(true)} title="宠物市场">
+            <Store size={14} /> 宠物市场
+          </button>
         </div>
         <div className="pet-profile-body">
-          {/* 【身份列】头像/动画 + 名字 + 等级阶段状态 + 头像管理 */}
+          {/* 【身份列】品种动画 + 名字 + 等级阶段状态。形象由所购品种决定，不支持自定义头像。 */}
           <div className="pet-profile-identity">
             <div className="pet-avatar-frame">
-              {pet?.avatarUrl ? (
-                <ClickableAvatar url={pet.avatarUrl} alt={`${pet.name ?? '宠物'} 头像`} />
-              ) : (
-                <PetSprite state={previewState} size={140} />
-              )}
+              <PetSprite state={previewState} size={140} sheet={pet?.species?.spritePath} />
             </div>
             <h3>{pet?.name ?? 'Soul'}</h3>
             {/* 【宠物属性网格】等级、阶段、状态 */}
@@ -223,20 +223,9 @@ export function PetPage({ pet: initialPet, onFed }: { pet: Pet | null; onFed?: (
               <div><span>阶段</span><strong>{pet?.growthStage ?? 'EGG'}</strong></div>
               <div><span>状态</span><strong>{pet?.status ?? 'NORMAL'}</strong></div>
             </div>
-            {/* 【头像操作按钮】上传/更换/恢复默认 */}
-            <div className="pet-avatar-actions">
-              <label className={`upload-control${avatarUploading ? ' disabled' : ''}`}>
-                <Upload size={14} />
-                <span>{avatarUploading ? '上传中...' : pet?.avatarUrl ? '更换头像' : '上传宠物头像'}</span>
-                <input type="file" accept="image/*" disabled={avatarUploading} onChange={(e) => void uploadAvatar(e.target.files?.[0])} />
-              </label>
-              {pet?.avatarUrl && (
-                <button className="secondary-button compact-button" onClick={() => void clearAvatar()} disabled={avatarUploading}>
-                  <X size={14} /> 恢复默认
-                </button>
-              )}
-            </div>
-            {avatarError && <div className="form-error" style={{ marginTop: 6 }}>{avatarError}</div>}
+            <p className="muted small" style={{ margin: '4px 0 0', textAlign: 'center' }}>
+              换形象请前往宠物市场领养 / 购买其它品种。
+            </p>
           </div>
 
           {/* 【反馈列】状态文案 + 属性进度条 + 喂食 */}
@@ -290,21 +279,27 @@ export function PetPage({ pet: initialPet, onFed }: { pet: Pet | null; onFed?: (
             </Suspense>
           </div>
 
-          {/* 【动作预览】点击切换主展示区的动画状态 */}
+          {/* 【动作解锁】点击切换主展示区动画；未达等级的动作锁定，升级解锁，满级全开 */}
           <div className="pet-dynamics-block">
-            <div className="pet-subhead">动作预览</div>
+            <div className="pet-subhead">动作解锁（{unlockedCount}/{PET_ACTIONS.length}）</div>
             <div className="pet-action-grid">
-              {petActionPreviews.map((action) => (
-                <button
-                  key={action.state}
-                  className={`pet-action ${previewState === action.state ? 'selected' : ''}`}
-                  onClick={() => setPreviewState(action.state)}
-                >
-                  <PetSprite state={action.state} size={52} label={`Feixue ${action.label}`} />
-                  <strong>{action.label}</strong>
-                  <span>{action.description}</span>
-                </button>
-              ))}
+              {PET_ACTIONS.map((action) => {
+                const locked = action.unlockLevel > petLevel;
+                return (
+                  <button
+                    key={action.state}
+                    className={`pet-action ${previewState === action.state ? 'selected' : ''}${locked ? ' locked' : ''}`}
+                    onClick={() => { if (!locked) setPreviewState(action.state); }}
+                    disabled={locked}
+                    title={locked ? `Lv.${action.unlockLevel} 解锁` : action.description}
+                  >
+                    <PetSprite state={locked ? 'idle' : action.state} size={52} sheet={pet?.species?.spritePath} label={`${pet?.name ?? 'Soul'} ${action.label}`} />
+                    <strong>{action.label}</strong>
+                    <span>{locked ? `Lv.${action.unlockLevel} 解锁` : action.description}</span>
+                    {locked && <span className="pet-action-lock" aria-hidden="true"><Lock size={12} /></span>}
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>

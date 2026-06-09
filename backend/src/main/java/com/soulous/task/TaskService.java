@@ -58,6 +58,8 @@ public class TaskService {
     private final ModerationService moderation;
     /** 【通知服务，用于推送 SSE 通知到前端】 */
     private final NotificationService notifications;
+    /** 【金币服务，任务完成时发放金币奖励】 */
+    private final com.soulous.wallet.CoinService coins;
     /**
      * 【延迟获取 ApplicationContext，用于打破循环依赖：
      * AiReviewProcessor 依赖 TaskService.applyAiReview，而 TaskService 需要调度 AiReviewProcessor。
@@ -92,6 +94,7 @@ public class TaskService {
                 StudyRecordRepository records, AppealRepository appeals, ExpLogRepository expLogs,
                 AiService ai, PetService pets, RetrievalService retrieval, ModerationService moderation,
                 NotificationService notifications,
+                com.soulous.wallet.CoinService coins,
                 org.springframework.context.ApplicationContext appCtx,
                 @org.springframework.beans.factory.annotation.Qualifier("aiReviewExecutor")
                 org.springframework.core.task.TaskExecutor aiReviewExecutor) {
@@ -106,6 +109,7 @@ public class TaskService {
         this.retrieval = retrieval;
         this.moderation = moderation;
         this.notifications = notifications;
+        this.coins = coins;
         this.appCtx = appCtx;
         this.aiReviewExecutor = aiReviewExecutor;
     }
@@ -455,8 +459,10 @@ public class TaskService {
         else if (bonus >= 4) feedback = "回答不错！获得 +" + bonus + " 经验奖励。";
         else if (bonus > 0) feedback = "回答有一定参考价值，获得 +" + bonus + " 经验。";
         else feedback = "回答较简短，本次无加成，下次尝试展开说明。";
-        var pet = bonus > 0 ? pets.addExp(user, submission.task, submission, bonus, "AI 追问奖励") : pets.get(user);
-        return Map.of("bonusExp", bonus, "feedback", feedback, "pet", pet);
+        var pet = bonus > 0 ? pets.addExp(user, submission.task, submission, bonus, "AI 追问奖励") : pets.getActiveOrNull(user);
+        // pet 可能为 null（用户尚未领养宠物）；视图为 null 时用空 Map 占位，避免 Map.of 的 NPE
+        var petView = com.soulous.pet.PetService.view(pet);
+        return Map.of("bonusExp", bonus, "feedback", feedback, "pet", petView == null ? Map.of() : petView);
     }
 
     /**
@@ -482,6 +488,9 @@ public class TaskService {
             task.completedAt = LocalDateTime.now();
             submission.status = SubmissionStatus.AI_APPROVED;
             pets.addExp(submission.user, task, submission, review.recommendedExp, "AI 审核通过：" + review.reason);
+            // 完成任务发放金币：约为经验的一半，至少 5 枚
+            int taskCoins = Math.max(5, (int) Math.round(review.recommendedExp * 0.5));
+            coins.grant(submission.user, taskCoins, "TASK", "SUBMISSION", submission.id, "完成任务：" + task.title);
             retrieval.indexCompletedTask(task);
             title = "AI 审核通过：" + task.title;
         } else if (review.result == AiReviewResult.NEED_MORE) {

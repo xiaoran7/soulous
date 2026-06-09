@@ -40,7 +40,7 @@ flowchart LR
     end
 
     subgraph DB["H2 / MySQL via Flyway"]
-      Tables[("user_account · study_task · task_submission<br/>ai_review · pet · refresh_token<br/>audit_log · moderation_log · memory_embedding ...")]
+      Tables[("user_account · study_task · task_submission<br/>ai_review · owned_pet · pet_species · coin_ledger<br/>daily_checkin · study_room · refresh_token · audit_log ...")]
     end
 
     UI --> API --> C
@@ -63,18 +63,22 @@ flowchart LR
 
 | 功能 | 后端包 | 前端入口 | 关键 DB 表 |
 | --- | --- | --- | --- |
-| 注册 / 登录 / 验证码 / 改密 | [`com.soulous.auth`](../backend/src/main/java/com/soulous/auth) | [`pages/AuthScreen.tsx`](../frontend/src/pages/AuthScreen.tsx) | `user_account`, `refresh_token` |
+| 注册(邮箱验证码 `EmailCodeService`) / 登录(图形验证码) / 改密 | [`com.soulous.auth`](../backend/src/main/java/com/soulous/auth) | [`pages/AuthScreen.tsx`](../frontend/src/pages/AuthScreen.tsx) + `pages/LandingPage.tsx` | `user_account`, `refresh_token` |
 | JWT 双 token + Filter | `auth/JwtService`, `auth/RefreshTokenService`, `common/web/JwtAuthenticationFilter` | `api.ts` 单飞刷新 | `refresh_token` |
 | AI 拆解对话（Gemini 式：分类/对话/消息） | [`com.soulous.chat`](../backend/src/main/java/com/soulous/chat) | `pages/ChatPage.tsx` + `components/ChatConversation.tsx` + `components/ChatComposer.tsx` | `chat_category`, `chat_conversation`, `chat_message` |
 | ~~长期目标 / 旧拆解会话~~（**已下线**，2026-06-01 重构；表/服务暂留供 RAG/复盘引用） | `com.soulous.goal`、`com.soulous.aisession` | — | `goal`, `planning_session`, `session_turn` |
 | 学习任务 + 凭证提交 | [`com.soulous.task`](../backend/src/main/java/com/soulous/task) | `pages/TasksPage.tsx` + `components/ProofUploader.tsx` | `study_task`, `task_submission` |
-| 自习室（正计时专注） | [`com.soulous.focus`](../backend/src/main/java/com/soulous/focus) | `pages/FocusPage.tsx` + `studyroom/`（场景目录 / 音频混音 / 本地偏好 / 自定义素材 IndexedDB） | `focus_session` |
+| 自习室·独享（正计时专注） | [`com.soulous.focus`](../backend/src/main/java/com/soulous/focus) | `pages/FocusPage.tsx` + `studyroom/`（场景目录 / 音频混音 / 本地偏好 / 自定义素材 IndexedDB） | `focus_session` |
+| 自习室·共享（轻量在线，心跳轮询） | [`com.soulous.room`](../backend/src/main/java/com/soulous/room) | `studyroom/SharedRooms.tsx`（FocusPage 内切换） | `study_room`, `room_member` |
 | 课表（导入 / 增删 / 周次） | [`com.soulous.timetable`](../backend/src/main/java/com/soulous/timetable) | `pages/TimetablePage.tsx` + `components/TimetableGrid.tsx` | `course_entry` |
 | AI 审核 + 出题 + 拆解 | [`com.soulous.ai`](../backend/src/main/java/com/soulous/ai) | （透明调用） | `ai_review` |
 | LLM 抽象 + Provider 池 | `com.soulous.ai`、`com.soulous.ai.provider` | — | — |
 | 内容风控 | [`com.soulous.moderation`](../backend/src/main/java/com/soulous/moderation) | （透明调用） | `moderation_log` |
 | RAG 长时记忆 | [`com.soulous.rag`](../backend/src/main/java/com/soulous/rag) + `ai.embedding` | — | `memory_embedding` |
-| 宠物成长规则 | [`com.soulous.pet`](../backend/src/main/java/com/soulous/pet) | `pages/PetPage.tsx` + `PetSprite.tsx` | `pet`, `exp_log` |
+| 宠物成长 + 市场（多宠/出战/领养/购买，每宠独立等级） | [`com.soulous.pet`](../backend/src/main/java/com/soulous/pet) | `pages/PetPage.tsx` + `components/PetMarket.tsx` + `PetSprite.tsx` | `owned_pet`, `pet_species`, `exp_log` |
+| 金币钱包 | [`com.soulous.wallet`](../backend/src/main/java/com/soulous/wallet) | 我的页 / 市场 | `user_account.coin_balance`, `coin_ledger` |
+| 每日打卡 | [`com.soulous.checkin`](../backend/src/main/java/com/soulous/checkin) | Dashboard 签到卡 | `daily_checkin` |
+| 每日邮件提醒（定时） | [`com.soulous.reminder`](../backend/src/main/java/com/soulous/reminder) | —（走通知→邮件） | （定时扫描，无独占表） |
 | 每日复盘 | [`com.soulous.review`](../backend/src/main/java/com/soulous/review) | `pages/DailyReviewPage.tsx` | （从已有表聚合） |
 | 数据看板 | [`com.soulous.stats`](../backend/src/main/java/com/soulous/stats) | `components/TrendChart.tsx`（趋势图已并入 `DailyReviewPage`，独立统计页已下线） | （从已有表聚合） |
 | 通知 | [`com.soulous.notification`](../backend/src/main/java/com/soulous/notification) | 后端保留；前端铃铛入口已移除 | `notification` |
@@ -483,16 +487,18 @@ stateDiagram-v2
 
 | 公式 | 代码 |
 | --- | --- |
-| 升下一级所需经验 | `expForNextLevel(level) = level==1 ? 100 : 100 + level*35` |
+| 升下一级所需经验 | `expForNextLevel(level) = 50 + 50*level + 8*level²`（二次曲线，Lv1≈108、Lv30≈8750） |
+| 满级 | `MAX_LEVEL=30`，到顶不再升级、经验条封满 |
 | 心情倍率 | `mood≥80 → 1.2x`, `mood≤30 → 0.8x`, 否则 1.0x |
-| 一次奖励的实际经验 | `amount = round(requested * moodMult)` |
-| 心情增益 | 大奖励（≥80% baseExp）+10，否则 +5 |
-| 升级循环 | `while currentExp ≥ nextLevelExp { currentExp -= nextLevelExp; level++; }`——一次提交可能跨多级 |
-| 状态机 | 大奖 → `PROUD`, 一般 → `HAPPY`, 升级瞬间 → `EXCITED`, NEED_MORE → `SLEEPY`, REJECT → `SAD` |
+| 连续打卡倍率 | `streakMultiplier(days) = min(1.5, 1.0 + 0.1*(days-1))`，叠在心情倍率之上 |
+| 一次奖励的实际经验 | `amount = round(requested * moodMult * streakMult)` |
+| 升级循环 | `while level<MAX && currentExp ≥ nextLevelExp { currentExp -= nextLevelExp; level++; }` |
+| 状态机 | 大奖 → `PROUD`, 一般 → `HAPPY`, 升级瞬间 → `EXCITED`, NEED_MORE → `SLEEPY`, REJECT/断签衰减 → `SAD/SLEEPY` |
+| 断签衰减 | `applyInactivityDecay`：心情-8/饱腹-10，不掉级；由 `PetMaintenanceService` 定时对久未打卡用户调用 |
 
 `normalize(pet)` 在每个入口先把 null/越界值修好——历史数据兼容用。
 
-**没用 Lombok**、**没用任何框架**、纯 `Math.max/min/round/ceil` + JDK。这块拿出来就能直接做单测，所以测试覆盖也是项目里最厚的一块（`PetGrowthRulesTests` 5 例）。
+**没用 Lombok**、**没用任何框架**、纯 `Math.max/min/round/ceil` + JDK。这块拿出来就能直接做单测，测试覆盖项目最厚（`PetGrowthRulesTests` 14 例）。动作按等级解锁（Lv1 idle/waiting … Lv30 全 9 态）的判定在前端 `PetPage`。
 
 ---
 

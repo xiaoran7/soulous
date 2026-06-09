@@ -49,8 +49,10 @@ public class AuthController {
 
     /** 用户服务，负责注册、登录、密码管理等核心业务 */
     private final UserService users;
-    /** 验证码服务，用于生成和校验 CAPTCHA */
+    /** 验证码服务，用于生成和校验 CAPTCHA（登录用） */
     private final CaptchaService captcha;
+    /** 邮箱验证码服务，用于注册时的邮箱验证码发放与校验 */
+    private final EmailCodeService emailCodes;
     /** 刷新令牌服务，负责令牌的颁发、轮换和撤销 */
     private final RefreshTokenService refreshTokens;
     /** 审计服务，用于记录安全相关操作日志 */
@@ -64,6 +66,7 @@ public class AuthController {
 
     AuthController(UserService users,
                    CaptchaService captcha,
+                   EmailCodeService emailCodes,
                    RefreshTokenService refreshTokens,
                    AuditService audit,
                    @Value("${soulous.cookie.secure:false}") boolean cookieSecure,
@@ -71,6 +74,7 @@ public class AuthController {
                    @Value("${soulous.jwt.refresh-ttl-days:30}") int refreshTtlDays) {
         this.users = users;
         this.captcha = captcha;
+        this.emailCodes = emailCodes;
         this.refreshTokens = refreshTokens;
         this.audit = audit;
         this.cookieSecure = cookieSecure;
@@ -90,24 +94,40 @@ public class AuthController {
     }
 
     /**
+     * 发送注册邮箱验证码接口。
+     * 向请求邮箱发送一个一次性 6 位验证码，注册时提交以验证邮箱归属。
+     * 限流防刷；同一邮箱另有重发冷却（由 EmailCodeService 控制）。
+     * 未配置 SMTP 时验证码回退到后端日志（开发期）。
+     *
+     * @param request 【包含目标邮箱的请求体】
+     * @return 【固定返回 {"ok": true}，不回显验证码】
+     */
+    @PostMapping("/email-code")
+    @RateLimit(name = "auth-email-code", capacity = 3, refillTokens = 3, refillPeriod = 1)
+    Map<String, Object> emailCode(@Valid @RequestBody EmailCodeRequest request) {
+        emailCodes.requestCode(request.email());
+        return Map.of("ok", true);
+    }
+
+    /**
      * Web 端注册接口。
-     * 先校验验证码，再校验两次密码是否一致，然后调用 UserService 创建用户。
+     * 先校验两次密码是否一致，再校验邮箱验证码（替代图形验证码），然后调用 UserService 创建用户。
      * 注册成功后颁发访问令牌和刷新令牌（通过 Cookie 设置）。
      *
-     * @param request    【包含用户名、密码、确认密码、昵称、验证码信息的注册请求】
+     * @param request    【包含用户名、密码、确认密码、昵称、邮箱、邮箱验证码的注册请求】
      * @param httpRequest 【HTTP 请求，用于获取 User-Agent 和客户端 IP】
      * @param response    【HTTP 响应，用于设置认证 Cookie】
      * @return 【认证响应，包含 JWT 令牌和用户信息】
      */
     @PostMapping("/register")
     @RateLimit(name = "auth-register", capacity = 5, refillTokens = 5, refillPeriod = 1)
-    AuthResponse register(@Valid @RequestBody RegisterWithCaptchaRequest request,
+    AuthResponse register(@Valid @RequestBody RegisterWithEmailCodeRequest request,
                           HttpServletRequest httpRequest,
                           HttpServletResponse response) {
-        captcha.verify(request.captchaId(), request.captchaCode());
         if (!request.password().equals(request.confirmPassword())) {
             throw new com.soulous.common.exception.BadRequestException("两次输入的密码不一致");
         }
+        emailCodes.verify(request.email(), request.emailCode());
         var auth = users.register(request.toService());
         issueCookies(httpRequest, response, auth, users.byToken(auth.token()));
         return auth;

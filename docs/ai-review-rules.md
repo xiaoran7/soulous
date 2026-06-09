@@ -1,28 +1,19 @@
 # AI 审核规则
 
-提交凭证后的审核走**三级链**（`AiReviewProcessor.runReview`，异步、off-request-thread）：
+提交凭证后的审核走**两级链**（`AiReviewProcessor.runReview`，异步、off-request-thread）：
 
 ```
 提交 → 内容安全审核(moderation，保留不变)
-     → ① 宠物审核(Anima/飞雪)   ← 首选，带记忆
-        失败/Anima 关闭 ↓
-     → ② AiService LLM 审核     ← 回退
+     → ① AiService LLM 审核     ← 首选
         LLM 不可用 ↓
-     → ③ 规则兜底评分           ← 最后保底
+     → ② 规则兜底评分           ← 保底
 ```
 
 任一级产出统一的 `AiReview{result, relevanceScore, completenessScore, qualityScore, recommendedExp, reason, suggestion, needManual}`，由 `TaskService.applyAiReview` 落地（PASS→任务完成+发经验；NEED_MORE→补充；REJECT/MANUAL→驳回/转人工）。
 
-## ① 宠物审核（Anima，首选）
+> 历史：曾有一层「宠物审核」把提交委托给独立的 Anima agent 服务（飞雪人格 + 记忆）做首选裁决，2026-06-08 连同陪伴模块整体下线，审核回归纯本地 `AiService`。
 
-把提交详情推给独立的 **Anima** 服务（`POST /v1/review`），由宠物（飞雪人格）**结合对该用户的记忆**评判：
-
-- 产出结构化裁决（result/三维分/经验/理由/建议）**和一段飞雪口吻的聊天回复**。
-- 这次「提交摘要 + 飞雪反馈」写进该用户的宠物会话（`pet-{userId}`）→ **进记忆、聊天框可见**（`GET /api/companion/history`）。
-- Soulous 侧映射：`result` 字符串 → `AiReviewResult`，`MANUAL`/未知 → `NEED_MORE`（拿不准时让用户补充，比直接驳回友好）。
-- 关闭/不可用/解析失败 → 返回 null，回退到 ②。开关见 `soulous.companion.*`。
-
-## ② / ③ 本地审核（回退）
+## ① / ② 本地审核
 
 `AiService.review` 先试 LLM（`completeJson`，返回固定 JSON schema），不可用再走规则兜底。
 

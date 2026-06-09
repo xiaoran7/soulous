@@ -3,7 +3,7 @@
 Base URL: `http://localhost:8080`
 
 > **Web 与 Mobile 鉴权差异**
-> - Web：双 token JWT，access (1h) + refresh (30d) 都写 HttpOnly cookie，请求自动带 cookie。登录/注册需先取 CAPTCHA（`GET /api/auth/captcha`）。
+> - Web：双 token JWT，access (1h) + refresh (30d) 都写 HttpOnly cookie，请求自动带 cookie。**登录**需先取图形验证码（`GET /api/auth/captcha`）；**注册**改用邮箱验证码——先 `POST /api/auth/email-code` 发码，再带 `emailCode` 提交 register，邮箱必填。
 > - Mobile：见下方 [Mobile Auth](#mobile-auth)，refresh token 走 response body，由客户端存 Keychain/Keystore，无 CAPTCHA（靠限流 + 未来设备 attestation）。
 > - 兼容 `Authorization: Bearer <token>`：web 端如果 cookie 没带（跨域场景）也认 Authorization 头。
 
@@ -11,23 +11,39 @@ Base URL: `http://localhost:8080`
 
 ## Auth/User
 
+### `POST /api/auth/email-code`
+
+向邮箱发送一次性 6 位注册验证码（10 分钟有效，60s 重发冷却）。未配 SMTP 时验证码打到后端日志（开发期回退）。
+
+```json
+{ "email": "alice@example.com" }
+```
+
 ### `POST /api/auth/register`
+
+注册改用邮箱验证码（不再走图形验证码）。`email` 与 `emailCode` 必填。
 
 ```json
 {
   "username": "alice",
   "password": "pass123",
+  "confirmPassword": "pass123",
   "nickname": "Alice",
-  "email": "alice@example.com"
+  "email": "alice@example.com",
+  "emailCode": "123456"
 }
 ```
 
 ### `POST /api/auth/login`
 
+需先 `GET /api/auth/captcha` 取图形验证码，带 `captchaId` / `captchaCode` 提交。
+
 ```json
 {
-  "username": "demo",
-  "password": "demo123"
+  "username": "alice",
+  "password": "pass123",
+  "captchaId": "...",
+  "captchaCode": "..."
 }
 ```
 
@@ -112,15 +128,6 @@ Gemini 式的分类 → 对话 → 消息聊天（取代旧的目标中心 Plann
 > 旧的 `/api/ai/sessions/*`（PlanningSession）与 `/api/goals/*`（Goal）REST 已下线删除；底层 `goal` / `planning_session` 表与服务暂时保留（RAG、每日复盘仍引用），但不再有对外接口。
 
 > SSE 服务端依赖 `spring.mvc.async.request-timeout`（默认 300000ms = 5min），反代如 nginx 需关 `proxy_buffering` + 抬 `proxy_read_timeout`，否则 token 流被攒在反代里或被切断。
-
-## 陪伴宠物（Companion）
-
-与「AI 拆解」完全独立的产品表面：有记忆、会陪伴的宠物（飞雪）。大脑跑在**独立的 Anima agent 服务**（Python/FastAPI，带多层记忆 + 人格），Soulous 通过 HTTP 调它（配置见 `soulous.companion.*`，默认 `ANIMA_BASE_URL=http://localhost:8090`）。记忆按登录用户隔离（`user_id`/`session` 由服务端从用户 id 派生，客户端传不进来）。
-
-- `POST /api/companion/chat` — 发一句话给宠物，body `{message}`，返回 `{reply}`。每用户固定一条长期会话 `pet-{userId}`，记忆随它累积。
-- `GET /api/companion/history` — 拉宠物会话最近消息（含审核留下的「提交 + 飞雪反馈」），返回 `{messages:[{role:"user"|"pet", text}]}`，聊天框打开时加载。
-
-Anima 不可用时聊天返回兜底文案、审核回退本地逻辑（见 `ai-review-rules.md`），不影响主流程。涉及 LLM 的端点同样配置小时/天级限流。
 
 ## Notifications / SSE
 
@@ -256,21 +263,29 @@ MVP 中审核随任务提交自动触发，此接口返回说明消息。
 
 ## Timetable / 课表
 
-用户课表（一周课程网格），供前端展示。导入走 LLM 解析：前端把教务系统导出的 `.xls`（用 SheetJS 在浏览器内转成 HTML 表格）或直接粘贴的课表 HTML 交给后端解析。全部接口需登录。（注：课表作为 `[COURSES]` 背景注入 AI 拆解的旧逻辑随 2026-06-01 的对话重构已移除。）
+用户课表（一周课程网格），供前端展示。同步走教务系统爬虫：用户输入学号 + 教务密码，后端用 Playwright 爬虫（`hut_schedule.py`，`--mode all`）一次登录会话同时抓回**课表 + 考试安排 + 成绩**并分别落库。全部接口需登录。（注：课表作为 `[COURSES]` 背景注入 AI 拆解的旧逻辑随 2026-06-01 的对话重构已移除。）
 
 ### `GET /api/timetable?semester=`
 
 列出当前用户课表，可选 `semester` 过滤。
 
-### `POST /api/timetable/import`
+### `POST /api/timetable/sync`
 
-LLM 解析课表 HTML 落库，按用户限流 30/h、100/day。
+输入教务系统账号密码，爬虫抓取并落库课表（同时一并抓回考试安排、成绩）。按用户限流 10/h、50/day（爬虫涉及教务登录，防滥用）。
 
 ```json
-{ "html": "<table>...</table>", "semester": "2025-2026-2", "replace": true }
+{ "username": "2508090103014", "password": "***" }
 ```
 
-`replace=true` 时先清空旧课表（指定 `semester` 则只清该学期）。返回 `{ count, semester, courses }`。
+返回 `{ count, semester, weekStart, courses, examCount, gradeCount }`。`count`=课表节数，`examCount`/`gradeCount`=顺带抓到的考试场次/成绩门数。
+
+### `GET /api/timetable/exams?semester=`
+
+列出当前用户的考试安排（随课表同步抓取），可选 `semester` 过滤。考试接口不带学期，由同步时的学期标识打上。
+
+### `GET /api/timetable/grades?semester=`
+
+列出当前用户的课程成绩（随课表同步抓取，天然跨学期，每条自带「开课学期」），可选 `semester` 过滤。
 
 ### `POST /api/timetable`
 
@@ -290,19 +305,60 @@ LLM 解析课表 HTML 落库，按用户限流 30/h、100/day。
 
 清空课表；带 `semester` 只清该学期，不带清全部。
 
-## Pet/Stats
+## Pet / 市场 / 钱包 / 打卡
+
+> 宠物已从「一对一默认宠物」改为「品种目录 + 用户拥有多只」。新用户默认无宠物，需先免费领养入门款。每只宠物独立等级/经验，`active=true` 为出战宠物，学习奖励只作用于它。
 
 ### `GET /api/pet`
 
-返回当前用户宠物。
+返回当前用户的**出战宠物**（未领养时为空）。
 
 ### `GET /api/pet/logs`
 
 返回最近经验日志。
 
+### `GET /api/pet/species`
+
+宠物市场目录（全部上架品种：slug、名称、稀有度、价格、是否入门款、sprite 路径）。
+
+### `GET /api/pet/owned`
+
+返回当前用户拥有的全部宠物。
+
+### `POST /api/pet/adopt`
+
+免费领养首只入门款（仅当尚无任何宠物且该品种 `starter=true`）。`{ "slug": "feixue" }`
+
+### `POST /api/pet/buy`
+
+金币购买宠物（不可重复购买同款；首只自动出战）。`{ "slug": "ember" }`
+
+### `POST /api/pet/active`
+
+切换出战宠物。`{ "petId": 12 }`
+
+### `GET /api/wallet`
+
+返回金币余额 + 最近 50 条流水。
+
+### `GET /api/checkin` · `POST /api/checkin`
+
+GET 查今日打卡状态（是否已打卡、连续天数、余额）；POST 执行每日打卡（幂等，发金币+给出战宠物经验，连续 streak 放大奖励）。
+
 ### `GET /api/stats/summary`
 
 返回今日任务、今日经验、今日学习分钟、完成率、近 7 天趋势和课程分布。
+
+## 共享自习室
+
+> 轻量在线状态：心跳轮询维持在线（90s 窗口），不走 WebSocket。一个用户同时只在一个房间。
+
+- `GET /api/rooms` — 房间广场（各房在线人数）
+- `POST /api/rooms` — 建房并进入，`{ "name": "图书馆三楼" }`（可空）
+- `GET /api/rooms/{id}` — 房间详情（在线成员 + 各自专注计时）
+- `POST /api/rooms/{id}/join` — 加入房间（自动退出其他房间）
+- `POST /api/rooms/{id}/heartbeat` — 心跳，`{ "focusing": true, "focusSeconds": 1500 }`
+- `DELETE /api/rooms/{id}/leave` — 退出（空房自动删除）
 
 ## Appeals/Admin
 
