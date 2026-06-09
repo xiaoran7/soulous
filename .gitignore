@@ -2,6 +2,8 @@
 backend/target/
 backend/data/
 backend/uploads/
+# 本地运行时误建在仓库根的 H2 数据库目录（非 backend/data/）
+/data/
 backend/*.log
 backend/*.err
 backend-run.log

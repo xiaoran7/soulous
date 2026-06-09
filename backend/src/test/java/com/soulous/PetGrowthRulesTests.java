@@ -8,6 +8,7 @@ import com.soulous.task.StudyTask;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 
 /**
  * 【宠物成长规则测试类：验证 PetGrowthRules 的核心逻辑，包括经验奖励计算、
@@ -40,7 +41,7 @@ class PetGrowthRulesTests {
         assertThat(result.currentLevel()).isEqualTo(2);
         assertThat(pet.level).isEqualTo(2);
         assertThat(pet.currentExp).isEqualTo(43);
-        assertThat(pet.nextLevelExp).isEqualTo(170);
+        assertThat(pet.nextLevelExp).isEqualTo(182); // 新曲线 expForNextLevel(2)=50+100+32
         assertThat(pet.growthStage).isEqualTo(PetStage.CHILD);
         assertThat(pet.status).isEqualTo(PetStatus.EXCITED);
         assertThat(pet.mood).isEqualTo(100);
@@ -138,6 +139,53 @@ class PetGrowthRulesTests {
     }
 
     /**
+     * 【测试场景：连续打卡倍率叠加在心情系数之上。mood=50（1.0x）、base=20、streak 倍率 1.5x，
+     * 实际获得 30 经验。】
+     */
+    @Test
+    void streakMultiplierBoostsExpOnTopOfMood() {
+        var pet = new Pet();
+        pet.mood = 50;
+        var task = new StudyTask();
+        task.baseExp = 20;
+
+        var result = PetGrowthRules.applyReward(pet, task, 20, 1.5);
+
+        assertThat(result.expAmount()).isEqualTo(30);
+        assertThat(pet.currentExp).isEqualTo(30);
+    }
+
+    /**
+     * 【测试场景：streakMultiplier 换算——连续 1 天为 1.0、3 天为 1.2、10 天封顶 1.5。】
+     */
+    @Test
+    void streakMultiplierScalesAndCaps() {
+        assertThat(PetGrowthRules.streakMultiplier(1)).isEqualTo(1.0);
+        assertThat(PetGrowthRules.streakMultiplier(3)).isCloseTo(1.2, within(1e-9));
+        assertThat(PetGrowthRules.streakMultiplier(10)).isEqualTo(1.5);
+    }
+
+    /**
+     * 【测试场景：到达满级（Lv30）后不再升级，溢出经验不累积，经验条封顶为满。】
+     */
+    @Test
+    void maxLevelStopsLevelingAndCapsExpBar() {
+        var pet = new Pet();
+        pet.level = PetGrowthRules.MAX_LEVEL;
+        pet.currentExp = 0;
+        pet.nextLevelExp = PetGrowthRules.expForNextLevel(PetGrowthRules.MAX_LEVEL);
+        pet.mood = 50;
+        var task = new StudyTask();
+        task.baseExp = 20;
+
+        var result = PetGrowthRules.applyReward(pet, task, 100_000);
+
+        assertThat(result.leveledUp()).isFalse();
+        assertThat(pet.level).isEqualTo(PetGrowthRules.MAX_LEVEL);
+        assertThat(pet.currentExp).isEqualTo(PetGrowthRules.expForNextLevel(PetGrowthRules.MAX_LEVEL));
+    }
+
+    /**
      * 【测试场景：当 AI 审核返回"需要更多反馈"时，宠物的心情和饱腹感应被降低，
      * 但经验值和等级进度不受影响（currentExp 和 nextLevelExp 保持不变），
      * 状态变为 SLEEPY（疲惫），且心情和饱腹感的下限为 0。】
@@ -154,7 +202,7 @@ class PetGrowthRulesTests {
         PetGrowthRules.applyNeedsMoreFeedback(pet);
 
         assertThat(pet.currentExp).isEqualTo(60);
-        assertThat(pet.nextLevelExp).isEqualTo(100);
+        assertThat(pet.nextLevelExp).isEqualTo(108); // 新曲线 expForNextLevel(1)=50+50+8
         assertThat(pet.mood).isEqualTo(1);
         assertThat(pet.satiety).isEqualTo(0);
         assertThat(pet.status).isEqualTo(PetStatus.SLEEPY);
@@ -174,6 +222,40 @@ class PetGrowthRulesTests {
 
         assertThat(pet.mood).isZero();
         assertThat(pet.satiety).isZero();
+        assertThat(pet.status).isEqualTo(PetStatus.SAD);
+    }
+
+    /**
+     * 【测试场景：断签衰减只降心情(-8)与饱腹感(-10)，绝不掉等级或扣经验，状态转 SLEEPY。】
+     */
+    @Test
+    void inactivityDecayLowersEnergyWithoutTouchingLevelOrExp() {
+        var pet = new Pet();
+        pet.level = 5;
+        pet.currentExp = 50;
+        pet.mood = 80;
+        pet.satiety = 80;
+
+        PetGrowthRules.applyInactivityDecay(pet);
+
+        assertThat(pet.mood).isEqualTo(72);
+        assertThat(pet.satiety).isEqualTo(70);
+        assertThat(pet.level).isEqualTo(5);
+        assertThat(pet.currentExp).isEqualTo(50);
+        assertThat(pet.status).isEqualTo(PetStatus.SLEEPY);
+    }
+
+    /**
+     * 【测试场景：断签衰减后若心情或饱腹感过低，状态转 SAD（更严重的视觉反馈）。】
+     */
+    @Test
+    void inactivityDecayMarksSadWhenEnergyLow() {
+        var pet = new Pet();
+        pet.mood = 35;   // -8 -> 27 (<=30)
+        pet.satiety = 25; // -10 -> 15 (<=20)
+
+        PetGrowthRules.applyInactivityDecay(pet);
+
         assertThat(pet.status).isEqualTo(PetStatus.SAD);
     }
 

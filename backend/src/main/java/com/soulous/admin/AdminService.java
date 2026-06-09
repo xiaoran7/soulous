@@ -43,11 +43,13 @@ public class AdminService {
     private final AdminAuditLogRepository audit;
     private final RetrievalService retrieval;
     private final NotificationService notifications;
+    /** 【金币服务，人工/申诉复核通过时发放金币奖励】 */
+    private final com.soulous.wallet.CoinService coins;
 
     AdminService(SubmissionRepository submissions, AppealRepository appeals, AiReviewRepository reviews,
                  TaskRepository tasks, PetService pets, PetRepository petRepo,
                  AdminAuditLogRepository audit, RetrievalService retrieval,
-                 NotificationService notifications) {
+                 NotificationService notifications, com.soulous.wallet.CoinService coins) {
         this.submissions = submissions;
         this.appeals = appeals;
         this.reviews = reviews;
@@ -57,6 +59,7 @@ public class AdminService {
         this.audit = audit;
         this.retrieval = retrieval;
         this.notifications = notifications;
+        this.coins = coins;
     }
 
     /**
@@ -123,7 +126,7 @@ public class AdminService {
             var item = new LinkedHashMap<String, Object>();
             item.put("submission", s);
             Integer level = s.user == null ? null : levelByUser.computeIfAbsent(s.user.id,
-                    uid -> petRepo.findByUser(s.user).map(p -> p.level).orElse(null));
+                    uid -> petRepo.findByUserAndActiveTrue(s.user).map(p -> p.level).orElse(null));
             item.put("petLevel", level);
             return (Map<String, Object>) item;
         }).toList();
@@ -144,7 +147,7 @@ public class AdminService {
         body.put("user", submission.user);
         body.put("review", reviews.findBySubmission(submission).orElse(null));
         body.put("petLevel", submission.user == null ? null
-                : petRepo.findByUser(submission.user).map(p -> p.level).orElse(null));
+                : petRepo.findByUserAndActiveTrue(submission.user).map(p -> p.level).orElse(null));
         return body;
     }
 
@@ -173,6 +176,7 @@ public class AdminService {
         submission.task.status = TaskStatus.COMPLETED;
         submission.task.completedAt = LocalDateTime.now();
         pets.addExp(submission.user, submission.task, submission, exp, "人工复核通过：" + safe(request.comment()));
+        coins.grant(submission.user, Math.max(5, (int) Math.round(exp * 0.5)), "TASK", "SUBMISSION", submission.id, "人工复核通过：" + safe(submission.task.title));
         var saved = submissions.save(submission);
         var savedTask = tasks.save(submission.task);
         retrieval.indexCompletedTask(savedTask);
@@ -250,7 +254,7 @@ public class AdminService {
             item.put("task", a.submission == null ? null : a.submission.task);
             item.put("user", a.user);
             Integer level = a.user == null ? null : levelByUser.computeIfAbsent(a.user.id,
-                    uid -> petRepo.findByUser(a.user).map(p -> p.level).orElse(null));
+                    uid -> petRepo.findByUserAndActiveTrue(a.user).map(p -> p.level).orElse(null));
             item.put("petLevel", level);
             item.put("aiReview", a.submission == null ? null
                     : reviews.findBySubmission(a.submission).orElse(null));
@@ -292,6 +296,7 @@ public class AdminService {
                 task.status = TaskStatus.COMPLETED;
                 task.completedAt = LocalDateTime.now();
                 pets.addExp(submission.user, task, submission, awardedExp, "申诉通过：" + safeComment);
+                coins.grant(submission.user, Math.max(5, (int) Math.round(awardedExp * 0.5)), "TASK", "SUBMISSION", submission.id, "申诉通过：" + safe(task.title));
                 retrieval.indexCompletedTask(task);
             } else if (status == AppealStatus.REJECTED) {
                 submission.status = SubmissionStatus.MANUAL_REJECTED;

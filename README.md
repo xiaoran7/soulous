@@ -18,20 +18,19 @@ Turn fragmented learning into a quantifiable, traceable, and positive feedback c
 
 ## Core Capabilities
 
-- **Account & Security**: Registration, login, SVG graphical CAPTCHA, password strength policies, JWT double tokens (1h access + 30d refresh, HttpOnly cookie, SHA-256 database storage, automatic rotation, multi-device logout on replay detection), and `audit_log` full-audit tracking.
+- **Account & Security**: Registration via **email verification code** (required email; dev fallback logs the code when SMTP unset), login with SVG graphical CAPTCHA, a marketing **landing page** for logged-out visitors, password strength policies, JWT double tokens (1h access + 30d refresh, HttpOnly cookie, SHA-256 database storage, automatic rotation, multi-device logout on replay detection), and `audit_log` full-audit tracking.
 - **AI Decompose Chat**: Gemini-style interface (category → conversation → message with collapsible sidebar, conversation move/categorization), stream replies, file uploads (md/pdf/txt text extraction), and one-click task conversion from AI-generated draft plans.
-- **Study Room / Verification**: stopwatch focus timer (theme backgrounds + ambient sound/music, full-screen immersive mode, custom scene/music uploads), credential submission (support for text / code snippet / image proofs, automatic compression to 1920px JPEG 85% with 5MB limit), and authorized downloads under `/uploads/**`.
-- **Timetable**: Import course timetables from university academic systems (SheetJS parsing of `.xls` in-browser → LLM structured format, or copy-pasting HTML), single/double week displays, manual entries, and semester start week alignment.
+- **Study Room / Verification**: **solo** stopwatch focus timer (theme backgrounds + ambient sound/music, full-screen immersive mode, custom scene/music uploads) and **shared** study rooms (lightweight presence via heartbeat polling — see who's online and their focus time, no WebSocket); credential submission (text / code snippet / image proofs, auto-compressed to 1920px JPEG 85% with 5MB limit), authorized downloads under `/uploads/**`.
+- **Timetable**: Sync course timetables directly from the university academic system (Playwright crawler with student credentials), single/double week displays, manual entries, and semester start week alignment. The same one-click sync also pulls **exam schedules** and **course grades** (with per-semester GPA/credit summaries), all viewable in the timetable page and switchable by semester.
 - **AI Hub**:
   - AI Decompose Chat (continuous messaging + `PLAN_JSON` to task conversion).
-  - Credential Verification Engine (multi-dimensional assessment: relevance, completeness, and quality score, with automated experience points reward). Reviews are delegated to the memory-aware **Companion Pet** (external Anima agent) first, with automatic fallback to the local LLM/rule engine — see `docs/ai-review-rules.md`.
+  - Credential Verification Engine (multi-dimensional assessment: relevance, completeness, and quality score, with automated experience points reward). Reviews run on the local LLM (`AiService.review`) with a deterministic rule-based scorer as fallback — see `docs/ai-review-rules.md`.
   - Daily Review (dynamic summaries based on user activity logs).
   - RAG Long-term Memory + Time-decay Retrieval:
     $$\text{Score} = \text{CosineSimilarity} \times 0.5^{\frac{\text{AgeDays}}{\text{HalfLife}}}$$
     (Default half-life of 90 days). Indexes cover `GOAL_MEMORY`, `SESSION_SUMMARY`, `COMPLETED_TASK`, and `DAILY_REVIEW`. The memory is retrieved and injected into system prompts during AI Reviews (`AiService.review`), task follow-ups (`generateQuestion`), goal decomposition (`decompose`), and daily reviews (`DailyReviewService`), giving the AI a personalized "memory" of the user.
   - Context-aware Content Moderation (bidirectional input/output wind control: PASS/FLAG/BLOCK verdicts, violating records saved to `moderation_log`).
-- **Companion Pet**: A memory-aware chat surface where the pet (Feixue) remembers you across sessions and reviews your submitted work in-character. Its brain runs in a standalone **Anima** agent service (Python/FastAPI: self-written orchestration loop + layered memory + persona), called over HTTP from the `companion` package; degrades gracefully when unavailable.
-- **Pet & Analytics**: Experience level-up, pet mood reflecting user activity, customizable avatars, pet spritesheet animations ([`frontend/public/pets/`](frontend/public/pets/)). Interactive dashboard for daily metrics, 7-day heatmaps, category distributions, and study trends.
+- **Pet, Economy & Analytics**: **Pet market** (species catalog; new users adopt a free starter, then buy more with coins and switch the active pet — each pet levels independently). Experience curve to max Lv30 with level-gated actions, mood + check-in-streak multipliers, gentle inactivity decay. **Coins** earned from tasks/focus/check-ins (`coin_ledger`). **Daily check-in** with streak rewards, **daily email reminders** for missed check-ins. Customizable avatars, spritesheet animations ([`frontend/public/pets/`](frontend/public/pets/)). Interactive dashboard for daily metrics, 7-day trends, category distributions; "My" page shows coins / streak / pet collection / coin ledger.
 - **Admin Dashboard**: Site-wide submissions queue, manual override of AI audit results (approve / reject / request additions), appeal handling, admin user provisioning, and role assignment. All operations logged in `admin_audit_log`.
 - **Notification Center**: AI review events, appeal statuses, and other alerts logged to `notification`. Real-time delivery via SSE (`GET /api/notifications/stream`) on the frontend, falling back to 60s polling. Optional email notification sink (`soulous.notification.email.enabled`).
 
@@ -192,7 +191,6 @@ location ~ ^/api/(notifications/stream|chat/conversations/[0-9]+/messages/stream
 To support advanced learning scenarios and maintain rigorous engineering quality, we are actively implementing the following milestones:
 
 ### 1. AI Agent Ecosystem
-- **Autonomous Digital Pet (Agent Companion)**: Refactoring the current virtual pet from a static view into an active agent running on an autonomous ReAct loop. The pet agent will monitor study schedules, reflect emotional states, and proactively send reminders or advice.
 - **Multi-Agent Collaboration**: Establishing specialized agents (e.g., a "Planning Coach Agent" and a "Reviewer Agent") to collaborate on task management and course validation.
 
 ### 2. Evaluation & Testing Harness

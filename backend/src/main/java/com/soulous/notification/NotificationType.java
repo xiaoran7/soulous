@@ -15,6 +15,8 @@ public final class NotificationType {
     public static final String APPEAL_REVIEWED = "APPEAL_REVIEWED";
     /** 内容被审核系统拦截。refType=SUBMISSION, refId=submissionId. */
     public static final String MODERATION_BLOCKED = "MODERATION_BLOCKED";
+    /** 每日提醒（未打卡）。refType=CHECKIN. 由 ReminderService 定时推送，邮件由 EmailNotificationSink 投递。 */
+    public static final String DAILY_REMINDER = "DAILY_REMINDER";
 
     /** 【私有构造器，防止实例化——此类仅作为常量容器】 */
     private NotificationType() {}

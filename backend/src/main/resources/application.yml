@@ -68,6 +68,20 @@ spring:
     #   设为 5 分钟避免 Spring 在流式传输中途抛出 AsyncRequestTimeoutException】
     async:
       request-timeout: ${SOULOUS_MVC_ASYNC_TIMEOUT_MS:300000}
+  mail:
+    # 【中文：SMTP 发信配置。默认 Gmail（smtp.gmail.com:587 STARTTLS）。
+    #   host 留空时不发真实邮件 —— EmailCodeService 回退为把验证码打到后端日志（开发期）。
+    #   生产启用：设 SOULOUS_MAIL_HOST/USERNAME/PASSWORD（Gmail 需用「应用专用密码」，非账号密码）。】
+    host: ${SOULOUS_MAIL_HOST:}
+    port: ${SOULOUS_MAIL_PORT:587}
+    username: ${SOULOUS_MAIL_USERNAME:}
+    password: ${SOULOUS_MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
 
 # 【中文：服务器配置】
 server:
@@ -106,16 +120,36 @@ soulous:
     enabled: ${SOULOUS_CAPTCHA_ENABLED:true}
     # 【中文：验证码有效期（秒），过期后需重新获取】
     ttl-seconds: 120
-  # —— 陪伴宠物（大脑跑在独立的 Anima agent 服务，Soulous 通过 HTTP 调；与 /api/chat 拆计划互不相干）——
-  companion:
-    # 【总开关。关闭后 /api/companion/chat 返回兜底文案，不调用 Anima】
-    enabled: ${SOULOUS_COMPANION_ENABLED:true}
-    # 【Anima 服务基础地址。本地默认 8090；生产走 VPS 内网地址】
-    base-url: ${ANIMA_BASE_URL:http://localhost:8090}
-    # 【人格 ID，对应 Anima personas/*.yaml 里的 id】
-    persona-id: ${SOULOUS_COMPANION_PERSONA:soulous_pet}
-    # 【调用 Anima 的超时（秒）】
-    timeout-seconds: ${SOULOUS_COMPANION_TIMEOUT:120}
+  auth:
+    email-code:
+      # 注册邮箱验证码开关。关闭只用于自动化测试（跳过校验）；生产保持 true
+      # 【中文：注册邮箱验证码开关。关闭后注册时跳过邮箱验证码校验（仅自动化测试用），生产保持开启】
+      enabled: ${SOULOUS_EMAIL_CODE_ENABLED:true}
+      # 【中文：验证码有效期（秒），默认 600（10 分钟）】
+      ttl-seconds: ${SOULOUS_EMAIL_CODE_TTL_SECONDS:600}
+      # 【中文：同一邮箱两次发码的最小间隔（秒），默认 60，防刷】
+      resend-cooldown-seconds: ${SOULOUS_EMAIL_CODE_RESEND_COOLDOWN:60}
+  pet:
+    decay:
+      # 【中文：断签衰减总开关。每日定时对久未打卡用户的宠物降心情/饱腹感（不掉等级），督促回归】
+      enabled: ${SOULOUS_PET_DECAY_ENABLED:true}
+      # 【中文：判定断签的不活跃天数阈值，达到即衰减，默认 2 天】
+      inactive-days: ${SOULOUS_PET_DECAY_INACTIVE_DAYS:2}
+      # 【中文：断签衰减定时任务 cron，默认每天凌晨 4 点】
+      cron: ${SOULOUS_PET_DECAY_CRON:0 0 4 * * *}
+  reminder:
+    # 【中文：每日打卡提醒总开关。傍晚扫描未打卡用户推送通知；真正发邮件还需开启下方 notification.email 并配好 SMTP】
+    enabled: ${SOULOUS_REMINDER_ENABLED:true}
+    # 【中文：提醒定时任务 cron，默认每天 20:00】
+    cron: ${SOULOUS_REMINDER_CRON:0 0 20 * * *}
+  notification:
+    email:
+      # 【中文：邮件通知 sink 开关。开启且配好 spring.mail.* 后，每日提醒/AI 审核等通知会真正发邮件】
+      enabled: ${SOULOUS_NOTIFICATION_EMAIL_ENABLED:false}
+      # 【中文：发件人地址】
+      from: ${SOULOUS_NOTIFICATION_EMAIL_FROM:no-reply@soulous.local}
+      # 【中文：邮件主题前缀】
+      subject-prefix: ${SOULOUS_NOTIFICATION_EMAIL_SUBJECT_PREFIX:[Soulous] }
   llm:
     # —— 单 provider 模式（向后兼容）——
     # provider: mock | anthropic | openai (openai 兼容 DeepSeek/Moonshot/通义/Ollama 等)
@@ -285,6 +319,11 @@ management:
         include: health,info,prometheus,metrics
       # 【中文：Actuator 端点基础路径】
       base-path: /actuator
+  health:
+    # 【中文：关闭 mail 健康探测 —— 配置 spring.mail 后 Spring 会创建 JavaMailSender 并默认探测 SMTP 连通性，
+    #   会让 /actuator/health 因 SMTP 不可达而变 DOWN(503)。邮件是旁路能力，不应阻断整体健康判定。】
+    mail:
+      enabled: false
   endpoint:
     health:
       # 【中文：健康检查详情显示策略。never = 从不显示详情；when-authorized = 仅授权用户可见；always = 始终显示】

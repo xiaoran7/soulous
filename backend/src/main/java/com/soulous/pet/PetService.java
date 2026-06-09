@@ -1,6 +1,7 @@
 package com.soulous.pet;
 
 import com.soulous.auth.UserAccount;
+import com.soulous.common.exception.BadRequestException;
 import com.soulous.common.exception.NotFoundException;
 import com.soulous.task.StudyTask;
 import com.soulous.task.TaskSubmission;
@@ -21,21 +22,37 @@ public class PetService {
     private final PetRepository pets;
     /** 【经验日志数据仓库，记录所有经验值变动历史】 */
     private final ExpLogRepository expLogs;
+    /** 【宠物品种目录仓库（市场）】 */
+    private final PetSpeciesRepository species;
+    /** 【金币服务，购买宠物时扣费】 */
+    private final com.soulous.wallet.CoinService coins;
 
-    PetService(PetRepository pets, ExpLogRepository expLogs) {
+    PetService(PetRepository pets, ExpLogRepository expLogs, PetSpeciesRepository species,
+               com.soulous.wallet.CoinService coins) {
         this.pets = pets;
         this.expLogs = expLogs;
+        this.species = species;
+        this.coins = coins;
     }
 
     /**
-     * 【获取当前用户的宠物，如果不存在则抛出 NotFoundException。】
+     * 【获取当前用户的出战宠物，不存在则抛出 NotFoundException。
+     *  用于喂食/重命名/设头像等「必须有宠物」的操作。】
      *
      * @param user 【当前登录用户】
-     * @return 【宠物实体】
-     * @throws NotFoundException 【宠物不存在时抛出】
+     * @return 【出战宠物实体】
+     * @throws NotFoundException 【没有出战宠物时抛出】
      */
     public Pet get(UserAccount user) {
-        return pets.findByUser(user).orElseThrow(() -> new NotFoundException("Pet not found"));
+        return pets.findByUserAndActiveTrue(user).orElseThrow(() -> new NotFoundException("Pet not found"));
+    }
+
+    /**
+     * 【获取出战宠物或 null：用于奖励路径与对外展示。
+     *  新用户尚未领养时返回 null，奖励据此安全跳过（不抛错）。】
+     */
+    public Pet getActiveOrNull(UserAccount user) {
+        return pets.findByUserAndActiveTrue(user).orElse(null);
     }
 
     /**
@@ -51,7 +68,8 @@ public class PetService {
      */
     @Transactional
     public Pet addExp(UserAccount user, StudyTask task, TaskSubmission submission, int amount, String reason) {
-        var pet = get(user);
+        var pet = getActiveOrNull(user);
+        if (pet == null) return null;
         var result = PetGrowthRules.applyReward(pet, task, amount);
         pet.updatedAt = LocalDateTime.now();
         pets.save(pet);
@@ -70,11 +88,32 @@ public class PetService {
      */
     @Transactional
     public Pet addFocusExp(UserAccount user, int amount, String reason) {
-        var pet = get(user);
+        var pet = getActiveOrNull(user);
+        if (pet == null) return null;
         var result = PetGrowthRules.applyFocusReward(pet, amount);
         pet.updatedAt = LocalDateTime.now();
         pets.save(pet);
         saveLog(user, null, null, result.expAmount(), "FOCUS_EXP", reason);
+        return pet;
+    }
+
+    /**
+     * 【每日打卡奖励：给出战宠物发放经验，叠加连续打卡 streak 倍率，记录 CHECKIN_EXP 日志。】
+     *
+     * @param user             【当前登录用户】
+     * @param amount           【基础经验值】
+     * @param streakMultiplier 【连续打卡倍率，见 PetGrowthRules.streakMultiplier】
+     * @param reason           【经验变动原因说明】
+     * @return 【更新后的宠物实体】
+     */
+    @Transactional
+    public Pet addCheckinExp(UserAccount user, int amount, double streakMultiplier, String reason) {
+        var pet = getActiveOrNull(user);
+        if (pet == null) return null;
+        var result = PetGrowthRules.applyFocusReward(pet, amount, streakMultiplier);
+        pet.updatedAt = LocalDateTime.now();
+        pets.save(pet);
+        saveLog(user, null, null, result.expAmount(), "CHECKIN_EXP", reason);
         return pet;
     }
 
@@ -88,7 +127,8 @@ public class PetService {
      */
     @Transactional
     public Pet markTaskStarted(UserAccount user, StudyTask task) {
-        var pet = get(user);
+        var pet = getActiveOrNull(user);
+        if (pet == null) return null;
         PetGrowthRules.applyTaskStarted(pet);
         pet.updatedAt = LocalDateTime.now();
         pets.save(pet);
@@ -107,7 +147,8 @@ public class PetService {
      */
     @Transactional
     public Pet markSubmittedForReview(UserAccount user, StudyTask task, TaskSubmission submission) {
-        var pet = get(user);
+        var pet = getActiveOrNull(user);
+        if (pet == null) return null;
         PetGrowthRules.applySubmittedForReview(pet);
         pet.updatedAt = LocalDateTime.now();
         pets.save(pet);
@@ -127,7 +168,8 @@ public class PetService {
      */
     @Transactional
     public Pet markNeedsMore(UserAccount user, StudyTask task, TaskSubmission submission, String reason) {
-        var pet = get(user);
+        var pet = getActiveOrNull(user);
+        if (pet == null) return null;
         PetGrowthRules.applyNeedsMoreFeedback(pet);
         pet.updatedAt = LocalDateTime.now();
         pets.save(pet);
@@ -147,7 +189,8 @@ public class PetService {
      */
     @Transactional
     public Pet markRejected(UserAccount user, StudyTask task, TaskSubmission submission, String reason) {
-        var pet = get(user);
+        var pet = getActiveOrNull(user);
+        if (pet == null) return null;
         PetGrowthRules.applyRejectedFeedback(pet);
         pet.updatedAt = LocalDateTime.now();
         pets.save(pet);
@@ -164,7 +207,8 @@ public class PetService {
      */
     @Transactional
     public Pet rename(UserAccount user, String newName) {
-        var pet = get(user);
+        var pet = getActiveOrNull(user);
+        if (pet == null) return null;
         var trimmed = newName == null ? "" : newName.trim();
         if (trimmed.isBlank()) {
             pet.name = user.username;
@@ -184,7 +228,8 @@ public class PetService {
      */
     @Transactional
     public Pet setAvatar(UserAccount user, String avatarUrl) {
-        var pet = get(user);
+        var pet = getActiveOrNull(user);
+        if (pet == null) return null;
         if (avatarUrl != null && avatarUrl.isBlank()) avatarUrl = null;
         pet.avatarUrl = avatarUrl;
         pet.updatedAt = LocalDateTime.now();
@@ -200,7 +245,8 @@ public class PetService {
      */
     @Transactional
     public Pet feed(UserAccount user) {
-        var pet = get(user);
+        var pet = getActiveOrNull(user);
+        if (pet == null) return null;
         pet.satiety = Math.min(100, (pet.satiety == null ? 80 : pet.satiety) + 20);
         pet.mood = Math.min(100, (pet.mood == null ? 80 : pet.mood) + 5);
         pet.updatedAt = LocalDateTime.now();
@@ -247,5 +293,122 @@ public class PetService {
      */
     private String safe(String value) {
         return value == null ? "" : value;
+    }
+
+    // ===================== 宠物市场 / 拥有关系 =====================
+
+    /** 【宠物市场目录：全部上架品种（按展示顺序）】 */
+    @Transactional(readOnly = true)
+    public List<PetSpecies> listSpecies() {
+        return species.findAllByOrderBySortOrderAsc();
+    }
+
+    /** 【当前用户拥有的全部宠物（按获得时间）】 */
+    @Transactional(readOnly = true)
+    public List<Pet> owned(UserAccount user) {
+        return pets.findByUserOrderByAcquiredAtAsc(user);
+    }
+
+    /**
+     * 【免费领养首只宠物：仅当用户尚无任何宠物、且所选品种是入门款时可领养，自动设为出战。】
+     *
+     * @throws BadRequestException 已有宠物 / 该品种非入门款
+     * @throws NotFoundException   品种不存在
+     */
+    @Transactional
+    public Pet adoptStarter(UserAccount user, String slug) {
+        if (pets.existsByUser(user)) throw new BadRequestException("你已经有宠物啦，去市场购买更多吧");
+        var sp = species.findBySlug(slug).orElseThrow(() -> new NotFoundException("宠物品种不存在"));
+        if (!sp.starter) throw new BadRequestException("该品种不是入门款，不能免费领养");
+        return createPet(user, sp, true);
+    }
+
+    /**
+     * 【购买宠物：扣金币（价格 0 则免费），不可重复购买同款；若是第一只则自动出战。】
+     *
+     * @throws BadRequestException 已拥有该品种 / 金币不足
+     * @throws NotFoundException   品种不存在
+     */
+    @Transactional
+    public Pet buy(UserAccount user, String slug) {
+        var sp = species.findBySlug(slug).orElseThrow(() -> new NotFoundException("宠物品种不存在"));
+        if (pets.existsByUserAndSpecies(user, sp)) throw new BadRequestException("你已经拥有这只宠物啦");
+        boolean first = !pets.existsByUser(user);
+        if (sp.price > 0) {
+            coins.spend(user, sp.price, "PURCHASE", "PET_SPECIES", sp.id, "购买宠物：" + sp.name);
+        }
+        return createPet(user, sp, first);
+    }
+
+    /** 【切换出战宠物：把目标设为 active，原出战取消】 */
+    @Transactional
+    public Pet setActive(UserAccount user, Long petId) {
+        var target = pets.findByIdAndUser(petId, user).orElseThrow(() -> new NotFoundException("宠物不存在"));
+        deactivateCurrent(user, target.id);
+        target.active = true;
+        target.updatedAt = LocalDateTime.now();
+        return pets.save(target);
+    }
+
+    /** 【新建一只宠物实例；active=true 时先取消原出战宠物】 */
+    private Pet createPet(UserAccount user, PetSpecies sp, boolean active) {
+        if (active) deactivateCurrent(user, null);
+        var pet = new Pet();
+        pet.user = user;
+        pet.species = sp;
+        pet.name = sp.name;
+        pet.avatarUrl = null;
+        pet.active = active;
+        pet.acquiredAt = LocalDateTime.now();
+        pet.createdAt = LocalDateTime.now();
+        pet.updatedAt = LocalDateTime.now();
+        return pets.save(pet);
+    }
+
+    /** 【取消当前出战宠物（exceptId 为新出战者时跳过自身）】 */
+    private void deactivateCurrent(UserAccount user, Long exceptId) {
+        pets.findByUserAndActiveTrue(user).ifPresent(cur -> {
+            if (exceptId == null || !cur.id.equals(exceptId)) {
+                cur.active = false;
+                pets.save(cur);
+            }
+        });
+    }
+
+    /**
+     * 【宠物 JSON 视图：只暴露前端需要的字段，避免序列化整个 user 实体；附带品种信息。
+     *  pet 为 null 时返回 null（前端按「未领养」处理）。】
+     */
+    public static java.util.Map<String, Object> view(Pet pet) {
+        if (pet == null) return null;
+        var m = new java.util.LinkedHashMap<String, Object>();
+        m.put("id", pet.id);
+        m.put("name", pet.name);
+        m.put("avatarUrl", pet.avatarUrl == null ? "" : pet.avatarUrl);
+        m.put("level", pet.level);
+        m.put("currentExp", pet.currentExp);
+        m.put("nextLevelExp", pet.nextLevelExp);
+        m.put("mood", pet.mood);
+        m.put("satiety", pet.satiety);
+        m.put("growthStage", pet.growthStage);
+        m.put("status", pet.status);
+        m.put("active", pet.active);
+        m.put("species", speciesView(pet.species));
+        return m;
+    }
+
+    /** 【品种 JSON 视图】 */
+    public static java.util.Map<String, Object> speciesView(PetSpecies sp) {
+        if (sp == null) return null;
+        var m = new java.util.LinkedHashMap<String, Object>();
+        m.put("id", sp.id);
+        m.put("slug", sp.slug);
+        m.put("name", sp.name);
+        m.put("rarity", sp.rarity);
+        m.put("price", sp.price);
+        m.put("starter", sp.starter);
+        m.put("spritePath", sp.spritePath);
+        m.put("description", sp.description);
+        return m;
     }
 }

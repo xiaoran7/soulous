@@ -5,6 +5,8 @@ import com.soulous.auth.UserAccount;
 import com.soulous.auth.UserService;
 import com.soulous.common.exception.BadRequestException;
 import com.soulous.timetable.CourseEntryRepository;
+import com.soulous.timetable.ExamEntryRepository;
+import com.soulous.timetable.GradeEntryRepository;
 import com.soulous.timetable.TimetableDtos.SyncRequest;
 import com.soulous.timetable.TimetableService;
 import org.junit.jupiter.api.AfterEach;
@@ -30,6 +32,8 @@ class TimetableServiceTests {
 
     @Autowired UserService users;
     @Autowired CourseEntryRepository repo;
+    @Autowired ExamEntryRepository examRepo;
+    @Autowired GradeEntryRepository gradeRepo;
 
     private Path mockScript;
 
@@ -68,11 +72,31 @@ class TimetableServiceTests {
         }
         """.formatted(SEMESTER_INFO);
 
+    // 课表 + 考试安排 + 成绩（跨学期）一体的 --mode all 输出样例
+    private static final String ALL_JSON = """
+        {
+          "学期": "2025-2026-2",
+          "课程": [
+            {"课程名": "高等数学", "教师": "张老师", "地点": "A101", "星期序号": 1, "节次": "1-2", "上课时间": "08:00~09:40", "周次": "1-16"}
+          ],
+          "考试安排": [
+            {"课程名称": "高等数学", "课程编号": "MATH001", "授课教师": "张老师", "考试时间": "2026-06-20 09:00~11:00", "考场": "A101", "考试校区": "云塘校区", "座位号": "12", "考试场次": "第1场", "准考证号": "Z123", "备注": ""},
+            {"课程名称": "大学英语", "课程编号": "ENG001", "授课教师": "李老师", "考试时间": "2026-06-18 14:00~16:00", "考场": "B202", "考试校区": "云塘校区", "座位号": "5", "考试场次": "第2场", "准考证号": "Z124", "备注": "闭卷"}
+          ],
+          "成绩": [
+            {"开课学期": "2025-2026-1", "课程编号": "PE001", "课程名称": "体育", "开课单位": "体育学院", "成绩": "良好", "学分": "1", "绩点": "3.5", "考试性质": "初修", "课程属性": "必修"},
+            {"开课学期": "2025-2026-2", "课程编号": "MATH001", "课程名称": "高等数学", "开课单位": "理学院", "成绩": "88", "学分": "4", "绩点": "3.8", "考试性质": "初修", "课程属性": "必修"}
+          ],
+          %s
+        }
+        """.formatted(SEMESTER_INFO);
+
     static class TestTimetableService extends TimetableService {
         private final Path scriptPath;
 
-        public TestTimetableService(CourseEntryRepository repo, Path scriptPath) {
-            super(repo, null);
+        public TestTimetableService(CourseEntryRepository repo, ExamEntryRepository examRepo,
+                                    GradeEntryRepository gradeRepo, Path scriptPath) {
+            super(repo, examRepo, gradeRepo, null);
             this.scriptPath = scriptPath;
         }
 
@@ -133,7 +157,7 @@ class TimetableServiceTests {
     @Test
     void syncParsesAndPersists() throws IOException {
         mockScript = createMockPythonScript(COURSES_JSON);
-        var svc = new TestTimetableService(repo, mockScript);
+        var svc = new TestTimetableService(repo, examRepo, gradeRepo, mockScript);
         var user = newUser();
 
         var result = svc.syncFromCrawler(user, new SyncRequest("test_user", "test_pass"));
@@ -153,9 +177,36 @@ class TimetableServiceTests {
     }
 
     @Test
+    void syncAlsoPersistsExamsAndGrades() throws IOException {
+        mockScript = createMockPythonScript(ALL_JSON);
+        var svc = new TestTimetableService(repo, examRepo, gradeRepo, mockScript);
+        var user = newUser();
+
+        var result = svc.syncFromCrawler(user, new SyncRequest("test_user", "test_pass"));
+
+        assertThat(result.count()).isEqualTo(1);
+        assertThat(result.examCount()).isEqualTo(2);
+        assertThat(result.gradeCount()).isEqualTo(2);
+
+        // 考试安排：按学期过滤 + 时间升序（6/18 在 6/20 前）
+        var exams = svc.listExams(user, "2025-2026-2");
+        assertThat(exams).hasSize(2);
+        assertThat(exams.get(0).courseName()).isEqualTo("大学英语");
+        assertThat(exams.get(0).campus()).isEqualTo("云塘校区");
+        assertThat(exams.get(1).courseName()).isEqualTo("高等数学");
+
+        // 成绩：跨学期返回全部；按学期过滤只取该学期
+        assertThat(svc.listGrades(user, null)).hasSize(2);
+        var sem1 = svc.listGrades(user, "2025-2026-1");
+        assertThat(sem1).hasSize(1);
+        assertThat(sem1.get(0).courseName()).isEqualTo("体育");
+        assertThat(sem1.get(0).gpa()).isEqualTo("3.5");
+    }
+
+    @Test
     void syncHandlesPasswordError() throws IOException {
         mockScript = createErrorPythonScript();
-        var svc = new TestTimetableService(repo, mockScript);
+        var svc = new TestTimetableService(repo, examRepo, gradeRepo, mockScript);
         var user = newUser();
 
         assertThatThrownBy(() -> svc.syncFromCrawler(user, new SyncRequest("test_user", "wrong_pass")))
@@ -166,7 +217,7 @@ class TimetableServiceTests {
     @Test
     void syncDedupesTooltipDuplicatesButKeepsDistinctSameName() throws IOException {
         mockScript = createMockPythonScript(COURSES_JSON_DUP);
-        var svc = new TestTimetableService(repo, mockScript);
+        var svc = new TestTimetableService(repo, examRepo, gradeRepo, mockScript);
         var user = newUser();
 
         var result = svc.syncFromCrawler(user, new SyncRequest("test_user", "test_pass"));

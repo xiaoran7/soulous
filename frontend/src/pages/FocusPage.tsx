@@ -23,6 +23,7 @@ import {
 import { useStudyRoomPrefs } from '../studyroom/useStudyRoomPrefs';
 import { useAudioMixer } from '../studyroom/useAudioMixer';
 import { addCustom, deleteCustom, listCustom, type CustomItem } from '../studyroom/customStore';
+import { SharedRooms } from '../studyroom/SharedRooms';
 
 /** 【格式化为正计时】秒 → H:MM:SS 或 MM:SS（始终非负，正计时不会出现负数） */
 function fmt(seconds: number): string {
@@ -281,9 +282,10 @@ function ImmersiveRoom({ session, scene, prefs, audio, audioControls, onUpdate, 
 
 /**
  * 【自习室页面主组件】
+ * @param userId 当前登录用户 id，用于按用户隔离自定义素材（IndexedDB 分库）
  * @param onImmersiveChange 通知外壳进入/退出全屏沉浸态（隐藏侧边栏与顶栏）
  */
-export function FocusPage({ onImmersiveChange }: { onImmersiveChange?: (v: boolean) => void } = {}) {
+export function FocusPage({ userId, onImmersiveChange }: { userId?: string | number | null; onImmersiveChange?: (v: boolean) => void } = {}) {
   const { prefs, update } = useStudyRoomPrefs();
   const [active, setActive] = useState<FocusSession | null>(() => focusCache?.active ?? null);
   const [tasks, setTasks] = useState<StudyTask[]>(() => focusCache?.tasks ?? []);
@@ -296,6 +298,8 @@ export function FocusPage({ onImmersiveChange }: { onImmersiveChange?: (v: boole
   const [linkTaskId, setLinkTaskId] = useState<number | ''>('');
   const [starting, setStarting] = useState(false);
   const [startErr, setStartErr] = useState('');
+  /** 【自习室模式：独享(默认沉浸专注) / 共享(和别人一起在线自习)】 */
+  const [roomMode, setRoomMode] = useState<'solo' | 'shared'>('solo');
 
   // 自定义素材（IndexedDB）
   const [customItems, setCustomItems] = useState<CustomItem[]>([]);
@@ -303,8 +307,8 @@ export function FocusPage({ onImmersiveChange }: { onImmersiveChange?: (v: boole
   const [addingScene, setAddingScene] = useState(false);
 
   const reloadCustom = useCallback(async () => {
-    try { setCustomItems(await listCustom()); } catch { /* IndexedDB 不可用则忽略 */ }
-  }, []);
+    try { setCustomItems(await listCustom(userId)); } catch { /* IndexedDB 不可用则忽略 */ }
+  }, [userId]);
   useEffect(() => { void reloadCustom(); }, [reloadCustom]);
 
   // 合并内置 + 自定义；为自定义 blob 生成 object URL
@@ -412,7 +416,7 @@ export function FocusPage({ onImmersiveChange }: { onImmersiveChange?: (v: boole
   /** 【上传自定义场景】name + 图片文件 + 环境音类型 → 存 IndexedDB */
   async function addSceneFile(name: string, file: File, ambient: AmbientKind) {
     const id = `custom-scene-${Date.now()}`;
-    await addCustom({ id, kind: 'scene', name: name || file.name.replace(/\.[^.]+$/, ''), blob: file, ambient, createdAt: Date.now() });
+    await addCustom(userId, { id, kind: 'scene', name: name || file.name.replace(/\.[^.]+$/, ''), blob: file, ambient, createdAt: Date.now() });
     await reloadCustom();
     update({ sceneId: id });
     setAddingScene(false);
@@ -421,7 +425,7 @@ export function FocusPage({ onImmersiveChange }: { onImmersiveChange?: (v: boole
   /** 【上传自定义音乐】 */
   async function addMusicFile(file: File) {
     const id = `custom-music-${Date.now()}`;
-    await addCustom({ id, kind: 'music', name: file.name.replace(/\.[^.]+$/, ''), blob: file, createdAt: Date.now() });
+    await addCustom(userId, { id, kind: 'music', name: file.name.replace(/\.[^.]+$/, ''), blob: file, createdAt: Date.now() });
     await reloadCustom();
     update({ musicTrackId: id });
   }
@@ -429,14 +433,14 @@ export function FocusPage({ onImmersiveChange }: { onImmersiveChange?: (v: boole
   /** 【上传自定义背景音】如雨天的淅沥声，循环作为环境音 */
   async function addAmbientFile(file: File) {
     const id = `custom-ambient-${Date.now()}`;
-    await addCustom({ id, kind: 'ambient', name: file.name.replace(/\.[^.]+$/, ''), blob: file, createdAt: Date.now() });
+    await addCustom(userId, { id, kind: 'ambient', name: file.name.replace(/\.[^.]+$/, ''), blob: file, createdAt: Date.now() });
     await reloadCustom();
     update({ ambientTrackId: id });
   }
 
   /** 【删除自定义素材】若正选中则回退默认 */
   async function removeCustom(id: string) {
-    await deleteCustom(id);
+    await deleteCustom(userId, id);
     if (prefs.sceneId === id) update({ sceneId: SCENES[0].id });
     if (prefs.musicTrackId === id) update({ musicTrackId: MUSIC_TRACKS[0].id });
     if (prefs.ambientTrackId === id) update({ ambientTrackId: 'scene' });
@@ -464,7 +468,8 @@ export function FocusPage({ onImmersiveChange }: { onImmersiveChange?: (v: boole
   if (loading) return <div className="notice">加载中...</div>;
   if (loadError) return <div className="notice error-notice">{loadError}</div>;
 
-  // ===== 沉浸态（全屏） =====
+  // ===== 沉浸态（全屏，仅独享）=====
+  // roomMode 在沉浸态判断之后使用；其状态声明见组件顶部（与其它 hooks 一起）。
   if (active) {
     return (
       <ImmersiveRoom
@@ -475,9 +480,28 @@ export function FocusPage({ onImmersiveChange }: { onImmersiveChange?: (v: boole
     );
   }
 
-  // ===== 设置态 =====
+  /** 【自习室模式切换：独享(默认沉浸专注) / 共享(和别人一起在线自习)】 */
+  const modeTabs = (
+    <div className="sr-mode-tabs">
+      <button type="button" className={roomMode === 'solo' ? 'active' : ''} onClick={() => setRoomMode('solo')}>独享自习</button>
+      <button type="button" className={roomMode === 'shared' ? 'active' : ''} onClick={() => setRoomMode('shared')}>共享自习室</button>
+    </div>
+  );
+
+  // ===== 共享自习室 =====
+  if (roomMode === 'shared') {
+    return (
+      <div className="studyroom-setup">
+        {modeTabs}
+        <SharedRooms />
+      </div>
+    );
+  }
+
+  // ===== 设置态（独享）=====
   return (
     <div className="studyroom-setup">
+      {modeTabs}
       <div className="studyroom-main">
         {/* 选场景 */}
         <section className="sr-step">

@@ -15,7 +15,8 @@ vi.mock('../api', () => ({
   api: {
     captcha: vi.fn(),
     login: vi.fn(),
-    register: vi.fn()
+    register: vi.fn(),
+    sendEmailCode: vi.fn()
   }
 }));
 
@@ -34,6 +35,8 @@ describe('AuthScreen', () => {
     vi.mocked(api.login).mockReset();
     vi.mocked(api.register).mockReset();
     vi.mocked(api.captcha).mockReset();
+    vi.mocked(api.sendEmailCode).mockReset();
+    vi.mocked(api.sendEmailCode).mockResolvedValue({ ok: true });
     // 【默认返回验证码】模拟页面加载时自动获取验证码图片
     vi.mocked(api.captcha).mockResolvedValue({ id: 'cap-id', image: 'data:image/svg+xml;base64,xxx' });
   });
@@ -85,13 +88,13 @@ describe('AuthScreen', () => {
   });
 
   /**
-   * 【测试：切换到注册模式并使用验证码注册新用户】
-   * 模拟用户点击"创建新账号"切换到注册表单，
-   * 填写用户名、密码、确认密码、昵称、验证码后点击注册。
-   * 预期：API register 被调用，参数包含所有表单字段及验证码信息；
-   *       注册成功后 onAuthed 回调应被触发，传递新用户的 token 和信息。
+   * 【测试：切换到注册模式并用邮箱验证码注册新用户】
+   * 模拟用户点击"创建新账号"切换到注册表单，填写各字段后先点「发送验证码」，
+   * 再填入收到的验证码后点击注册。
+   * 预期：sendEmailCode 以邮箱被调用；register 以所有字段（含邮箱验证码、无图形验证码）被调用；
+   *       注册成功后 onAuthed 回调被触发。
    */
-  it('switches to register mode and registers a new user with captcha', async () => {
+  it('switches to register mode and registers a new user with an email code', async () => {
     vi.mocked(api.register).mockResolvedValue({ token: 'new-token', user: { id: 2 } });
     const onAuthed = vi.fn();
     render(<AuthScreen onAuthed={onAuthed} message="" />);
@@ -103,10 +106,13 @@ describe('AuthScreen', () => {
     await userEvent.type(screen.getByPlaceholderText('密码'), 'Passw0rd!');
     await userEvent.type(screen.getByPlaceholderText('再次输入密码'), 'Passw0rd!');
     await userEvent.type(screen.getByPlaceholderText('昵称'), '新同学');
-    await userEvent.type(screen.getByLabelText('验证码'), 'WXYZ');
+    await userEvent.type(screen.getByPlaceholderText('邮箱（接收验证码，必填）'), 'newbie@example.com');
+    await userEvent.click(screen.getByRole('button', { name: '发送验证码' }));
+    await waitFor(() => expect(api.sendEmailCode).toHaveBeenCalledWith('newbie@example.com'));
+    await userEvent.type(screen.getByLabelText('邮箱验证码'), '123456');
     await userEvent.click(screen.getByRole('button', { name: '注册' }));
 
     await waitFor(() => expect(onAuthed).toHaveBeenCalled());
-    expect(api.register).toHaveBeenCalledWith('newbie', 'Passw0rd!', 'Passw0rd!', '新同学', 'cap-id', 'WXYZ');
+    expect(api.register).toHaveBeenCalledWith('newbie', 'Passw0rd!', 'Passw0rd!', '新同学', 'newbie@example.com', '123456');
   });
 });

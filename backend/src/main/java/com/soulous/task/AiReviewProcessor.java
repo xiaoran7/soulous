@@ -2,10 +2,7 @@ package com.soulous.task;
 
 import com.soulous.ai.AiReview;
 import com.soulous.ai.AiReviewRepository;
-import com.soulous.ai.AiReviewResult;
 import com.soulous.ai.AiService;
-import com.soulous.companion.AnimaClient;
-import com.soulous.companion.CompanionService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -46,8 +43,6 @@ public class AiReviewProcessor {
     private final AiService ai;
     /** 【任务服务，用于在审核完成后更新任务和提交的最终状态】 */
     private final TaskService taskService;
-    /** 【Anima 客户端：把审核委托给宠物（飞雪）；不可用/失败时回退到本地 AiService】 */
-    private final AnimaClient anima;
 
     /**
      * 【构造注入所有依赖项】
@@ -56,15 +51,13 @@ public class AiReviewProcessor {
      * @param reviews     【AI 审核结果仓库】
      * @param ai          【AI 服务】
      * @param taskService 【任务服务】
-     * @param anima       【Anima 客户端，委托宠物审核】
      */
     AiReviewProcessor(SubmissionRepository submissions, AiReviewRepository reviews,
-                      AiService ai, TaskService taskService, AnimaClient anima) {
+                      AiService ai, TaskService taskService) {
         this.submissions = submissions;
         this.reviews = reviews;
         this.ai = ai;
         this.taskService = taskService;
-        this.anima = anima;
     }
 
     /**
@@ -120,11 +113,7 @@ public class AiReviewProcessor {
         var task = submission.task;
 
         try {
-            // 【优先把审核委托给宠物（飞雪，带记忆）；不可用/失败时回退本地 AiService】
-            var review = tryPetReview(task, submission);
-            if (review == null) {
-                review = ai.review(task, submission);
-            }
+            var review = ai.review(task, submission);
             reviews.save(review);
             taskService.applyAiReview(task, submission, review);
         } catch (RuntimeException ex) {
@@ -150,59 +139,5 @@ public class AiReviewProcessor {
             reviews.save(fallback);
             taskService.applyAiReview(task, submission, fallback);
         }
-    }
-
-    /**
-     * 【把审核委托给宠物（Anima/飞雪）。把提交详情打包发给 Anima，宠物结合记忆给出裁决；
-     * 宠物的聊天回复由 Anima 写进该用户的宠物会话（聊天框可见、进记忆），这里只取结构化裁决落地。
-     * Anima 关闭/不可用/解析失败时返回 null，由调用方回退到本地 AiService。】
-     */
-    private AiReview tryPetReview(StudyTask task, TaskSubmission submission) {
-        if (!anima.isEnabled()) return null;
-        var sub = anima.mapper().createObjectNode();
-        sub.put("task_title", safe(task.title));
-        sub.put("task_description", safe(task.description));
-        sub.put("task_type", task.taskType == null ? "" : task.taskType.name());
-        sub.put("difficulty", task.difficulty == null ? "" : task.difficulty.name());
-        sub.put("text_proof", safe(submission.textProof));
-        sub.put("code_snippet", safe(submission.codeSnippet));
-        sub.put("proof_link", safe(submission.proofLink));
-        boolean hasShot = (submission.screenshotUrl != null && !submission.screenshotUrl.isBlank())
-                || (submission.screenshotUrls != null && !submission.screenshotUrls.isBlank());
-        sub.put("has_screenshot", hasShot);
-        sub.put("study_minutes", submission.studyMinutes == null ? 0 : submission.studyMinutes);
-        sub.put("base_exp", task.baseExp == null ? 20 : task.baseExp);
-
-        var node = anima.review(CompanionService.petUserId(submission.user),
-                CompanionService.petSession(submission.user), sub).orElse(null);
-        if (node == null) return null;
-
-        var review = new AiReview();
-        review.submission = submission;
-        review.result = mapResult(node.path("result").asText("MANUAL"));
-        review.relevanceScore = node.path("relevance").asInt(0);
-        review.completenessScore = node.path("completeness").asInt(0);
-        review.qualityScore = node.path("quality").asInt(0);
-        review.score = (review.relevanceScore + review.completenessScore + review.qualityScore) / 3;
-        review.recommendedExp = node.path("recommended_exp").asInt(0);
-        review.reason = node.path("reason").asText("");
-        review.suggestion = node.path("suggestion").asText("");
-        review.needManual = node.path("need_manual").asBoolean(false);
-        log.info("Pet review for submission {}: {} (exp {})", submission.id, review.result, review.recommendedExp);
-        return review;
-    }
-
-    /** MANUAL / 未知一律映射为 NEED_MORE：拿不准时让用户补充，比直接驳回友好。 */
-    private static AiReviewResult mapResult(String s) {
-        return switch (s == null ? "" : s.toUpperCase()) {
-            case "PASS" -> AiReviewResult.PASS;
-            case "REJECT" -> AiReviewResult.REJECT;
-            case "NEED_MORE" -> AiReviewResult.NEED_MORE;
-            default -> AiReviewResult.NEED_MORE;
-        };
-    }
-
-    private static String safe(String s) {
-        return s == null ? "" : s;
     }
 }

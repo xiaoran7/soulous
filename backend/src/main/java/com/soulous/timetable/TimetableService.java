@@ -8,6 +8,8 @@ import com.soulous.common.exception.BadRequestException;
 import com.soulous.common.exception.ForbiddenException;
 import com.soulous.common.exception.NotFoundException;
 import com.soulous.timetable.TimetableDtos.CourseView;
+import com.soulous.timetable.TimetableDtos.ExamView;
+import com.soulous.timetable.TimetableDtos.GradeView;
 import com.soulous.timetable.TimetableDtos.SyncRequest;
 import com.soulous.timetable.TimetableDtos.SyncResult;
 import org.slf4j.Logger;
@@ -57,18 +59,26 @@ public class TimetableService {
     private static final Semaphore CRAWLER_SLOTS = new Semaphore(MAX_CONCURRENT_CRAWLERS);
     /** 【等待并发槽位的最长时间，拿不到就快速失败返回"繁忙"，不让请求线程长时间堆积】 */
     private static final long SLOT_WAIT_SECONDS = 5;
-    /** 【单个爬虫子进程的总超时，超时强杀整棵进程树】 */
-    private static final long CRAWLER_TIMEOUT_SECONDS = 120;
+    /** 【单个爬虫子进程的总超时，超时强杀整棵进程树。
+     *  --mode all 在同一登录会话里多拉考试/成绩两类接口，比单纯课表稍久；
+     *  海外 VPS 跨境访问大陆教务系统延迟高，登录+滑块常超 150s，放宽到 240s。
+     *  注意：网关（Nginx proxy_read_timeout）必须 ≥ 此值，否则后端没超时网关先 504。】 */
+    private static final long CRAWLER_TIMEOUT_SECONDS = 240;
 
     private final CourseEntryRepository repo;
+    private final ExamEntryRepository examRepo;
+    private final GradeEntryRepository gradeRepo;
     private final LlmService llm;
 
     /** 【脚本只在 JVM 内解压一次到固定路径，之后所有请求复用，
      *  避免并发请求各自 copy 同一文件造成读到半截脚本的竞争（见 getScriptPath）。】 */
     private volatile Path cachedScriptPath;
 
-    public TimetableService(CourseEntryRepository repo, LlmService llm) {
+    public TimetableService(CourseEntryRepository repo, ExamEntryRepository examRepo,
+                            GradeEntryRepository gradeRepo, LlmService llm) {
         this.repo = repo;
+        this.examRepo = examRepo;
+        this.gradeRepo = gradeRepo;
         this.llm = llm;
     }
 
@@ -187,12 +197,12 @@ public class TimetableService {
                 "--pwd-stdin",          // 密码改走 stdin，命令行/进程列表/日志均不含明文
                 "--relogin",            // 服务端强制每次重新登录，杜绝共享 cookie 缓存导致的跨用户串号
                 "--term", "auto",
-                "--mode", "schedule",
+                "--mode", "all",        // 一次登录会话顺带把考试安排、成绩一并抓回来（见下方解析）
                 "--out", tempJsonOutput.toString()
             );
 
             // command 已不含密码，可安全记录；密码下面单独经 stdin 传入。
-            log.info("Starting schedule crawler for user={}", user.id);
+            log.info("Starting schedule crawler (mode=all) for user={}", user.id);
             ProcessBuilder pb = new ProcessBuilder(command);
             pb.environment().put("PYTHONIOENCODING", "utf-8");
             // 服务端模式开关：跳过运行时自动装依赖、强制无头、禁用 scratch 调试落盘、不持久化 cookie。
@@ -335,9 +345,13 @@ public class TimetableService {
             List<CourseEntry> saved = repo.saveAll(parsed);
             log.info("Timetable synced via crawler: user={} semester={} courses={}", user.id, semester, saved.size());
 
+            // ===== 考试安排 / 成绩（同一会话顺带抓回，解析失败不拖垮课表同步）=====
+            int examCount = persistExams(user, semester, root);
+            int gradeCount = persistGrades(user, root);
+
             String weekStart = root.path("学期信息").path("开学日期").asText("");
 
-            return new SyncResult(saved.size(), semester, weekStart, toViews(saved));
+            return new SyncResult(saved.size(), semester, weekStart, toViews(saved), examCount, gradeCount);
 
         } catch (IOException | InterruptedException e) {
             log.error("Failed to execute schedule crawler", e);
@@ -357,7 +371,115 @@ public class TimetableService {
         }
     }
 
+    /**
+     * 【解析并落库「考试安排」段：考试接口不带学期，统一打上本次同步的学期标识。
+     *  仅当解析出非空列表时才覆盖该学期旧数据——避免考试接口偶发为空（未公布/抓取失败）时
+     *  把上次同步到的考试安排误删。解析异常只记日志，不影响课表主流程。】
+     *  @return 写入的考试条数（未覆盖时返回当前库内该学期条数）
+     */
+    private int persistExams(UserAccount user, String semester, JsonNode root) {
+        try {
+            List<ExamEntry> exams = new ArrayList<>();
+            for (JsonNode item : root.path("考试安排")) {
+                String name = blankToNull(item.path("课程名称").asText(null));
+                if (name == null) continue; // 跳过完全空行
+                ExamEntry e = new ExamEntry();
+                e.user = user;
+                e.semester = semester;
+                e.courseName = trunc(name, 200);
+                e.courseCode = trunc(blankToNull(item.path("课程编号").asText(null)), 64);
+                e.teacher = trunc(blankToNull(item.path("授课教师").asText(null)), 100);
+                e.examTime = trunc(blankToNull(item.path("考试时间").asText(null)), 120);
+                e.room = trunc(blankToNull(item.path("考场").asText(null)), 120);
+                String campus = blankToNull(item.path("考试校区").asText(null));
+                if (campus == null) campus = blankToNull(item.path("校区").asText(null));
+                e.campus = trunc(campus, 80);
+                e.seatNo = trunc(blankToNull(item.path("座位号").asText(null)), 40);
+                e.session = trunc(blankToNull(item.path("考试场次").asText(null)), 80);
+                e.admissionNo = trunc(blankToNull(item.path("准考证号").asText(null)), 60);
+                e.remark = trunc(blankToNull(item.path("备注").asText(null)), 200);
+                exams.add(e);
+            }
+            if (exams.isEmpty()) {
+                return examRepo.findByUserAndSemesterOrderByExamTimeAsc(user, semester).size();
+            }
+            examRepo.deleteByUserAndSemester(user, semester);
+            examRepo.saveAll(exams);
+            log.info("Exam schedules synced: user={} semester={} exams={}", user.id, semester, exams.size());
+            return exams.size();
+        } catch (Exception ex) {
+            log.warn("Failed to persist exam schedules for user={} (ignored): {}", user.id, ex.toString());
+            return 0;
+        }
+    }
+
+    /**
+     * 【解析并落库「成绩」段：成绩查询天然跨学期返回全部，每条自带「开课学期」。
+     *  仅当解析出非空列表时才整体覆盖（deleteByUser → saveAll）——避免成绩接口偶发为空时
+     *  把历史成绩误删。解析异常只记日志，不影响课表主流程。】
+     *  @return 写入的成绩条数（未覆盖时返回当前库内该用户成绩条数）
+     */
+    private int persistGrades(UserAccount user, JsonNode root) {
+        try {
+            List<GradeEntry> grades = new ArrayList<>();
+            for (JsonNode item : root.path("成绩")) {
+                String name = blankToNull(item.path("课程名称").asText(null));
+                if (name == null) continue;
+                GradeEntry g = new GradeEntry();
+                g.user = user;
+                g.semester = trunc(blankToNull(item.path("开课学期").asText(null)), 40);
+                g.courseName = trunc(name, 200);
+                g.courseCode = trunc(blankToNull(item.path("课程编号").asText(null)), 64);
+                g.department = trunc(blankToNull(item.path("开课单位").asText(null)), 120);
+                g.score = trunc(blankToNull(item.path("成绩").asText(null)), 40);
+                g.scoreFlag = trunc(blankToNull(item.path("成绩标识").asText(null)), 40);
+                g.credit = trunc(blankToNull(item.path("学分").asText(null)), 16);
+                g.gpa = trunc(blankToNull(item.path("绩点").asText(null)), 16);
+                g.totalHours = trunc(blankToNull(item.path("总学时").asText(null)), 16);
+                g.assessMethod = trunc(blankToNull(item.path("考核方式").asText(null)), 40);
+                g.examNature = trunc(blankToNull(item.path("考试性质").asText(null)), 40);
+                g.courseAttr = trunc(blankToNull(item.path("课程属性").asText(null)), 40);
+                g.courseNature = trunc(blankToNull(item.path("课程性质").asText(null)), 40);
+                grades.add(g);
+            }
+            if (grades.isEmpty()) {
+                return gradeRepo.findByUserOrderBySemesterDescCourseNameAsc(user).size();
+            }
+            gradeRepo.deleteByUser(user);
+            gradeRepo.saveAll(grades);
+            log.info("Grades synced: user={} grades={}", user.id, grades.size());
+            return grades.size();
+        } catch (Exception ex) {
+            log.warn("Failed to persist grades for user={} (ignored): {}", user.id, ex.toString());
+            return 0;
+        }
+    }
+
     // ===================== 查询 / 删除 =====================
+
+    /** 【列出当前用户的考试安排，semester 为空则返回全部（学期倒序、时间升序）】 */
+    @Transactional(readOnly = true)
+    public List<ExamView> listExams(UserAccount user, String semester) {
+        var sem = blankToNull(semester);
+        var rows = sem == null
+                ? examRepo.findByUserOrderBySemesterDescExamTimeAsc(user)
+                : examRepo.findByUserAndSemesterOrderByExamTimeAsc(user, sem);
+        var out = new ArrayList<ExamView>(rows.size());
+        for (var e : rows) out.add(ExamView.of(e));
+        return out;
+    }
+
+    /** 【列出当前用户的课程成绩，semester 为空则返回全部（学期倒序、课程名升序）】 */
+    @Transactional(readOnly = true)
+    public List<GradeView> listGrades(UserAccount user, String semester) {
+        var sem = blankToNull(semester);
+        var rows = sem == null
+                ? gradeRepo.findByUserOrderBySemesterDescCourseNameAsc(user)
+                : gradeRepo.findByUserAndSemesterOrderByCourseNameAsc(user, sem);
+        var out = new ArrayList<GradeView>(rows.size());
+        for (var g : rows) out.add(GradeView.of(g));
+        return out;
+    }
 
     /** 【列出当前用户课表，semester 为空则返回全部】 */
     @Transactional(readOnly = true)

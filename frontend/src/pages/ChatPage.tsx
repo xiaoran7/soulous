@@ -16,9 +16,18 @@ import { ChatWelcome } from '../components/ChatComposer';
 
 const COLLAPSE_KEY = 'soulous.chat.sidebar.collapsed.v1';
 
+/**
+ * 【AI 拆解模块级缓存】记住侧边栏树与当前打开的对话，切到别的页再切回时直接恢复，
+ * 不再每次重拉树、也不丢失正在看的对话。对话本身服务端持久化，这里只为消除切换闪烁。
+ * 登出由 resetChatCache() 清空，避免串户看到上一个账号的对话。
+ */
+let chatTreeCache: ChatTree | null = null;
+let chatActiveConvCache: ChatConversationView | null = null;
+export function resetChatCache() { chatTreeCache = null; chatActiveConvCache = null; }
+
 export function ChatPage() {
-  const [tree, setTree] = useState<ChatTree>({ categories: [], conversations: [] });
-  const [activeConv, setActiveConv] = useState<ChatConversationView | null>(null);
+  const [tree, setTree] = useState<ChatTree>(() => chatTreeCache ?? { categories: [], conversations: [] });
+  const [activeConv, setActiveConv] = useState<ChatConversationView | null>(() => chatActiveConvCache);
   const [pendingInitial, setPendingInitial] = useState<{ id: number; text: string } | null>(null);
   const [collapsed, setCollapsed] = useState<boolean>(() => {
     try { return localStorage.getItem(COLLAPSE_KEY) === '1'; } catch { return false; }
@@ -28,11 +37,14 @@ export function ChatPage() {
   const [menuConvId, setMenuConvId] = useState<number | null>(null);
 
   const reloadTree = useCallback(async () => {
-    try { setTree(await api.chatTree()); }
+    try { const t = await api.chatTree(); chatTreeCache = t; setTree(t); }
     catch (err) { setLoadError(err instanceof Error ? err.message : '加载失败'); }
   }, []);
 
   useEffect(() => { void reloadTree(); }, [reloadTree]);
+
+  // 同步当前打开的对话到模块缓存，切走再切回时恢复，不丢正在看的对话。
+  useEffect(() => { chatActiveConvCache = activeConv; }, [activeConv]);
 
   useEffect(() => {
     try { localStorage.setItem(COLLAPSE_KEY, collapsed ? '1' : '0'); } catch { /* ignore */ }

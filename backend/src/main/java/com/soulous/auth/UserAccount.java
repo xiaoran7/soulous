@@ -64,6 +64,10 @@ public class UserAccount {
     @Column(nullable = false)
     public int tokenVersion = 0;
 
+    /** 【金币余额：完成任务/打卡/专注赚取，用于宠物市场购买。账号级共享（与每宠独立的经验不同）。】 */
+    @Column(nullable = false)
+    public int coinBalance = 0;
+
     /** 【账户创建时间，在实体持久化时自动设置，用于审计和展示】 */
     public LocalDateTime createdAt = LocalDateTime.now();
 

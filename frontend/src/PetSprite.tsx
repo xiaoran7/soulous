@@ -71,11 +71,14 @@ const animations: Record<PetAnimationState, AnimationConfig> = {
 export function PetSprite({
   state,
   size = 132,
-  label = 'Feixue'
+  label = 'Feixue',
+  sheet
 }: {
   state: PetAnimationState;
   size?: number;
   label?: string;
+  /** 【可选 spritesheet 路径】不同品种可传各自的图；省略则用默认 Feixue 图 */
+  sheet?: string | null;
 }) {
   /** 【当前帧索引，从 0 开始循环】 */
   const [frame, setFrame] = useState(0);
@@ -129,7 +132,7 @@ export function PetSprite({
       <img
         aria-hidden="true"
         className="pet-sprite__sheet"
-        src={FEIXUE_SPRITESHEET}
+        src={sheet || FEIXUE_SPRITESHEET}
         alt=""
         draggable={false}
         style={sheetStyle}

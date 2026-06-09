@@ -10,6 +10,12 @@ import com.soulous.task.StudyTask;
 public final class PetGrowthRules {
     private PetGrowthRules() {}
 
+    /** 【满级等级：到达后不再升级，全部动作解锁。经验条在满级时封顶显示为满。】 */
+    public static final int MAX_LEVEL = 30;
+
+    /** 【连续打卡经验倍率上限：streak 越长加成越高，封顶 1.5x】 */
+    private static final double STREAK_MULTIPLIER_CAP = 1.5;
+
     /**
      * 【应用任务完成奖励：当用户完成学习任务后，根据任务经验值和心情系数计算实际获得的经验，
      *  同时更新心情和饱腹感。如果累计经验超过升级阈值则自动升级，并更新成长阶段。
@@ -21,11 +27,22 @@ public final class PetGrowthRules {
      * @return 【成长结果，包含实际经验量、升级前等级、升级后等级、是否升级】
      */
     public static PetGrowthResult applyReward(Pet pet, StudyTask task, int requestedExp) {
+        return applyReward(pet, task, requestedExp, 1.0);
+    }
+
+    /**
+     * 【应用任务完成奖励（带连续打卡倍率重载）：在心情系数之上再叠加 streak 倍率。
+     *  streakMultiplier 由调用方依据连续打卡天数算出（见 {@link #streakMultiplier(int)}），
+     *  默认 1.0 即与无 streak 行为一致。】
+     *
+     * @param streakMultiplier 【连续打卡倍率，1.0~1.5】
+     */
+    public static PetGrowthResult applyReward(Pet pet, StudyTask task, int requestedExp, double streakMultiplier) {
         normalize(pet);
         var previousLevel = pet.level;
         var requested = Math.max(0, requestedExp);
-        // 【根据心情应用经验加成/减成系数】
-        var amount = applyMoodMultiplier(requested, pet.mood);
+        // 【先按心情加成/减成，再叠加连续打卡倍率】
+        var amount = applyStreakMultiplier(applyMoodMultiplier(requested, pet.mood), streakMultiplier);
         var baseExp = Math.max(1, task.baseExp == null ? 20 : task.baseExp);
 
         pet.currentExp += amount;
@@ -34,14 +51,7 @@ public final class PetGrowthRules {
         // 【饱腹感变化：获得经验时固定增加6点】
         pet.satiety = clamp(pet.satiety + satietyGain(amount));
 
-        // 【循环升级：当前经验超过下一级所需经验时自动升级，支持连续多级升级】
-        var leveledUp = false;
-        while (pet.currentExp >= pet.nextLevelExp) {
-            pet.currentExp -= pet.nextLevelExp;
-            pet.level += 1;
-            pet.nextLevelExp = expForNextLevel(pet.level);
-            leveledUp = true;
-        }
+        var leveledUp = levelUp(pet);
 
         // 【根据等级更新成长阶段和状态】
         pet.growthStage = stageFor(pet.level);
@@ -58,23 +68,64 @@ public final class PetGrowthRules {
      * @return 【成长结果，包含实际经验量、升级前后等级、是否升级】
      */
     public static PetGrowthResult applyFocusReward(Pet pet, int requestedExp) {
+        return applyFocusReward(pet, requestedExp, 1.0);
+    }
+
+    /**
+     * 【应用专注完成奖励（带连续打卡倍率重载）：心情系数之上叠加 streak 倍率，默认 1.0。】
+     *
+     * @param streakMultiplier 【连续打卡倍率，1.0~1.5】
+     */
+    public static PetGrowthResult applyFocusReward(Pet pet, int requestedExp, double streakMultiplier) {
         normalize(pet);
         var previousLevel = pet.level;
         var requested = Math.max(0, requestedExp);
-        var amount = applyMoodMultiplier(requested, pet.mood);
+        var amount = applyStreakMultiplier(applyMoodMultiplier(requested, pet.mood), streakMultiplier);
         pet.currentExp += amount;
         pet.mood = clamp(pet.mood + 6);
         pet.satiety = clamp(pet.satiety + 4);
+        var leveledUp = levelUp(pet);
+        pet.growthStage = stageFor(pet.level);
+        pet.status = leveledUp ? PetStatus.EXCITED : PetStatus.HAPPY;
+        return new PetGrowthResult(amount, previousLevel, pet.level, leveledUp);
+    }
+
+    /**
+     * 【统一升级逻辑：循环消耗经验升级，到达 {@link #MAX_LEVEL} 后停止。
+     *  满级时把当前经验封顶到 nextLevelExp（经验条显示为满），不再累积溢出。】
+     *
+     * @return 是否发生过升级
+     */
+    private static boolean levelUp(Pet pet) {
         var leveledUp = false;
-        while (pet.currentExp >= pet.nextLevelExp) {
+        while (pet.level < MAX_LEVEL && pet.currentExp >= pet.nextLevelExp) {
             pet.currentExp -= pet.nextLevelExp;
             pet.level += 1;
             pet.nextLevelExp = expForNextLevel(pet.level);
             leveledUp = true;
         }
-        pet.growthStage = stageFor(pet.level);
-        pet.status = leveledUp ? PetStatus.EXCITED : PetStatus.HAPPY;
-        return new PetGrowthResult(amount, previousLevel, pet.level, leveledUp);
+        if (pet.level >= MAX_LEVEL) {
+            pet.currentExp = Math.min(pet.currentExp, pet.nextLevelExp);
+        }
+        return leveledUp;
+    }
+
+    /**
+     * 【连续打卡倍率：streak=1（含未连续）为 1.0，之后每多一天 +0.1，封顶 {@value #STREAK_MULTIPLIER_CAP}。
+     *  例如连续 6 天及以上达到 1.5x。】
+     *
+     * @param streakDays 【连续打卡天数（含今天）】
+     */
+    public static double streakMultiplier(int streakDays) {
+        var extraDays = Math.max(0, streakDays - 1);
+        return Math.min(STREAK_MULTIPLIER_CAP, 1.0 + 0.1 * extraDays);
+    }
+
+    /** 【对经验量叠加 streak 倍率（倍率夹在 1.0~上限），向上取整四舍五入】 */
+    static int applyStreakMultiplier(int amount, double streakMultiplier) {
+        if (amount <= 0) return 0;
+        var mult = Math.max(1.0, Math.min(STREAK_MULTIPLIER_CAP, streakMultiplier));
+        return (int) Math.round(amount * mult);
     }
 
     /**
@@ -137,15 +188,31 @@ public final class PetGrowthRules {
     }
 
     /**
-     * 【计算下一级所需经验值：等级1需要100经验，之后每级增加35点。
-     *  公式：max(1, level) == 1 ? 100 : 100 + level * 35】
+     * 【应用断签/久未活跃衰减惩罚：温和机制——只降心情和饱腹感，绝不掉等级或扣经验。
+     *  心情 -8、饱腹感 -10；衰减后若心情或饱腹感过低则转 SAD（伤心），否则 SLEEPY（困倦）。
+     *  由每日定时任务对久未打卡的用户调用，督促回归而非劝退。】
+     *
+     * @param pet 【宠物实体，方法会直接修改其字段】
+     */
+    public static void applyInactivityDecay(Pet pet) {
+        normalize(pet);
+        pet.mood = clamp(pet.mood - 8);
+        pet.satiety = clamp(pet.satiety - 10);
+        pet.status = (pet.mood <= 30 || pet.satiety <= 20) ? PetStatus.SAD : PetStatus.SLEEPY;
+        pet.growthStage = stageFor(pet.level);
+        pet.nextLevelExp = expForNextLevel(pet.level);
+    }
+
+    /**
+     * 【计算下一级所需经验值：二次曲线 50 + 50·L + 8·L²，让高等级有明显的成长追求感。
+     *  Lv1≈108、Lv10≈1350、Lv30≈8750。替代旧的近线性 100+35·L（高等级太平）。】
      *
      * @param level 【当前等级，最小为1】
      * @return 【升到下一级所需的总经验值】
      */
     public static int expForNextLevel(int level) {
         var safeLevel = Math.max(1, level);
-        return safeLevel == 1 ? 100 : 100 + safeLevel * 35;
+        return 50 + 50 * safeLevel + 8 * safeLevel * safeLevel;
     }
 
     /**

@@ -1,0 +1,45 @@
+-- 【中文：创建 exam_entry / grade_entry 两张表（MySQL 版本）—— 存储同步课表时一并抓取的
+--   考试安排与课程成绩。数据来源：教务爬虫 --mode all 输出的「考试安排」「成绩」段。
+--   考试安排按 (user, semester) 分学期；成绩天然跨学期、每条自带开课学期。】
+-- Exam schedules and course grades crawled alongside the timetable (--mode all).
+CREATE TABLE exam_entry (
+    id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,            -- 【中文：主键，自增 ID】
+    user_id BIGINT NOT NULL,                                  -- 【中文：关联用户 ID】
+    semester VARCHAR(40),                                     -- 【中文：学期标识，如 2025-2026-2】
+    course_name VARCHAR(200),                                 -- 【中文：课程名称】
+    course_code VARCHAR(64),                                  -- 【中文：课程编号】
+    teacher VARCHAR(100),                                     -- 【中文：授课教师】
+    exam_time VARCHAR(120),                                   -- 【中文：考试时间原文】
+    room VARCHAR(120),                                        -- 【中文：考场/教室】
+    campus VARCHAR(80),                                       -- 【中文：考试校区】
+    seat_no VARCHAR(40),                                      -- 【中文：座位号】
+    exam_session VARCHAR(80),                                 -- 【中文：考试场次】
+    admission_no VARCHAR(60),                                 -- 【中文：准考证号】
+    remark VARCHAR(200),                                      -- 【中文：备注】
+    created_at DATETIME(6) NOT NULL,                          -- 【中文：创建时间】
+    CONSTRAINT fk_exam_entry_user FOREIGN KEY (user_id) REFERENCES user_account(id),
+    KEY idx_exam_entry_user (user_id),
+    KEY idx_exam_entry_user_sem (user_id, semester)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE grade_entry (
+    id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,            -- 【中文：主键，自增 ID】
+    user_id BIGINT NOT NULL,                                  -- 【中文：关联用户 ID】
+    semester VARCHAR(40),                                     -- 【中文：开课学期，如 2025-2026-2】
+    course_code VARCHAR(64),                                  -- 【中文：课程编号】
+    course_name VARCHAR(200),                                 -- 【中文：课程名称】
+    department VARCHAR(120),                                  -- 【中文：开课单位/学院】
+    score VARCHAR(40),                                        -- 【中文：成绩原文，如 88 / 优秀】
+    score_flag VARCHAR(40),                                   -- 【中文：成绩标识】
+    credit VARCHAR(16),                                       -- 【中文：学分原文】
+    gpa VARCHAR(16),                                          -- 【中文：绩点原文】
+    total_hours VARCHAR(16),                                  -- 【中文：总学时原文】
+    assess_method VARCHAR(40),                                -- 【中文：考核方式】
+    exam_nature VARCHAR(40),                                  -- 【中文：考试性质 初修/补考/重修】
+    course_attr VARCHAR(40),                                  -- 【中文：课程属性 必修/选修】
+    course_nature VARCHAR(40),                                -- 【中文：课程性质】
+    created_at DATETIME(6) NOT NULL,                          -- 【中文：创建时间】
+    CONSTRAINT fk_grade_entry_user FOREIGN KEY (user_id) REFERENCES user_account(id),
+    KEY idx_grade_entry_user (user_id),
+    KEY idx_grade_entry_user_sem (user_id, semester)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

@@ -39,7 +39,43 @@ class PetController extends BaseController {
      */
     @GetMapping
     Object pet(HttpServletRequest request) {
-        return pets.get(current(request));
+        return PetService.view(pets.getActiveOrNull(current(request)));
+    }
+
+    /** 【宠物市场：列出全部上架品种】 */
+    @GetMapping("/species")
+    Object species(HttpServletRequest request) {
+        current(request);
+        return pets.listSpecies().stream().map(PetService::speciesView).toList();
+    }
+
+    /** 【当前用户拥有的全部宠物】 */
+    @GetMapping("/owned")
+    Object owned(HttpServletRequest request) {
+        return pets.owned(current(request)).stream().map(PetService::view).toList();
+    }
+
+    /** 【免费领养首只入门款宠物】 */
+    @PostMapping("/adopt")
+    Object adopt(HttpServletRequest request, @RequestBody Map<String, String> body) {
+        var slug = body == null ? null : body.get("slug");
+        return PetService.view(pets.adoptStarter(current(request), slug));
+    }
+
+    /** 【购买宠物（金币）】 */
+    @PostMapping("/buy")
+    Object buy(HttpServletRequest request, @RequestBody Map<String, String> body) {
+        var slug = body == null ? null : body.get("slug");
+        return PetService.view(pets.buy(current(request), slug));
+    }
+
+    /** 【切换出战宠物】 */
+    @PostMapping("/active")
+    Object setActive(HttpServletRequest request, @RequestBody Map<String, Object> body) {
+        var raw = body == null ? null : body.get("petId");
+        if (raw == null) return PetService.view(pets.getActiveOrNull(current(request)));
+        Long petId = Long.valueOf(raw.toString());
+        return PetService.view(pets.setActive(current(request), petId));
     }
 
     /**
@@ -50,7 +86,7 @@ class PetController extends BaseController {
      */
     @PostMapping("/feed")
     Object feed(HttpServletRequest request) {
-        return pets.feed(current(request));
+        return PetService.view(pets.feed(current(request)));
     }
 
     /**
@@ -74,7 +110,7 @@ class PetController extends BaseController {
      */
     @PostMapping("/avatar")
     Object avatar(HttpServletRequest request, @RequestBody PetAvatarRequest body) {
-        return pets.setAvatar(current(request), body == null ? null : body.avatarUrl());
+        return PetService.view(pets.setAvatar(current(request), body == null ? null : body.avatarUrl()));
     }
 
     /**
@@ -87,6 +123,6 @@ class PetController extends BaseController {
     @PatchMapping
     Object rename(HttpServletRequest request, @RequestBody Map<String, String> body) {
         var name = body == null ? null : body.get("name");
-        return pets.rename(current(request), name);
+        return PetService.view(pets.rename(current(request), name));
     }
 }

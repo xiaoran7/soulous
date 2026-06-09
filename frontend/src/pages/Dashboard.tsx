@@ -11,8 +11,9 @@
  * 设计思路：Dashboard 是用户的"仪表盘"，一屏展示所有关键信息，
  * 引导用户进入任务、复盘、宠物等子页面。宠物气泡提供情感化陪伴。
  */
-import React, { Suspense, lazy } from 'react';
-import { CalendarCheck, CheckCircle2, ChevronRight, ClipboardList, RefreshCw, Sparkles, Target, Timer } from 'lucide-react';
+import React, { Suspense, lazy, useEffect, useState } from 'react';
+import { CalendarCheck, CheckCircle2, ChevronRight, ClipboardList, Coins, Flame, RefreshCw, Sparkles, Target, Timer } from 'lucide-react';
+import { api } from '../api';
 import type { Pet, StudyTask, Summary } from '../types';
 import { PetSprite } from '../PetSprite';
 import {
@@ -27,6 +28,87 @@ import {
 
 /** 【懒加载趋势图组件】仅在滚动到趋势区域时加载 */
 const TrendChart = lazy(() => import('../components/TrendChart'));
+
+/**
+ * 【签到模块级缓存】记住今日打卡状态与已领奖励，跨页面切回工作台时直接渲染、
+ * 后台静默刷新，消除每次重进的局部 loading。登出由 resetCheckinCache() 清空。
+ */
+type CheckinSnapshot = { checkedInToday: boolean; streak: number; balance: number };
+let checkinCache: { status: CheckinSnapshot; reward: { expReward: number; coinReward: number } | null } | null = null;
+export function resetCheckinCache() { checkinCache = null; }
+
+/**
+ * 【每日签到卡片】自包含：挂载查询今日打卡状态，未签到则可领奖。
+ * 领取后用 POST 响应里的宠物快照局部刷新（onPetSync），不再整页重拉接口。
+ * @param onPetSync - 领奖成功后同步出战宠物快照到全局 state（宠物经验/等级即时更新）
+ */
+function CheckinCard({ onPetSync }: { onPetSync: (pet: Pet) => void }) {
+  const [status, setStatus] = useState<CheckinSnapshot | null>(() => checkinCache?.status ?? null);
+  const [claiming, setClaiming] = useState(false);
+  const [reward, setReward] = useState<{ expReward: number; coinReward: number } | null>(() => checkinCache?.reward ?? null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const s = await api.checkinStatus();
+        if (cancelled) return;
+        setStatus(s);
+        checkinCache = { status: s, reward: checkinCache?.reward ?? null };
+      } catch { /* 未登录或网络异常时静默，不打扰工作台 */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  async function claim() {
+    if (claiming || status?.checkedInToday) return;
+    setClaiming(true);
+    setError('');
+    try {
+      const r = await api.checkin();
+      const nextReward = { expReward: r.expReward, coinReward: r.coinReward };
+      const nextStatus = { checkedInToday: true, streak: r.streak, balance: r.balance };
+      setReward(nextReward);
+      setStatus(nextStatus);
+      checkinCache = { status: nextStatus, reward: nextReward };
+      // 用响应里的宠物快照局部刷新全局 state，避免重拉 me/tasks/pet/summary
+      if (r.pet) onPetSync(r.pet);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '签到失败');
+    } finally {
+      setClaiming(false);
+    }
+  }
+
+  if (!status) return null;
+  const done = status.checkedInToday;
+
+  return (
+    <section className="panel checkin-card">
+      <div className="checkin-main">
+        <div className="checkin-streak" title="连续打卡天数">
+          <Flame size={18} /> <strong>{status.streak}</strong><span>天</span>
+        </div>
+        <div className="checkin-copy">
+          <h3>{done ? '今日已签到' : '每日签到'}</h3>
+          <p>
+            {done
+              ? (reward ? `已领 +${reward.expReward} 经验 · +${reward.coinReward} 金币，明天继续保持连击。` : '今天已经领过啦，明天再来。')
+              : '每天签到领经验和金币，连续越久奖励越高。'}
+          </p>
+        </div>
+      </div>
+      <div className="checkin-actions">
+        <span className="checkin-balance"><Coins size={14} /> {status.balance}</span>
+        <button className="primary-button" disabled={done || claiming} onClick={() => void claim()}>
+          {done ? '已签到 ✓' : claiming ? '签到中…' : '签到领取'}
+        </button>
+      </div>
+      {error && <div className="form-error" style={{ flexBasis: '100%' }}>{error}</div>}
+    </section>
+  );
+}
 
 /**
  * 【宠物心情文案映射】每种宠物状态对应的描述文案
@@ -56,11 +138,12 @@ const petMoodCopy: Record<string, string> = {
  * 数据来源：所有数据都从父组件（App）传入，Dashboard 本身不发起 API 请求。
  * 这种设计确保了数据的一致性和页面切换的流畅性。
  */
-export function Dashboard({ tasks, pet, summary, onRefresh, onOpenTasks, onOpenReview, onOpenPet }: {
+export function Dashboard({ tasks, pet, summary, onRefresh, onPetSync, onOpenTasks, onOpenReview, onOpenPet }: {
   tasks: StudyTask[];
   pet: Pet | null;
   summary: Summary | null;
   onRefresh: () => void;
+  onPetSync: (pet: Pet) => void;
   onOpenTasks: () => void;
   onOpenReview: () => void;
   onOpenPet: () => void;
@@ -127,6 +210,9 @@ export function Dashboard({ tasks, pet, summary, onRefresh, onOpenTasks, onOpenR
           </div>
         </button>
       </section>
+
+      {/* ===== 【每日签到】领经验+金币，连续越久越多 ===== */}
+      <CheckinCard onPetSync={onPetSync} />
 
       {/* ===== 【指标行】6 个关键指标卡片 ===== */}
       <section className="metric-row">
