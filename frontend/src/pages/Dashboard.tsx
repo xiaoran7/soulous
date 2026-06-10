@@ -266,29 +266,21 @@ export function Dashboard({ tasks, pet, summary, onRefresh, onPetSync, onOpenTas
 
       {/* ===== 【复盘入口】点击跳转到 AI 每日复盘页面 ===== */}
       <button
-        className="panel"
+        className="panel review-entry"
         onClick={onOpenReview}
-        style={{
-          textAlign: 'left',
-          cursor: 'pointer',
-          display: 'grid',
-          gap: 12,
-          background: 'var(--ink)',
-          color: 'var(--bg)',
-          border: 0
-        }}
+        style={{ textAlign: 'left', cursor: 'pointer', display: 'grid', gap: 12 }}
       >
         <div className="panel-title" style={{ marginBottom: 0 }}>
-          <h2 style={{ color: 'inherit' }}>今日 <em style={{ fontStyle: 'italic', color: 'var(--ink-4)' }}>复盘</em></h2>
-          <CalendarCheck size={18} />
+          <h2>今日 <em style={{ fontStyle: 'italic', color: 'var(--ink-3)' }}>复盘</em></h2>
+          <CalendarCheck size={18} style={{ color: 'var(--le-amber)' }} />
         </div>
-        <p style={{ fontFamily: 'var(--mono)', fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--ink-4)', margin: 0 }}>
+        <p style={{ fontFamily: 'var(--mono)', fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--ink-3)', margin: 0 }}>
           AI Reflection
         </p>
-        <p style={{ lineHeight: 1.6, fontSize: 13.5, color: 'var(--bg-elev)', margin: '4px 0 0' }}>
+        <p style={{ lineHeight: 1.6, fontSize: 13.5, color: 'var(--ink-2)', margin: '4px 0 0' }}>
           点击查看 AI 根据今日任务、提交、学习时长生成的复盘报告。
         </p>
-        <span style={{ alignSelf: 'flex-start', color: 'var(--bg)', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
+        <span style={{ alignSelf: 'flex-start', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 4, color: 'var(--amber-deep, #b45309)', fontWeight: 600 }}>
           进入复盘 <ChevronRight size={14} />
         </span>
       </button>

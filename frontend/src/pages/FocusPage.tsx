@@ -24,6 +24,7 @@ import { useStudyRoomPrefs } from '../studyroom/useStudyRoomPrefs';
 import { useAudioMixer } from '../studyroom/useAudioMixer';
 import { addCustom, deleteCustom, listCustom, type CustomItem } from '../studyroom/customStore';
 import { SharedRooms } from '../studyroom/SharedRooms';
+import { PetSprite } from '../PetSprite';
 
 /** 【格式化为正计时】秒 → H:MM:SS 或 MM:SS（始终非负，正计时不会出现负数） */
 function fmt(seconds: number): string {
@@ -214,14 +215,15 @@ function ImmersiveRoom({ session, scene, prefs, audio, audioControls, onUpdate, 
   }
 
   return (
-    <div className="immersive-room" style={{ background: sceneBackground(scene, 0.5) }}>
+    <div className="immersive-room" style={{ background: sceneBackground(scene, 0.22) }}>
       {scene.video && (
         <>
           <video className="immersive-video-bg" src={scene.video} autoPlay loop muted playsInline />
           <div className="immersive-video-dim" />
         </>
       )}
-      <div className="immersive-top">
+      {/* 顶部悬浮玻璃信息条（soulous_3：品牌位 = 场景名） */}
+      <div className="immersive-top glass-card">
         <span className="immersive-scene-name">{SCENE_ICON[scene.id] ?? <Sunrise size={15} />} {scene.name}</span>
         <span className="immersive-status">{session.status === 'PAUSED' ? '· 已暂停' : '· 专注中'}</span>
         <button type="button" className="immersive-fs-btn" onClick={toggleFullscreen}
@@ -231,50 +233,64 @@ function ImmersiveRoom({ session, scene, prefs, audio, audioControls, onUpdate, 
         </button>
       </div>
 
-      <div className="immersive-center">
-        <div className={`immersive-clock${session.status === 'RUNNING' ? ' is-running' : ''}`}>
+      {/* 左下玻璃计时卡：状态标签 + 琥珀刻线 + 大数字 + 目标 */}
+      <div className="immersive-body">
+        <div className={`immersive-timer-card glass-card${session.status === 'RUNNING' ? ' is-running' : ''}`}>
+          <span className="immersive-timer-label">{session.status === 'PAUSED' ? 'PAUSED · 已暂停' : 'FOCUSING · 专注中'}</span>
+          <i className="immersive-timer-rule" aria-hidden="true" />
           <div className="immersive-time">{fmt(elapsed)}</div>
-          <div className="immersive-sub">{session.status === 'PAUSED' ? 'PAUSED · 已暂停' : 'FOCUSING · 专注中'}</div>
-        </div>
-
-        <div className="immersive-goal">
-          <Target size={14} />
-          <input
-            className="immersive-goal-input"
-            placeholder="写下今天想做的事…（可选）"
-            value={prefs.goal}
-            maxLength={120}
-            onChange={e => onPrefsPatch({ goal: e.target.value })}
-          />
+          <div className="immersive-goal">
+            <Target size={14} />
+            <input
+              className="immersive-goal-input"
+              placeholder="写下今天想做的事…（可选）"
+              value={prefs.goal}
+              maxLength={120}
+              onChange={e => onPrefsPatch({ goal: e.target.value })}
+            />
+          </div>
         </div>
       </div>
 
-      <div className="immersive-bottom">
-        <div className="immersive-audio">{audioControls}</div>
-        <div className="immersive-controls">
-          {/* 声音：开启 / 静音 合并为一个开关按钮 */}
-          <button className="im-btn" onClick={() => audio.playing ? audio.stop() : audio.start()}
-            title={audio.playing ? '静音' : '开启声音'}>
-            {audio.playing ? <><VolumeX size={18} /> 静音</> : <><Volume2 size={18} /> 开启声音</>}
-          </button>
-          {session.status === 'RUNNING' && (
-            <button className="im-btn" disabled={busy} onClick={() => act(() => api.pauseFocus(session.id))}>
-              <Pause size={18} /> 暂停
-            </button>
-          )}
-          {session.status === 'PAUSED' && (
-            <button className="im-btn im-btn-primary" disabled={busy} onClick={() => act(() => api.resumeFocus(session.id))}>
-              <Play size={18} /> 继续
-            </button>
-          )}
-          <button className="im-btn im-btn-primary" disabled={busy} onClick={() => act(() => api.finishFocus(session.id, 'completed'))}>
-            <CheckCircle2 size={18} /> 结束
-          </button>
-          <button className="im-btn im-btn-ghost" disabled={busy} onClick={() => act(() => api.finishFocus(session.id, 'aborted'))}>
-            <XCircle size={18} /> 放弃
-          </button>
-        </div>
+      {/* 底部居中玻璃控制坞：音量簇 | 操作簇 */}
+      <div className="immersive-dock-wrap">
         {actError && <p className="immersive-error">{actError}</p>}
+        <div className="immersive-dock glass-card">
+          <div className="immersive-audio">{audioControls}</div>
+          <div className="immersive-controls">
+            {/* 声音：开启 / 静音 合并为一个开关按钮 */}
+            <button className="im-btn" onClick={() => audio.playing ? audio.stop() : audio.start()}
+              title={audio.playing ? '静音' : '开启声音'}>
+              {audio.playing ? <VolumeX size={24} /> : <Volume2 size={24} />}
+              <span>{audio.playing ? '静音' : '声音'}</span>
+            </button>
+            {session.status === 'RUNNING' && (
+              <button className="im-btn" disabled={busy} title="暂停"
+                onClick={() => act(() => api.pauseFocus(session.id))}>
+                <Pause size={24} /><span>暂停</span>
+              </button>
+            )}
+            {session.status === 'PAUSED' && (
+              <button className="im-btn im-btn-amber" disabled={busy} title="继续"
+                onClick={() => act(() => api.resumeFocus(session.id))}>
+                <Play size={24} /><span>继续</span>
+              </button>
+            )}
+            <button className="im-btn im-btn-amber" disabled={busy} title="结束并结算"
+              onClick={() => act(() => api.finishFocus(session.id, 'completed'))}>
+              <CheckCircle2 size={24} /><span>结束</span>
+            </button>
+            <button className="im-btn im-btn-danger" disabled={busy} title="放弃本次专注"
+              onClick={() => act(() => api.finishFocus(session.id, 'aborted'))}>
+              <XCircle size={24} /><span>放弃</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* 右下漂浮宠物（soulous_3 Pet Widget） */}
+      <div className="immersive-pet glass-card amber-glow le-float" aria-hidden="true">
+        <PetSprite state="idle" size={56} />
       </div>
     </div>
   );
@@ -536,7 +552,7 @@ export function FocusPage({ userId, onImmersiveChange }: { userId?: string | num
               {audio.playing ? <><Pause size={14} /> 停止试听</> : <><Volume2 size={14} /> 开启声音 / 试听</>}
             </button>
           </div>
-          <div className="sr-audio card">
+          <div className="sr-audio glass-card">
             {audioControls}
             <div className="sr-track-row">
               <span className="sr-track-label">曲目</span>
@@ -590,7 +606,7 @@ export function FocusPage({ userId, onImmersiveChange }: { userId?: string | num
 
         {/* 目标 + 关联任务 + 进入 */}
         <section className="sr-step">
-          <div className="sr-pomodoro card">
+          <div className="sr-pomodoro glass-card">
             <label className="field-label">今日目标（可选）</label>
             <input
               className="text-input"

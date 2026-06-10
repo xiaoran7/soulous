@@ -23,22 +23,24 @@ export function TrendChart({ data }: { data: { date: string; minutes: number; fo
       <ResponsiveContainer width="100%" height={220}>
         <AreaChart data={data}>
           <defs>
+            {/* Luminous Ethereal：琥珀主线 + 向下淡出的渐变（design/stitch/soulous_4 趋势卡） */}
             <linearGradient id="minutes" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#1c1916" stopOpacity={0.18} />
-              <stop offset="95%" stopColor="#1c1916" stopOpacity={0} />
+              <stop offset="0%" stopColor="#FFBF00" stopOpacity={0.3} />
+              <stop offset="100%" stopColor="#FFBF00" stopOpacity={0} />
             </linearGradient>
             <linearGradient id="focusMinutes" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#c98a3e" stopOpacity={0.28} />
-              <stop offset="95%" stopColor="#c98a3e" stopOpacity={0} />
+              <stop offset="5%" stopColor="#845400" stopOpacity={0.22} />
+              <stop offset="95%" stopColor="#845400" stopOpacity={0} />
             </linearGradient>
           </defs>
-          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#efe7d6" />
-          <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fill: '#7a7368', fontSize: 11, fontFamily: 'JetBrains Mono, ui-monospace, monospace' }} />
-          <YAxis axisLine={false} tickLine={false} tick={{ fill: '#7a7368', fontSize: 11, fontFamily: 'JetBrains Mono, ui-monospace, monospace' }} />
-          <Tooltip formatter={(value, name) => [value, name === 'minutes' ? '学习分钟' : '专注分钟']} contentStyle={{ background: '#fffdf7', border: '1px solid #e5dccb', borderRadius: 6, fontSize: 12 }} />
-          <Area type="monotone" dataKey="minutes" name="minutes" stroke="#1c1916" fill="url(#minutes)" strokeWidth={2} />
+          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(94,94,92,0.18)" />
+          <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fill: '#454742', fontSize: 11, fontFamily: 'JetBrains Mono, ui-monospace, monospace' }} />
+          <YAxis axisLine={false} tickLine={false} tick={{ fill: '#454742', fontSize: 11, fontFamily: 'JetBrains Mono, ui-monospace, monospace' }} />
+          <Tooltip formatter={(value, name) => [value, name === 'minutes' ? '学习分钟' : '专注分钟']} contentStyle={{ background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(12px)', border: '1px solid rgba(255,255,255,0.6)', borderRadius: 12, fontSize: 12 }} />
+          <Area type="monotone" dataKey="minutes" name="minutes" stroke="#FFBF00" fill="url(#minutes)" strokeWidth={2}
+            style={{ filter: 'drop-shadow(0 0 8px rgba(255, 191, 0, 0.4))' }} />
           {hasFocus && (
-            <Area type="monotone" dataKey="focusMinutes" name="focusMinutes" stroke="#c98a3e" fill="url(#focusMinutes)" strokeWidth={2} strokeDasharray="4 2" />
+            <Area type="monotone" dataKey="focusMinutes" name="focusMinutes" stroke="#845400" fill="url(#focusMinutes)" strokeWidth={2} strokeDasharray="4 2" />
           )}
         </AreaChart>
       </ResponsiveContainer>

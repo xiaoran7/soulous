@@ -468,11 +468,18 @@ main.is-chat > * { max-width: none; }
   .dr-row-2, .dr-row-3 { grid-template-columns: 1fr; }
 }
 
+/* 面板基元：Luminous Ethereal 玻璃卡（上左亮边 + 下右雾边，24px 圆角） */
 .metric, .panel {
-  background: var(--paper);
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
+  background: var(--le-glass-fill);
+  -webkit-backdrop-filter: blur(var(--le-blur));
+  backdrop-filter: blur(var(--le-blur));
+  border-top: 1px solid var(--le-glass-border);
+  border-left: 1px solid var(--le-glass-border);
+  border-bottom: 1px solid var(--le-mist);
+  border-right: 1px solid var(--le-mist);
+  border-radius: 24px;
   padding: 18px 20px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.06);
 }
 .panel { padding: 22px 24px; }
 .panel.wide { grid-column: span 2; }
@@ -543,12 +550,18 @@ main.is-chat > * { max-width: none; }
   gap: 16px;
 }
 .hero-progress, .hero-pet {
-  background: var(--paper);
-  border: 1px solid var(--line);
-  border-radius: var(--r-lg);
+  background: var(--le-glass-fill);
+  -webkit-backdrop-filter: blur(var(--le-blur));
+  backdrop-filter: blur(var(--le-blur));
+  border-top: 1px solid var(--le-glass-border);
+  border-left: 1px solid var(--le-glass-border);
+  border-bottom: 1px solid var(--le-mist);
+  border-right: 1px solid var(--le-mist);
+  border-radius: 24px;
   padding: 24px 26px;
   position: relative;
   overflow: hidden;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.06);
 }
 .hero-progress {
   display: grid;
@@ -607,7 +620,6 @@ main.is-chat > * { max-width: none; }
   gap: 18px;
   align-items: center;
   text-align: left;
-  background: var(--paper);
   cursor: pointer;
   position: relative;
 }
@@ -679,9 +691,10 @@ main.is-chat > * { max-width: none; }
 .progress-ring svg { transform: rotate(-90deg); display: block; }
 .progress-ring-track { stroke: var(--line-2); }
 .progress-ring-fill {
-  stroke: var(--ink);
+  stroke: var(--le-amber);
   stroke-linecap: round;
   transition: stroke-dashoffset 0.5s ease;
+  filter: drop-shadow(0 0 8px rgba(255, 191, 0, 0.4));
 }
 .progress-ring-label {
   position: absolute;
@@ -728,12 +741,13 @@ main.is-chat > * { max-width: none; }
 .task-list.compact .task-card:first-child { border-top: 0; }
 .task-list.compact .task-card::before { display: none; }
 .task-list.compact .task-card:hover { background: var(--line-2); }
+/* 任务行卡：白雾圆角卡（design/stitch/soulous_2 Task Item，bg-white/95 + 16px 圆角） */
 .task-card {
   width: 100%;
   text-align: left;
-  background: var(--paper);
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--le-glass-border);
+  border-radius: 16px;
   padding: 14px 16px;
   display: grid;
   gap: 10px;
@@ -751,10 +765,11 @@ main.is-chat > * { max-width: none; }
   transition: background .12s ease;
 }
 .task-card.selected, .task-card:hover {
-  border-color: var(--ink-4);
-  background: var(--bg-elev);
+  border-color: rgba(255, 191, 0, 0.4);
+  background: #fff;
+  box-shadow: 0 4px 18px rgba(255, 179, 71, 0.18);
 }
-.task-card.selected::before, .task-card:hover::before { background: var(--amber); }
+.task-card.selected::before, .task-card:hover::before { background: var(--le-amber); }
 
 .task-row {
   display: flex;
@@ -897,14 +912,16 @@ main.is-chat > * { max-width: none; }
   transition: background .12s ease, color .12s ease, border-color .12s ease, transform .04s;
   white-space: nowrap;
 }
+/* 主按钮：琥珀胶囊 + 柔光（DESIGN.md Buttons/Primary） */
 .primary-button {
-  background: var(--ink);
-  color: var(--bg);
-  border-color: var(--ink);
+  background: var(--le-amber);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 4px 24px rgba(255, 179, 71, 0.4);
 }
-.primary-button:hover { background: var(--ink-2); border-color: var(--ink-2); }
+.primary-button:hover { background: var(--le-amber-soft); border-color: transparent; box-shadow: 0 4px 30px rgba(255, 179, 71, 0.55); }
 .primary-button:active { transform: translateY(1px); }
-.primary-button:disabled { background: var(--ink-4); border-color: var(--ink-4); color: var(--paper); cursor: not-allowed; }
+.primary-button:disabled { background: var(--ink-4); border-color: var(--ink-4); color: var(--paper); cursor: not-allowed; box-shadow: none; }
 
 .secondary-button {
   background: var(--paper);
@@ -1006,10 +1023,12 @@ main.is-chat > * { max-width: none; }
   transition: border-color .12s ease, background .12s ease, color .12s ease;
 }
 .chip:hover { border-color: var(--ink-3); color: var(--ink); }
+/* 激活 chip：琥珀微染 + 柔光（design/stitch/soulous_2 筛选条） */
 .chip.selected {
-  background: var(--ink);
-  border-color: var(--ink);
-  color: var(--bg);
+  background: rgba(255, 191, 0, 0.12);
+  border-color: rgba(255, 191, 0, 0.4);
+  color: var(--le-ink);
+  box-shadow: 0 0 10px rgba(255, 179, 71, 0.2);
 }
 .chip.small { padding: 2px 8px; font-size: 10.5px; }
 .chip-input {
@@ -2509,6 +2528,9 @@ textarea.code, .textarea.code { font-family: var(--mono); font-size: 12.5px; }
 .sr-enter-btn:disabled { opacity: 0.6; cursor: default; }
 
 /* ===== 沉浸态 ===== */
+/* ===== 沉浸态：Luminous Ethereal 玻璃风（design/stitch/soulous_3）=====
+   布局：顶部悬浮玻璃信息条 / 左下玻璃计时卡 / 底部居中玻璃控制坞 / 右下宠物玻璃圆。
+   场景背景只轻微压暗（0.22），可读性靠玻璃卡自身的白雾底 + 模糊。 */
 .immersive-room {
   position: relative;
   display: flex; flex-direction: column;
@@ -2517,104 +2539,134 @@ textarea.code, .textarea.code { font-family: var(--mono); font-size: 12.5px; }
   background-size: cover !important;
   background-position: center !important;
   overflow: hidden;
-  color: #fff;
+  color: var(--le-ink);
   box-shadow: var(--shadow-3);
   animation: immersiveFade 0.6s ease;
 }
 @keyframes immersiveFade { from { opacity: 0; } to { opacity: 1; } }
 
-/* 动态背景（自定义动图/视频）：视频铺底，半透明渐变压暗，内容浮于其上 */
+/* 动态背景（自定义动图/视频）：视频铺底，轻雾压暗，内容浮于其上 */
 .immersive-video-bg {
   position: absolute; inset: 0; width: 100%; height: 100%;
   object-fit: cover; z-index: 0;
 }
 .immersive-video-dim {
   position: absolute; inset: 0; z-index: 1;
-  background: linear-gradient(180deg, rgba(8,6,4,0.25) 0%, rgba(8,6,4,0.5) 100%);
+  background: linear-gradient(180deg, rgba(8,6,4,0.10) 0%, rgba(8,6,4,0.25) 100%);
 }
-.immersive-top, .immersive-center, .immersive-bottom { position: relative; z-index: 2; }
+.immersive-top, .immersive-body, .immersive-dock-wrap, .immersive-pet { position: relative; z-index: 2; }
 
+/* 顶部悬浮玻璃信息条 */
 .immersive-top {
-  display: flex; align-items: center; gap: 8px;
-  padding: 20px 24px;
+  display: flex; align-items: center; gap: 10px;
+  margin: 16px 16px 0;
+  padding: 10px 18px; border-radius: var(--r-pill);
   font-size: 13px; letter-spacing: 0.02em;
 }
 .immersive-fs-btn {
   margin-left: auto;
   display: inline-flex; align-items: center; gap: 6px;
   padding: 7px 14px; border-radius: var(--r-pill);
-  border: 1px solid rgba(255,255,255,0.28); background: rgba(0,0,0,0.28);
-  color: #fff; font-size: 12px; font-weight: 500; cursor: pointer;
-  backdrop-filter: blur(6px); transition: background 0.15s ease;
+  border: 1px solid var(--le-glass-border); background: var(--le-glass-fill);
+  color: var(--le-ink); font-size: 12px; font-weight: 600; cursor: pointer;
+  transition: background 0.15s ease, transform 0.15s ease;
 }
-.immersive-fs-btn:hover { background: rgba(0,0,0,0.5); }
-.immersive-scene-name { display: inline-flex; align-items: center; gap: 7px; font-weight: 600; text-shadow: 0 1px 6px rgba(0,0,0,0.5); }
-.immersive-status { opacity: 0.8; font-family: var(--mono); font-size: 11px; }
+.immersive-fs-btn:hover { background: var(--le-glass-fill-strong); }
+.immersive-fs-btn:active { transform: scale(0.95); }
+.immersive-scene-name { display: inline-flex; align-items: center; gap: 7px; font-weight: 700; }
+.immersive-status { color: var(--le-ink-soft); font-family: var(--mono); font-size: 11px; }
 
-.immersive-center {
-  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 18px; padding: 12px 24px;
+/* 左下计时卡（soulous_3 Timer Card：320px、28px 圆角、琥珀刻线、数字辉光） */
+.immersive-body {
+  flex: 1; display: flex; align-items: flex-end;
+  padding: 16px clamp(16px, 5vw, 64px) 20px;
 }
-.immersive-timer-wrap { position: relative; width: 260px; height: 260px; }
-.immersive-ring { position: absolute; inset: 0; }
-.immersive-timer-inner {
-  position: absolute; inset: 0; display: flex; flex-direction: column;
-  align-items: center; justify-content: center; gap: 6px;
+.immersive-timer-card {
+  width: min(340px, 100%);
+  border-radius: 28px; padding: 26px 28px;
+  display: flex; flex-direction: column; gap: 8px;
+  transition: transform 0.5s ease;
 }
+.immersive-timer-card:hover { transform: scale(1.02); }
+.immersive-timer-label {
+  font-family: var(--mono); font-size: 11px; font-weight: 600;
+  letter-spacing: 0.18em; color: var(--le-ink-soft);
+}
+.immersive-timer-rule { display: block; width: 48px; height: 1px; background: var(--le-amber); margin-bottom: 6px; }
 .immersive-time {
-  font-family: var(--serif); font-size: 62px; font-weight: 400; letter-spacing: -0.02em;
-  text-shadow: 0 2px 16px rgba(0,0,0,0.4); font-variant-numeric: tabular-nums;
+  font-size: 64px; font-weight: 800; letter-spacing: -0.04em; line-height: 1;
+  color: var(--le-ink); font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 15px rgba(255, 191, 0, 0.4);
 }
-.immersive-over { color: #ff8a7a; }
-.immersive-sub { font-family: var(--mono); font-size: 10px; letter-spacing: 0.14em; opacity: 0.8; }
-.immersive-elapsed { font-family: var(--mono); font-size: 12px; letter-spacing: 0.04em; opacity: 0.85; }
+.immersive-timer-card.is-running .immersive-time { animation: clockBreath 4s ease-in-out infinite; }
+@keyframes clockBreath { 0%, 100% { opacity: 1; } 50% { opacity: 0.82; } }
 .immersive-goal {
   display: flex; align-items: center; gap: 8px;
-  width: min(440px, 80%); padding: 10px 16px;
-  background: rgba(0,0,0,0.28); backdrop-filter: blur(6px);
-  border: 1px solid rgba(255,255,255,0.16); border-radius: var(--r-pill);
+  width: 100%; margin-top: 8px; padding: 9px 14px;
+  background: rgba(255, 255, 255, 0.45);
+  border: 1px solid var(--le-glass-border); border-radius: var(--r-pill);
+  color: var(--le-ink-soft);
 }
 .immersive-goal-input {
   flex: 1; background: transparent; border: none; outline: none;
-  color: #fff; font-size: 14px;
+  color: var(--le-ink); font-size: 13px;
 }
-.immersive-goal-input::placeholder { color: rgba(255,255,255,0.55); }
+.immersive-goal-input::placeholder { color: rgba(45, 41, 38, 0.45); }
 
-.immersive-bottom {
-  display: flex; flex-direction: column; gap: 16px;
-  padding: 18px 24px 24px;
-  background: linear-gradient(0deg, rgba(0,0,0,0.42), rgba(0,0,0,0));
+/* 底部居中玻璃控制坞：音量簇 | 操作簇 */
+.immersive-dock-wrap {
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  padding: 0 16px 28px;
+}
+.immersive-dock {
+  display: flex; align-items: center; justify-content: center; flex-wrap: wrap;
+  gap: 20px 28px; padding: 14px 32px; border-radius: var(--r-pill);
 }
 .immersive-audio {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 14px 28px;
-  max-width: 720px; width: 100%; margin: 0 auto;
+  display: flex; align-items: center; gap: 22px;
+  padding-right: 28px; border-right: 1px solid rgba(255, 255, 255, 0.5);
 }
-.immersive-audio .vol-label, .immersive-audio .vol-hint,
-.immersive-audio .vol-pct { color: rgba(255,255,255,0.92); }
-.immersive-audio .vol-hint { color: rgba(255,255,255,0.6); }
+.immersive-audio .vol-row { gap: 8px; }
+.immersive-audio .vol-head, .immersive-audio .vol-pct { display: none; }
+.immersive-audio .vol-main { flex: none; }
 .immersive-audio .vol-toggle {
-  background: rgba(255,255,255,0.14); border-color: rgba(255,255,255,0.22); color: #fff;
+  width: auto; height: auto; border: none; background: transparent;
+  color: var(--le-ink-soft); transition: color 0.15s ease;
 }
-.immersive-audio .vol-slider { accent-color: #fff; }
-.immersive-controls { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+.immersive-audio .vol-toggle:hover { color: var(--le-amber); }
+.immersive-audio .vol-slider { width: 96px; accent-color: var(--le-amber); }
+.immersive-controls { display: flex; gap: 26px; justify-content: center; align-items: center; }
 .im-btn {
-  display: inline-flex; align-items: center; gap: 8px;
-  padding: 11px 22px; border-radius: var(--r-pill);
-  border: 1px solid rgba(255,255,255,0.28); background: rgba(255,255,255,0.12);
-  color: #fff; font-size: 14px; font-weight: 500; cursor: pointer;
-  backdrop-filter: blur(6px);
-  transition: background 0.15s ease;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  background: transparent; border: none; padding: 0; cursor: pointer;
+  color: var(--le-ink-soft); font-size: 10px; font-weight: 600; letter-spacing: 0.05em;
+  transition: transform 0.15s ease, color 0.15s ease;
 }
-.im-btn:hover { background: rgba(255,255,255,0.22); }
+.im-btn:hover { transform: scale(1.1); color: var(--le-ink); }
+.im-btn:hover svg { color: var(--le-amber); }
+.im-btn:active { transform: scale(0.95); }
 .im-btn:disabled { opacity: 0.5; cursor: default; }
-.im-btn-primary { background: rgba(255,255,255,0.92); color: #1c1916; border-color: transparent; }
-.im-btn-primary:hover { background: #fff; }
-.im-btn-ghost { background: transparent; border-color: rgba(255,255,255,0.2); opacity: 0.8; }
-.immersive-error { text-align: center; color: #ffb3a8; font-size: 13px; margin: 0; }
+.im-btn-amber svg { color: #845400; }
+.im-btn-danger:hover svg { color: var(--danger, #ba1a1a); }
+.immersive-error {
+  margin: 0; padding: 8px 18px; border-radius: var(--r-pill);
+  background: rgba(255, 218, 214, 0.85); color: #93000a; font-size: 13px;
+  -webkit-backdrop-filter: blur(var(--le-blur)); backdrop-filter: blur(var(--le-blur));
+}
+
+/* 右下宠物玻璃圆（soulous_3 Pet Widget） */
+.immersive-pet {
+  position: absolute; right: 22px; bottom: 26px;
+  width: 84px; height: 84px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+}
 
 @media (max-width: 880px) {
   .studyroom-cols { grid-template-columns: 1fr; }
-  .immersive-audio { grid-template-columns: 1fr; }
+  .immersive-body { align-items: flex-end; padding-bottom: 12px; }
+  .immersive-audio { border-right: none; padding-right: 0; }
+  .immersive-dock { gap: 14px 18px; padding: 12px 20px; }
+  .immersive-pet { display: none; }
 }
 
 /* ===== 沉浸全屏：隐藏顶栏，侧边栏变抽屉 ===== */
@@ -2629,7 +2681,8 @@ textarea.code, .textarea.code { font-family: var(--mono); font-size: 12.5px; }
 }
 .app-shell.immersive.nav-open .sidebar { transform: none; }
 .app-shell.immersive .immersive-room { min-height: 100vh; border-radius: 0; }
-.app-shell.immersive .immersive-top { padding-left: 66px; }
+/* 给左上角抽屉把手让位（把手 fixed 在 14px 处，宽 40px） */
+.app-shell.immersive .immersive-top { margin-left: 66px; }
 
 .nav-drawer-handle {
   position: fixed; top: 14px; left: 14px; z-index: 70;
@@ -2640,16 +2693,6 @@ textarea.code, .textarea.code { font-family: var(--mono); font-size: 12.5px; }
 }
 .nav-drawer-handle:hover { background: rgba(0,0,0,0.52); }
 .nav-drawer-backdrop { position: fixed; inset: 0; z-index: 55; background: rgba(0,0,0,0.4); }
-
-/* ===== 正计时时钟 ===== */
-.immersive-clock { display: flex; flex-direction: column; align-items: center; gap: 8px; }
-.immersive-clock.is-running .immersive-time { animation: clockBreath 4s ease-in-out infinite; }
-@keyframes clockBreath { 0%, 100% { opacity: 1; } 50% { opacity: 0.82; } }
-.immersive-time {
-  font-family: var(--serif); font-size: 84px; font-weight: 400; letter-spacing: -0.02em;
-  text-shadow: 0 2px 20px rgba(0,0,0,0.45); font-variant-numeric: tabular-nums; line-height: 1;
-}
-.immersive-sub { font-family: var(--mono); font-size: 11px; letter-spacing: 0.16em; opacity: 0.8; }
 
 /* ===== 自定义场景卡 / 添加 ===== */
 .scene-card-add {
@@ -2703,8 +2746,8 @@ textarea.code, .textarea.code { font-family: var(--mono); font-size: 12.5px; }
 }
 .legend-item { display: inline-flex; align-items: center; gap: 6px; }
 .legend-item::before { content: ''; width: 16px; height: 3px; border-radius: 2px; display: inline-block; }
-.legend-item.study::before { background: var(--ink); }
-.legend-item.focus::before { background: var(--amber); }
+.legend-item.study::before { background: var(--le-amber); }
+.legend-item.focus::before { background: #845400; }
 
 /* daily review completion */
 .daily-review-hero .primary-button { flex-shrink: 0; white-space: nowrap; align-self: center; }
@@ -3568,6 +3611,19 @@ main::-webkit-scrollbar-thumb:hover { background: var(--ink-4); background-clip:
 .le-ghost-button:hover { background: var(--le-glass-fill-strong); }
 .le-ghost-button:active { transform: scale(0.96); }
 .le-primary-button.large, .le-ghost-button.large { padding: 13px 26px; font-size: 15px; }
+/* 应用内页微光底色：纯色背景上给玻璃卡一点可"透"的光晕 */
+.app-shell > main {
+  background:
+    radial-gradient(1100px 520px at 85% -10%, rgba(255, 191, 0, 0.10), transparent 60%),
+    radial-gradient(900px 480px at -10% 108%, rgba(255, 179, 71, 0.08), transparent 60%);
+}
+
+/* ===== 自习室设置态（玻璃化）===== */
+.sr-audio.glass-card, .sr-pomodoro.glass-card { border-radius: 24px; }
+
+/* 工作台复盘入口：悬停泛起琥珀微光 */
+.review-entry { transition: box-shadow 0.25s ease, transform 0.25s ease; }
+.review-entry:hover { box-shadow: 0 4px 30px rgba(255, 179, 71, 0.35); transform: translateY(-2px); }
 
 /* ===== 落地页（Luminous Ethereal 玻璃风）===== */
 .landing { position: relative; min-height: 100vh; color: var(--le-ink); display: flex; flex-direction: column; overflow-x: hidden; }
@@ -3643,12 +3699,21 @@ main::-webkit-scrollbar-thumb:hover { background: var(--ink-4); background-clip:
 }
 
 /* ===== 自习室：独享/共享切换 + 共享房间 ===== */
-.sr-mode-tabs { display: inline-flex; gap: 4px; padding: 4px; border: 1px solid var(--line); border-radius: 999px; margin-bottom: 16px; }
+/* 模式切换：玻璃胶囊 + 琥珀激活态（Luminous Ethereal） */
+.sr-mode-tabs {
+  display: inline-flex; gap: 4px; padding: 4px;
+  border: 1px solid var(--le-glass-border); border-radius: 999px; margin-bottom: 16px;
+  background: var(--le-glass-fill);
+  -webkit-backdrop-filter: blur(var(--le-blur)); backdrop-filter: blur(var(--le-blur));
+}
 .sr-mode-tabs button {
   border: 0; background: transparent; color: var(--ink-3);
   padding: 6px 16px; border-radius: 999px; font-size: 13px; cursor: pointer;
 }
-.sr-mode-tabs button.active { background: var(--ink); color: var(--bg); }
+.sr-mode-tabs button.active {
+  background: var(--le-amber); color: #fff;
+  box-shadow: 0 4px 24px rgba(255, 179, 71, 0.4);
+}
 .shared-room { max-width: 720px; }
 .shared-create { display: flex; gap: 10px; margin-top: 12px; }
 .shared-create input { flex: 1 1 auto; min-width: 0; }

@@ -97,7 +97,10 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (!response.ok) {
     throw new Error(await errorMessage(response));
   }
-  return response.json();
+  // 后端对"无数据"场景（如尚未领养宠物）返回 200 + 空体，直接 .json() 会抛
+  // "Unexpected end of JSON input" 导致整个 bootstrap 失败，这里把空体归一为 null
+  const text = await response.text();
+  return (text ? JSON.parse(text) : null) as T;
 }
 
 /**
