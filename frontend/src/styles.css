@@ -1411,7 +1411,11 @@ textarea.code, .textarea.code { font-family: var(--mono); font-size: 12.5px; }
   border-radius: inherit;
   transition: width .4s ease;
 }
-.stat-bar.tone-primary .stat-bar-track > span { background: var(--ink); }
+/* 经验条 = 琥珀渐变"宝石"元素（design/stitch/pet：Experience Bar + DESIGN.md Pets & Economy） */
+.stat-bar.tone-primary .stat-bar-track > span {
+  background: linear-gradient(90deg, var(--le-amber-soft), var(--le-amber));
+  box-shadow: 0 0 8px rgba(255, 191, 0, 0.45);
+}
 .stat-bar.tone-warm .stat-bar-track > span { background: var(--amber); }
 .stat-bar.tone-cool .stat-bar-track > span { background: var(--sage-deep); }
 
@@ -1521,11 +1525,25 @@ textarea.code, .textarea.code { font-family: var(--mono); font-size: 12.5px; }
   max-width: 100%;
 }
 
+/* 宠物展示：玻璃基座 + 琥珀辉光 + 缓浮（design/stitch/pet：Glass Stage / Pedestal） */
 .pet-avatar-frame {
   position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  padding-bottom: 18px;
+  animation: le-float 6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) { .pet-avatar-frame { animation: none; } }
+.pet-avatar-frame::before {
+  content: "";
+  position: absolute;
+  bottom: 2px; left: 50%; transform: translateX(-50%);
+  width: 150px; height: 22px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.4);
+  border: 1px solid var(--le-glass-border);
+  box-shadow: 0 10px 30px rgba(255, 179, 71, 0.25), 0 0 15px rgba(255, 255, 255, 0.5);
 }
 .pet-avatar-frame img {
   width: 140px;
@@ -1551,27 +1569,36 @@ textarea.code, .textarea.code { font-family: var(--mono); font-size: 12.5px; }
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
 }
+/* 动作钮 = 玻璃方块，悬停上浮（design/stitch/pet：Side Actions） */
 .pet-action {
   position: relative;
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  background: var(--bg-elev);
+  border-top: 1px solid var(--le-glass-border);
+  border-left: 1px solid var(--le-glass-border);
+  border-bottom: 1px solid var(--le-mist);
+  border-right: 1px solid var(--le-mist);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.4);
   color: var(--ink);
   min-height: 100px;
   padding: 10px 8px;
+  transition: transform 0.25s ease, background 0.25s ease, box-shadow 0.25s ease;
   display: grid;
   place-items: center;
   gap: 3px;
   text-align: center;
   transition: border-color .12s ease, background .12s ease;
 }
-.pet-action:hover, .pet-action.selected { border-color: var(--ink-3); background: var(--paper); }
-.pet-action.selected { background: color-mix(in oklab, var(--amber) 10%, var(--paper)); }
+.pet-action:hover { background: rgba(255, 255, 255, 0.6); transform: translateY(-3px); box-shadow: 0 8px 20px rgba(255, 179, 71, 0.18); }
+.pet-action.selected {
+  background: rgba(255, 191, 0, 0.12);
+  border-color: rgba(255, 191, 0, 0.4);
+  box-shadow: 0 0 10px rgba(255, 179, 71, 0.2);
+}
 .pet-action strong { font-size: 13px; font-weight: 500; }
 .pet-action span { font-family: var(--mono); color: var(--ink-3); font-size: 10px; letter-spacing: 0.04em; }
 /* 【锁定动作】未达解锁等级：置灰、禁用、右上角锁标 */
 .pet-action.locked { cursor: not-allowed; opacity: 0.5; }
-.pet-action.locked:hover { border-color: var(--line); background: var(--bg-elev); }
+.pet-action.locked:hover { background: rgba(255, 255, 255, 0.4); transform: none; box-shadow: none; }
 .pet-action.locked .pet-sprite { filter: grayscale(1); }
 .pet-action-lock {
   position: absolute;
@@ -1671,18 +1698,18 @@ textarea.code, .textarea.code { font-family: var(--mono); font-size: 12.5px; }
 /* =========================================================
    Reviews / feedback
    ========================================================= */
+/* 综合评分：琥珀大数字 + 玻璃底（design/stitch/soulous_7 详情头部） */
 .review-score {
-  background: linear-gradient(135deg,
-    color-mix(in oklab, var(--amber) 16%, var(--paper)),
-    color-mix(in oklab, var(--sage) 12%, var(--paper)));
-  color: var(--ink);
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
+  background: rgba(255, 191, 0, 0.1);
+  color: #845400;
+  border: 1px solid rgba(255, 191, 0, 0.35);
+  border-radius: 16px;
   padding: 14px 16px;
   font-family: var(--serif);
   font-weight: 400;
-  font-size: 22px;
+  font-size: 24px;
   letter-spacing: -0.01em;
+  text-shadow: 0 2px 10px rgba(255, 191, 0, 0.3);
 }
 .score-breakdown { display: flex; flex-wrap: wrap; gap: 6px; }
 .score-breakdown span {
@@ -1843,6 +1870,11 @@ textarea.code, .textarea.code { font-family: var(--mono); font-size: 12.5px; }
   font-weight: 400;
 }
 .profile-hero p { margin: 0; color: var(--ink-3); font-family: var(--mono); font-size: 11px; }
+/* 我的页头像：琥珀渐变光环（design/stitch/soulous_8 User Card） */
+.profile-hero .avatar-preview {
+  border-color: transparent;
+  box-shadow: 0 0 0 3px rgba(255, 191, 0, 0.45), 0 6px 20px rgba(255, 179, 71, 0.3);
+}
 .avatar-preview {
   width: 92px;
   height: 92px;
@@ -3014,9 +3046,13 @@ main::-webkit-scrollbar-thumb:hover { background: var(--ink-4); background-clip:
   word-break: break-word;
   box-shadow: 0 1px 0 rgba(0, 0, 0, 0.02);
 }
+/* DESIGN.md「Inputs & Chat」：用户气泡琥珀微染的暖玻璃，AI 气泡纯霜白玻璃 */
 .planner-chat-bubble.user {
-  background: var(--ink);
-  color: var(--bg);
+  background: rgba(255, 191, 0, 0.16);
+  color: var(--le-ink);
+  border: 1px solid rgba(255, 191, 0, 0.3);
+  -webkit-backdrop-filter: blur(var(--le-blur));
+  backdrop-filter: blur(var(--le-blur));
   border-bottom-right-radius: 4px;
 }
 .planner-chat-bubble.assistant {
@@ -3025,9 +3061,11 @@ main::-webkit-scrollbar-thumb:hover { background: var(--ink-4); background-clip:
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
-  background: var(--paper);
+  background: rgba(255, 255, 255, 0.65);
   color: var(--ink);
-  border: 1px solid var(--line);
+  border: 1px solid var(--le-glass-border);
+  -webkit-backdrop-filter: blur(var(--le-blur));
+  backdrop-filter: blur(var(--le-blur));
   border-bottom-left-radius: 4px;
 }
 .planner-chat-bubble.assistant.blocked {
@@ -3035,7 +3073,7 @@ main::-webkit-scrollbar-thumb:hover { background: var(--ink-4); background-clip:
   border-color: var(--danger-border);
 }
 .planner-chat-bubble.assistant.streaming {
-  background: color-mix(in oklab, var(--paper) 92%, var(--ink-4));
+  background: rgba(255, 255, 255, 0.5);
 }
 .planner-chat-cursor {
   display: inline-block;
@@ -3151,9 +3189,12 @@ main::-webkit-scrollbar-thumb:hover { background: var(--ink-4); background-clip:
   margin-top: 8px;
 }
 .metrics-card {
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.4);
+  border-top: 1px solid var(--le-glass-border);
+  border-left: 1px solid var(--le-glass-border);
+  border-bottom: 1px solid var(--le-mist);
+  border-right: 1px solid var(--le-mist);
+  border-radius: 16px;
   padding: 12px;
   display: flex;
   flex-direction: column;
@@ -3400,13 +3441,14 @@ main::-webkit-scrollbar-thumb:hover { background: var(--ink-4); background-clip:
   flex: 0 0 auto; width: 38px; height: 38px; border-radius: 10px; cursor: pointer;
   display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--line);
 }
-.chat-plus-btn { background: var(--bg-elev); color: var(--ink-2); }
-.chat-plus-btn:hover:not(:disabled) { background: var(--line-2); }
-.chat-send-btn { background: var(--amber); color: #2a2017; border-color: transparent; }
-.chat-send-btn:disabled, .chat-plus-btn:disabled { opacity: 0.5; cursor: default; }
+.chat-plus-btn { background: var(--le-glass-fill); color: var(--ink-2); border-color: var(--le-glass-border); }
+.chat-plus-btn:hover:not(:disabled) { background: var(--le-glass-fill-strong); }
+/* 发送钮：琥珀 + 柔光（DESIGN.md Buttons/Primary） */
+.chat-send-btn { background: var(--le-amber); color: #fff; border-color: transparent; box-shadow: 0 4px 18px rgba(255, 179, 71, 0.35); }
+.chat-send-btn:disabled, .chat-plus-btn:disabled { opacity: 0.5; cursor: default; box-shadow: none; }
 .chat-input-field {
   flex: 1; min-width: 0; height: 38px; padding: 0 14px; border-radius: 19px;
-  border: 1px solid var(--line); background: var(--bg-elev); color: var(--ink); font-size: 14px;
+  border: 1px solid var(--le-glass-border); background: var(--le-glass-fill); color: var(--ink); font-size: 14px;
 }
 
 .chat-welcome { flex: 1; display: flex; align-items: center; justify-content: center; padding: 24px; }
@@ -3498,16 +3540,25 @@ main::-webkit-scrollbar-thumb:hover { background: var(--ink-4); background-clip:
   gap: 12px;
 }
 .pet-market-card {
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
+  border-top: 1px solid var(--le-glass-border);
+  border-left: 1px solid var(--le-glass-border);
+  border-bottom: 1px solid var(--le-mist);
+  border-right: 1px solid var(--le-mist);
+  border-radius: 16px;
   padding: 14px 12px;
   display: grid;
   justify-items: center;
   gap: 6px;
   text-align: center;
-  background: var(--bg-elev);
+  background: rgba(255, 255, 255, 0.4);
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
 }
-.pet-market-card.active { border-color: var(--amber, #d9a441); background: color-mix(in oklab, var(--amber) 8%, var(--paper)); }
+.pet-market-card:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(255, 179, 71, 0.15); }
+.pet-market-card.active {
+  border-color: rgba(255, 191, 0, 0.4);
+  background: rgba(255, 191, 0, 0.1);
+  box-shadow: 0 0 10px rgba(255, 179, 71, 0.2);
+}
 .pet-market-frame { display: grid; place-items: center; height: 72px; }
 .pet-market-meta { display: inline-flex; align-items: center; gap: 6px; }
 .pet-market-meta strong { font-size: 14px; }
@@ -3519,15 +3570,29 @@ main::-webkit-scrollbar-thumb:hover { background: var(--ink-4); background-clip:
 
 /* ===== 我的页：数据概览 / 收藏 / 流水 ===== */
 .profile-stat-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+/* 数据砖：玻璃方块 + 发光图标圆（design/stitch/soulous_8 Stats Row） */
 .profile-stat {
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  padding: 12px 10px;
+  border-top: 1px solid var(--le-glass-border);
+  border-left: 1px solid var(--le-glass-border);
+  border-bottom: 1px solid var(--le-mist);
+  border-right: 1px solid var(--le-mist);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.4);
+  padding: 14px 10px;
   display: grid;
   justify-items: center;
-  gap: 2px;
+  gap: 4px;
   text-align: center;
   color: var(--ink-3);
+  transition: transform 0.25s ease;
+}
+.profile-stat:hover { transform: translateY(-2px); }
+.profile-stat svg {
+  width: 38px; height: 38px; padding: 10px;
+  border-radius: 50%;
+  background: rgba(255, 191, 0, 0.15);
+  color: #845400;
+  box-shadow: 0 0 15px rgba(255, 191, 0, 0.2);
 }
 .profile-stat strong { font-size: 20px; font-family: var(--serif); color: var(--ink); }
 .profile-stat span { font-size: 11px; }
@@ -3540,7 +3605,12 @@ main::-webkit-scrollbar-thumb:hover { background: var(--ink-4); background-clip:
   justify-items: center;
   gap: 2px;
 }
-.profile-collection-item.active { border-color: var(--amber, #d9a441); background: color-mix(in oklab, var(--amber) 8%, var(--paper)); }
+/* 出战中的收藏宠物：琥珀描边 + 柔光（design/stitch/soulous_8 Active Pet） */
+.profile-collection-item.active {
+  border-color: rgba(255, 191, 0, 0.5);
+  background: rgba(255, 191, 0, 0.1);
+  box-shadow: 0 0 20px rgba(255, 191, 0, 0.15);
+}
 .profile-collection-item span { font-family: var(--mono); font-size: 10px; color: var(--ink-3); }
 .profile-ledger { display: grid; gap: 6px; }
 .profile-ledger-row {
@@ -3620,6 +3690,29 @@ main::-webkit-scrollbar-thumb:hover { background: var(--ink-4); background-clip:
 
 /* ===== 自习室设置态（玻璃化）===== */
 .sr-audio.glass-card, .sr-pomodoro.glass-card { border-radius: 24px; }
+
+/* ===== 成绩页：学期小结玻璃条（design/stitch/soulous_6）===== */
+.grade-sem-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 14px; flex-wrap: wrap;
+  border-radius: 16px; padding: 12px 16px; margin: 4px 0 10px;
+}
+.grade-sem-name {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-weight: 600; font-size: 14px; color: var(--le-ink);
+}
+.grade-sem-name svg { color: #845400; }
+.grade-sem-stats { display: flex; align-items: center; gap: 22px; }
+.grade-sem-stats > div { display: grid; gap: 1px; justify-items: end; }
+.grade-sem-stats span {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--ink-3);
+}
+.grade-sem-stats strong { font-size: 19px; font-weight: 700; color: var(--le-ink); line-height: 1.2; }
+.grade-sem-gpa strong {
+  color: #845400;
+  text-shadow: 0 2px 10px rgba(255, 191, 0, 0.3);
+}
 
 /* 工作台复盘入口：悬停泛起琥珀微光 */
 .review-entry { transition: box-shadow 0.25s ease, transform 0.25s ease; }
