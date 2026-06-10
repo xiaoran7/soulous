@@ -16,7 +16,7 @@ import { api } from '../api';
 import { PetSprite } from '../PetSprite';
 import type { PetAnimationState } from '../PetSprite';
 import type { ExpLog, Pet } from '../types';
-import { Empty, StatBar, animationForPet } from '../components/shared';
+import { Empty, StatBar, animationForPet, clampAnimation, PET_ACTION_UNLOCK_LEVEL } from '../components/shared';
 import { PetMarket } from '../components/PetMarket';
 
 /** 【懒加载经验趋势图】仅在滚动到图表区域时加载 */
@@ -62,15 +62,15 @@ const petEventLabels: Record<string, string> = {
  * 未达解锁等级的动作在预览区显示为锁定态，不可选中。
  */
 const PET_ACTIONS: { state: PetAnimationState; label: string; description: string; unlockLevel: number }[] = [
-  { state: 'idle', label: '待机', description: '日常陪伴', unlockLevel: 1 },
-  { state: 'waiting', label: '等待', description: '耐心等你', unlockLevel: 1 },
-  { state: 'waving', label: '招呼', description: '挥手问好', unlockLevel: 3 },
-  { state: 'failed', label: '低落', description: '需要补充', unlockLevel: 5 },
-  { state: 'running', label: '奔跑', description: '元气满满', unlockLevel: 8 },
-  { state: 'running-right', label: '右奔', description: '向右冲刺', unlockLevel: 12 },
-  { state: 'running-left', label: '左奔', description: '向左冲刺', unlockLevel: 16 },
-  { state: 'jumping', label: '跳跃', description: '兴奋雀跃', unlockLevel: 22 },
-  { state: 'review', label: '复核', description: '专注审阅', unlockLevel: 30 }
+  { state: 'idle', label: '待机', description: '日常陪伴', unlockLevel: PET_ACTION_UNLOCK_LEVEL.idle },
+  { state: 'waiting', label: '等待', description: '耐心等你', unlockLevel: PET_ACTION_UNLOCK_LEVEL.waiting },
+  { state: 'waving', label: '招呼', description: '挥手问好', unlockLevel: PET_ACTION_UNLOCK_LEVEL.waving },
+  { state: 'failed', label: '低落', description: '需要补充', unlockLevel: PET_ACTION_UNLOCK_LEVEL.failed },
+  { state: 'running', label: '奔跑', description: '元气满满', unlockLevel: PET_ACTION_UNLOCK_LEVEL.running },
+  { state: 'running-right', label: '右奔', description: '向右冲刺', unlockLevel: PET_ACTION_UNLOCK_LEVEL['running-right'] },
+  { state: 'running-left', label: '左奔', description: '向左冲刺', unlockLevel: PET_ACTION_UNLOCK_LEVEL['running-left'] },
+  { state: 'jumping', label: '跳跃', description: '兴奋雀跃', unlockLevel: PET_ACTION_UNLOCK_LEVEL.jumping },
+  { state: 'review', label: '复核', description: '专注审阅', unlockLevel: PET_ACTION_UNLOCK_LEVEL.review }
 ];
 
 /**
@@ -112,8 +112,16 @@ export function PetPage({ pet: initialPet, onFed, onRefresh }: { pet: Pet | null
   const [marketOpen, setMarketOpen] = useState(false);
   /** 【宠物动画状态】根据宠物数据自动计算的动画状态 */
   const petState = animationForPet(pet);
-  /** 【预览动画状态】用户手动选择的预览状态，默认跟随宠物状态 */
-  const [previewState, setPreviewState] = useState<PetAnimationState>(petState);
+  /** 【当前等级】驱动动作解锁判断 */
+  const petLevel = pet?.level ?? 1;
+  /**
+   * 【安全的展示动画状态】宠物的自然状态可能映射到尚未解锁的动作
+   * （例如 Lv2 心情 HAPPY 会映射到 Lv3 才解锁的 waving）。此时回退到始终可用的 idle，
+   * 避免主展示区播放未解锁的动作。
+   */
+  const safePetState = clampAnimation(petState, petLevel);
+  /** 【预览动画状态】用户手动选择的预览状态，默认跟随宠物状态（已钳制到已解锁动作） */
+  const [previewState, setPreviewState] = useState<PetAnimationState>(safePetState);
   /** 【成长事件日志】宠物的经验获取历史，初值从模块缓存 seed */
   const [logs, setLogs] = useState<ExpLog[]>(() => petLogsCache ?? []);
   const [loadingLogs, setLoadingLogs] = useState(petLogsCache === null);
@@ -122,8 +130,6 @@ export function PetPage({ pet: initialPet, onFed, onRefresh }: { pet: Pet | null
   const [logsError, setLogsError] = useState('');
   /** 【状态文案】根据当前宠物状态获取对应的标题和描述 */
   const statusCopy = petStatusCopy[pet?.status ?? 'NORMAL'] ?? petStatusCopy.NORMAL;
-  /** 【当前等级】驱动动作解锁判断 */
-  const petLevel = pet?.level ?? 1;
   /** 【已解锁动作数】用于动作区小标题展示 X/9 */
   const unlockedCount = PET_ACTIONS.filter((a) => a.unlockLevel <= petLevel).length;
 
@@ -157,8 +163,8 @@ export function PetPage({ pet: initialPet, onFed, onRefresh }: { pet: Pet | null
    */
   React.useEffect(() => { setPet(initialPet); }, [initialPet]);
 
-  /** 【同步预览状态】当宠物状态变化时，更新预览动画 */
-  useEffect(() => { setPreviewState(petState); }, [petState]);
+  /** 【同步预览状态】当宠物状态变化时，更新预览动画（钳制到已解锁动作，未解锁回退 idle） */
+  useEffect(() => { setPreviewState(safePetState); }, [safePetState]);
 
   /**
    * 【加载成长事件日志】获取宠物的经验获取历史
@@ -223,9 +229,6 @@ export function PetPage({ pet: initialPet, onFed, onRefresh }: { pet: Pet | null
               <div><span>阶段</span><strong>{pet?.growthStage ?? 'EGG'}</strong></div>
               <div><span>状态</span><strong>{pet?.status ?? 'NORMAL'}</strong></div>
             </div>
-            <p className="muted small" style={{ margin: '4px 0 0', textAlign: 'center' }}>
-              换形象请前往宠物市场领养 / 购买其它品种。
-            </p>
           </div>
 
           {/* 【反馈列】状态文案 + 属性进度条 + 喂食 */}

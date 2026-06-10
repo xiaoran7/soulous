@@ -136,6 +136,31 @@ export function animationForPet(pet: Pet | null): PetAnimationState {
 }
 
 /**
+ * 【动作解锁等级表】每个宠物动画动作对应的解锁等级（唯一数据源）。
+ * 宠物页动作预览、首页宠物卡片、侧边栏迷你卡片共用，确保"未解锁动作不播放"行为一致。
+ * idle / waiting 在 Lv1 即可用，最后一个动作（review）恰好在满级 Lv30 解锁。
+ */
+export const PET_ACTION_UNLOCK_LEVEL: Record<PetAnimationState, number> = {
+  idle: 1,
+  waiting: 1,
+  waving: 3,
+  failed: 5,
+  running: 8,
+  'running-right': 12,
+  'running-left': 16,
+  jumping: 22,
+  review: 30
+};
+
+/**
+ * 【钳制到已解锁动作】给定动画状态在当前等级尚未解锁时回退到始终可用的 idle，
+ * 避免在任意展示位（卡片/侧边栏/详情页）播放尚未解锁的动作。
+ */
+export function clampAnimation(state: PetAnimationState, level: number): PetAnimationState {
+  return (PET_ACTION_UNLOCK_LEVEL[state] ?? 1) <= level ? state : 'idle';
+}
+
+/**
  * 【导航按钮组件】
  * 侧边栏中的导航项，支持激活状态高亮。
  *
@@ -212,7 +237,9 @@ export function PetCard({ pet, activeTaskCount = 0, reviewTaskCount = 0 }: {
   reviewTaskCount?: number;
 }) {
   const percent = pet ? Math.round((pet.currentExp / pet.nextLevelExp) * 100) : 0;
-  const petState = activeTaskCount > 0 ? 'running' : reviewTaskCount > 0 ? 'review' : animationForPet(pet);
+  const rawState = activeTaskCount > 0 ? 'running' : reviewTaskCount > 0 ? 'review' : animationForPet(pet);
+  /** 【钳制到已解锁动作】未解锁的动作（如低等级的 running/review）回退 idle，不在卡片上播放 */
+  const petState = clampAnimation(rawState, pet?.level ?? 1);
   return (
     <section className="panel pet-card">
       <div className="panel-title"><h2>宠物 <em style={{ fontStyle: 'italic', color: 'var(--ink-3)' }}>成长</em></h2><PawPrint size={16} /></div>
@@ -332,7 +359,7 @@ export function ProgressRing({ value, max, size = 128, stroke = 12, label, subla
 export function SidebarPet({ pet, onOpen }: { pet: Pet | null; onOpen: () => void }) {
   const percent = pet ? Math.min(100, Math.round((pet.currentExp / Math.max(pet.nextLevelExp, 1)) * 100)) : 0;
   const mood = petStatusLabel[pet?.status ?? 'NORMAL'] ?? '安静陪伴';
-  const animState = animationForPet(pet);
+  const animState = clampAnimation(animationForPet(pet), pet?.level ?? 1);
   return (
     <button className="sidebar-pet" onClick={onOpen} style={{ textAlign: 'left', cursor: 'pointer' }}>
       <div className="sidebar-pet-top">

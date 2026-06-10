@@ -30,7 +30,7 @@ Turn fragmented learning into a quantifiable, traceable, and positive feedback c
     $$\text{Score} = \text{CosineSimilarity} \times 0.5^{\frac{\text{AgeDays}}{\text{HalfLife}}}$$
     (Default half-life of 90 days). Indexes cover `GOAL_MEMORY`, `SESSION_SUMMARY`, `COMPLETED_TASK`, and `DAILY_REVIEW`. The memory is retrieved and injected into system prompts during AI Reviews (`AiService.review`), task follow-ups (`generateQuestion`), goal decomposition (`decompose`), and daily reviews (`DailyReviewService`), giving the AI a personalized "memory" of the user.
   - Context-aware Content Moderation (bidirectional input/output wind control: PASS/FLAG/BLOCK verdicts, violating records saved to `moderation_log`).
-- **Pet, Economy & Analytics**: **Pet market** (species catalog; new users adopt a free starter, then buy more with coins and switch the active pet — each pet levels independently). Experience curve to max Lv30 with level-gated actions, mood + check-in-streak multipliers, gentle inactivity decay. **Coins** earned from tasks/focus/check-ins (`coin_ledger`). **Daily check-in** with streak rewards, **daily email reminders** for missed check-ins. Customizable avatars, spritesheet animations ([`frontend/public/pets/`](frontend/public/pets/)). Interactive dashboard for daily metrics, 7-day trends, category distributions; "My" page shows coins / streak / pet collection / coin ledger.
+- **Pet, Economy & Analytics**: **Pet market** (species catalog; new users adopt a free starter, then buy more with coins and switch the active pet — each pet levels independently). Experience curve to max Lv30 with level-gated actions, mood + check-in-streak multipliers, gentle inactivity decay. **Coins** earned from tasks/focus/check-ins (`coin_ledger`). **Daily check-in** with streak rewards, **daily email reminders** for missed check-ins. Spritesheet animations ([`frontend/public/pets/`](frontend/public/pets/)). Interactive dashboard for daily metrics, 7-day trends, category distributions; "My" page shows coins / streak / pet collection / coin ledger.
 - **Admin Dashboard**: Site-wide submissions queue, manual override of AI audit results (approve / reject / request additions), appeal handling, admin user provisioning, and role assignment. All operations logged in `admin_audit_log`.
 - **Notification Center**: AI review events, appeal statuses, and other alerts logged to `notification`. Real-time delivery via SSE (`GET /api/notifications/stream`) on the frontend, falling back to 60s polling. Optional email notification sink (`soulous.notification.email.enabled`).
 
@@ -72,8 +72,8 @@ Subsequent accounts can be registered through the frontend or provisioned by exi
 ## Verification & Testing
 
 ```bash
-cd backend && mvn test         # Backend Unit / Integration Tests (185 test cases)
-cd frontend && npm test        # Frontend Vitest (15 test cases)
+cd backend && mvn test         # Backend Unit / Integration Tests (243 test cases)
+cd frontend && npm test        # Frontend Vitest (41 test cases)
 cd frontend && npm run build   # Frontend Production Build
 cd frontend && npm run test:e2e  # Playwright End-to-End Tests (requires backend running)
 ```

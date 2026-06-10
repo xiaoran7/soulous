@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>宠物中心 - Soulous</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&amp;family=Manrope:wght@600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-container-highest": "#e5e2e1",
+                        "on-surface-variant": "#454742",
+                        "surface-container-low": "#f7f3f2",
+                        "tertiary": "#605e5f",
+                        "surface-container": "#f1edec",
+                        "surface": "#fcf8f7",
+                        "secondary-fixed": "#ffddb6",
+                        "tertiary-container": "#fffafb",
+                        "on-tertiary": "#ffffff",
+                        "on-secondary-fixed-variant": "#643f00",
+                        "on-primary": "#ffffff",
+                        "secondary-container": "#feb246",
+                        "inverse-surface": "#313030",
+                        "primary-fixed": "#e4e2de",
+                        "glass-fill": "rgba(255, 255, 255, 0.4)",
+                        "surface-tint": "#5e5e5c",
+                        "ink-text": "#2D2926",
+                        "inverse-primary": "#c8c6c3",
+                        "surface-bright": "#fcf8f7",
+                        "mist-gray": "#E5E1DA",
+                        "surface-dim": "#ddd9d8",
+                        "primary": "#5e5e5c",
+                        "on-tertiary-fixed-variant": "#484647",
+                        "error": "#ba1a1a",
+                        "on-background": "#1c1b1b",
+                        "on-error-container": "#93000a",
+                        "background": "#fcf8f7",
+                        "tertiary-fixed": "#e6e1e2",
+                        "on-primary-fixed-variant": "#474744",
+                        "on-secondary": "#ffffff",
+                        "outline": "#767872",
+                        "primary-fixed-dim": "#c8c6c3",
+                        "tertiary-fixed-dim": "#c9c5c6",
+                        "surface-container-lowest": "#ffffff",
+                        "surface-container-high": "#ebe7e6",
+                        "inverse-on-surface": "#f4f0ef",
+                        "secondary": "#845400",
+                        "amber-highlight": "#FFBF00",
+                        "on-primary-fixed": "#1b1c1a",
+                        "surface-variant": "#e5e2e1",
+                        "on-error": "#ffffff",
+                        "on-secondary-container": "#6f4600",
+                        "primary-container": "#fdfbf7",
+                        "error-container": "#ffdad6",
+                        "on-primary-container": "#747471",
+                        "glass-border": "rgba(255, 255, 255, 0.6)",
+                        "on-tertiary-container": "#757374",
+                        "outline-variant": "#c6c7c0",
+                        "on-surface": "#1c1b1b",
+                        "on-secondary-fixed": "#2a1800",
+                        "secondary-fixed-dim": "#ffb95a",
+                        "on-tertiary-fixed": "#1c1b1c"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "container-max": "1440px",
+                        "unit": "8px",
+                        "margin-desktop": "64px",
+                        "card-gap": "32px",
+                        "gutter": "24px"
+                    },
+                    "fontFamily": {
+                        "body-md": ["Hanken Grotesk"],
+                        "body-lg": ["Hanken Grotesk"],
+                        "headline-lg": ["Manrope"],
+                        "label-md": ["Hanken Grotesk"],
+                        "headline-md": ["Manrope"],
+                        "display-lg": ["Manrope"],
+                        "caption": ["Hanken Grotesk"]
+                    },
+                    "fontSize": {
+                        "body-md": ["16px", { "lineHeight": "1.6", "fontWeight": "400" }],
+                        "body-lg": ["18px", { "lineHeight": "1.6", "fontWeight": "400" }],
+                        "headline-lg": ["32px", { "lineHeight": "1.2", "fontWeight": "600" }],
+                        "label-md": ["14px", { "lineHeight": "1.2", "letterSpacing": "0.05em", "fontWeight": "600" }],
+                        "headline-md": ["24px", { "lineHeight": "1.3", "fontWeight": "600" }],
+                        "display-lg": ["48px", { "lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "caption": ["12px", { "lineHeight": "1.4", "fontWeight": "500" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .bg-gradient-custom {
+            background: linear-gradient(135deg, #fdfbf7 0%, #fee8d1 100%);
+        }
+        
+        /* Floating animations */
+        @keyframes float-slow {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+        .animate-float-slow {
+            animation: float-slow 6s ease-in-out infinite;
+        }
+        
+        @keyframes pulse-glow {
+            0%, 100% { opacity: 0.5; transform: scale(0.95) translate(-50%, -50%); }
+            50% { opacity: 0.8; transform: scale(1.05) translate(-50%, -50%); }
+        }
+        .animate-pulse-glow {
+            animation: pulse-glow 4s ease-in-out infinite;
+        }
+
+        /* Ambient Orbs */
+        .ambient-orb {
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(80px);
+            z-index: 0;
+            pointer-events: none;
+        }
+        .orb-1 { width: 400px; height: 400px; background: rgba(255, 179, 71, 0.15); top: -10%; left: -10%; }
+        .orb-2 { width: 500px; height: 500px; background: rgba(254, 178, 70, 0.1); bottom: -20%; right: -10%; }
+        .orb-3 { width: 300px; height: 300px; background: rgba(255, 255, 255, 0.4); top: 40%; left: 50%; transform: translate(-50%, -50%); }
+    </style>
+</head>
+<body class="bg-gradient-custom min-h-screen text-on-surface overflow-x-hidden selection:bg-amber-highlight selection:text-white">
+<!-- Ambient Background Elements -->
+<div class="ambient-orb orb-1"></div>
+<div class="ambient-orb orb-2"></div>
+<div class="ambient-orb orb-3"></div>
+<!-- TopNavBar Shared Component -->
+<nav class="fixed top-0 left-0 right-0 z-50 flex justify-between items-center px-8 h-16 max-w-container-max mx-auto bg-glass-fill dark:bg-glass-fill rounded-full mt-4 mx-margin-desktop backdrop-blur-xl border-t-[1.5px] border-l-[1.5px] border-glass-border shadow-[0_0_15px_rgba(255,179,71,0.15)] shadow-lg hidden md:flex">
+<!-- Logo -->
+<div class="text-headline-md font-headline-md font-bold text-ink-text dark:text-mist-gray">
+            Soulous
+        </div>
+<!-- Navigation Links -->
+<ul class="flex items-center gap-8 font-label-md text-label-md">
+<li>
+<a class="text-on-surface-variant dark:text-surface-variant font-medium hover:bg-glass-fill transition-all duration-300 px-4 py-2 rounded-full" href="#">
+                    自习室
+                </a>
+</li>
+<li>
+<a class="text-on-surface-variant dark:text-surface-variant font-medium hover:bg-glass-fill transition-all duration-300 px-4 py-2 rounded-full" href="#">
+                    工作台
+                </a>
+</li>
+<li>
+<a class="text-on-surface-variant dark:text-surface-variant font-medium hover:bg-glass-fill transition-all duration-300 px-4 py-2 rounded-full" href="#">
+                    任务
+                </a>
+</li>
+<li>
+<a class="text-on-surface-variant dark:text-surface-variant font-medium hover:bg-glass-fill transition-all duration-300 px-4 py-2 rounded-full" href="#">
+                    AI 拆解
+                </a>
+</li>
+</ul>
+<!-- Trailing Actions -->
+<div class="flex items-center gap-4">
+<!-- Trailing Primary Action (The exact string from JSON is "宠物市场", but we are treating this page as related. However, the nav still shows it as a button per prompt and JSON) -->
+<button class="bg-amber-highlight text-white font-label-md text-label-md px-6 py-2 rounded-full hover:shadow-[0_0_20px_rgba(255,191,0,0.4)] transition-all duration-300 active:scale-95 text-amber-highlight font-bold relative after:content-[''] after:absolute after:-bottom-1 after:left-1/2 after:-translate-x-1/2 after:w-1 after:h-1 after:bg-amber-highlight after:rounded-full">
+                宠物市场
+            </button>
+<button aria-label="个人中心" class="w-10 h-10 rounded-full bg-white/50 border border-white/60 flex items-center justify-center hover:bg-white/80 transition-all duration-300 active:scale-95 text-primary dark:text-inverse-primary">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">person</span>
+</button>
+</div>
+</nav>
+<!-- Main Content Canvas -->
+<main class="relative z-10 pt-32 pb-20 px-8 max-w-container-max mx-auto min-h-screen flex flex-col md:flex-row items-center justify-center gap-card-gap">
+<!-- Center Pet Display Area -->
+<div class="flex-1 flex flex-col items-center justify-center max-w-2xl w-full">
+<!-- Pet Animation Area -->
+<div class="relative w-[300px] h-[320px] flex items-center justify-center mb-8 animate-float-slow">
+<!-- Glowing pedestal base -->
+<div class="absolute bottom-0 left-1/2 w-64 h-16 bg-gradient-to-t from-amber-highlight/20 to-transparent blur-xl animate-pulse-glow origin-bottom"></div>
+<!-- The Pedestal (Glass Stage) -->
+<div class="absolute bottom-4 left-1/2 -translate-x-1/2 w-48 h-8 bg-white/30 backdrop-blur-md rounded-[100%] border border-white/60 shadow-[0_10px_30px_rgba(255,179,71,0.2)]"></div>
+<div class="absolute bottom-5 left-1/2 -translate-x-1/2 w-40 h-6 bg-white/40 backdrop-blur-lg rounded-[100%] border border-white/80 shadow-[0_0_15px_rgba(255,255,255,0.5)]"></div>
+<!-- Placeholder for Pet -->
+<div class="relative z-10 w-full h-full border-2 border-dashed border-outline-variant/50 rounded-2xl flex items-center justify-center bg-white/10 backdrop-blur-sm">
+<span class="font-headline-md text-headline-md text-tertiary">宠物动画区域</span>
+</div>
+</div>
+<!-- Pet Status Card -->
+<div class="w-full max-w-md bg-white/70 backdrop-blur-2xl rounded-3xl p-8 border-t-[1.5px] border-l-[1.5px] border-glass-border border-r border-b border-mist-gray shadow-[0_20px_40px_-10px_rgba(0,0,0,0.05)] relative overflow-hidden">
+<!-- Inner glow -->
+<div class="absolute -top-10 -right-10 w-32 h-32 bg-amber-highlight/10 rounded-full blur-2xl"></div>
+<div class="relative z-10">
+<div class="flex justify-between items-end mb-6">
+<div>
+<h1 class="font-display-lg text-display-lg text-on-surface mb-1">飞雪</h1>
+<span class="font-label-md text-label-md text-secondary-container px-3 py-1 bg-secondary-fixed/30 rounded-full">等级 Lv12</span>
+</div>
+<!-- Status Pills -->
+<div class="flex flex-col gap-2 items-end">
+<div class="flex items-center gap-1.5 bg-surface/50 px-3 py-1.5 rounded-full border border-white/50">
+<span class="material-symbols-outlined text-[16px] text-amber-highlight" style="font-variation-settings: 'FILL' 1;">mood</span>
+<span class="font-caption text-caption text-on-surface-variant">心情：愉悦</span>
+</div>
+<div class="flex items-center gap-1.5 bg-surface/50 px-3 py-1.5 rounded-full border border-white/50">
+<span class="material-symbols-outlined text-[16px] text-primary" style="font-variation-settings: 'FILL' 1;">restaurant</span>
+<span class="font-caption text-caption text-on-surface-variant">饱腹度：80%</span>
+</div>
+</div>
+</div>
+<!-- Experience Bar -->
+<div class="space-y-2">
+<div class="flex justify-between items-center font-label-md text-label-md">
+<span class="text-on-surface-variant">经验值</span>
+<span class="text-secondary">2400 / 3000</span>
+</div>
+<div class="w-full h-3 bg-surface-container-highest rounded-full overflow-hidden border border-white/40 shadow-inner">
+<div class="h-full bg-gradient-to-r from-amber-highlight to-[#FFBF00] rounded-full relative" style="width: 80%;">
+<!-- Shimmer effect -->
+<div class="absolute top-0 left-0 right-0 h-1/2 bg-white/30 rounded-t-full"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Right Side Actions (SideNav-like, but customized for page intent) -->
+<div class="md:w-32 flex flex-col gap-4 shrink-0">
+<!-- Active/Available Action -->
+<button class="group w-full aspect-square bg-white/40 backdrop-blur-xl rounded-2xl border-t-[1.5px] border-l-[1.5px] border-glass-border shadow-lg flex flex-col items-center justify-center gap-2 hover:bg-white/60 hover:-translate-y-1 transition-all duration-300 relative overflow-hidden">
+<div class="absolute inset-0 bg-amber-highlight/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+<span class="material-symbols-outlined text-4xl text-amber-highlight" style="font-variation-settings: 'FILL' 1;">restaurant</span>
+<span class="font-label-md text-label-md text-on-surface">喂食</span>
+</button>
+<button class="group w-full aspect-square bg-white/40 backdrop-blur-xl rounded-2xl border-t-[1.5px] border-l-[1.5px] border-glass-border shadow-lg flex flex-col items-center justify-center gap-2 hover:bg-white/60 hover:-translate-y-1 transition-all duration-300 relative overflow-hidden">
+<div class="absolute inset-0 bg-amber-highlight/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+<span class="material-symbols-outlined text-4xl text-secondary-container" style="font-variation-settings: 'FILL' 0;">sports_esports</span>
+<span class="font-label-md text-label-md text-on-surface">玩耍</span>
+</button>
+<!-- Locked Actions -->
+<div class="w-full aspect-square bg-surface-container-highest/30 backdrop-blur-md rounded-2xl border border-white/20 flex flex-col items-center justify-center gap-2 relative opacity-60 cursor-not-allowed">
+<span class="material-symbols-outlined absolute top-3 right-3 text-sm text-tertiary">lock</span>
+<span class="material-symbols-outlined text-4xl text-tertiary" style="font-variation-settings: 'FILL' 0;">sanitizer</span>
+<span class="font-label-md text-label-md text-tertiary">洗澡</span>
+</div>
+<div class="w-full aspect-square bg-surface-container-highest/30 backdrop-blur-md rounded-2xl border border-white/20 flex flex-col items-center justify-center gap-2 relative opacity-60 cursor-not-allowed">
+<span class="material-symbols-outlined absolute top-3 right-3 text-sm text-tertiary">lock</span>
+<span class="material-symbols-outlined text-4xl text-tertiary" style="font-variation-settings: 'FILL' 0;">bedtime</span>
+<span class="font-label-md text-label-md text-tertiary">休息</span>
+</div>
+</div>
+</main>
+</body></html>

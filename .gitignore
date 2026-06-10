@@ -57,3 +57,4 @@ frontend/tsconfig.tsbuildinfo
 .tmp.driveupload/
 .claude_screenshots/
 .claude/
+.design/

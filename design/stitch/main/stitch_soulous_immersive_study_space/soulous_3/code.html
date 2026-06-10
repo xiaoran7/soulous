@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Soulous 自习室 - 沉浸式专注</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&amp;family=Hanken+Grotesk:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "background": "#fcf8f7",
+                    "amber-highlight": "#FFBF00",
+                    "on-surface": "#1c1b1b",
+                    "on-tertiary-container": "#757374",
+                    "secondary": "#845400",
+                    "inverse-primary": "#c8c6c3",
+                    "surface-container-low": "#f7f3f2",
+                    "on-primary": "#ffffff",
+                    "inverse-on-surface": "#f4f0ef",
+                    "on-secondary-fixed": "#2a1800",
+                    "on-primary-container": "#747471",
+                    "primary-container": "#fdfbf7",
+                    "outline": "#767872",
+                    "on-secondary-fixed-variant": "#643f00",
+                    "primary": "#5e5e5c",
+                    "on-tertiary-fixed-variant": "#484647",
+                    "surface-container-lowest": "#ffffff",
+                    "surface-dim": "#ddd9d8",
+                    "mist-gray": "#E5E1DA",
+                    "tertiary-fixed-dim": "#c9c5c6",
+                    "on-error": "#ffffff",
+                    "tertiary-fixed": "#e6e1e2",
+                    "outline-variant": "#c6c7c0",
+                    "error": "#ba1a1a",
+                    "surface-tint": "#5e5e5c",
+                    "tertiary": "#605e5f",
+                    "on-tertiary": "#ffffff",
+                    "primary-fixed": "#e4e2de",
+                    "error-container": "#ffdad6",
+                    "surface-variant": "#e5e2e1",
+                    "surface-container": "#f1edec",
+                    "on-secondary-container": "#6f4600",
+                    "inverse-surface": "#313030",
+                    "surface": "#fcf8f7",
+                    "on-error-container": "#93000a",
+                    "on-secondary": "#ffffff",
+                    "surface-container-high": "#ebe7e6",
+                    "tertiary-container": "#fffafb",
+                    "secondary-container": "#feb246",
+                    "on-tertiary-fixed": "#1c1b1c",
+                    "on-background": "#1c1b1b",
+                    "glass-fill": "rgba(255, 255, 255, 0.4)",
+                    "secondary-fixed": "#ffddb6",
+                    "surface-bright": "#fcf8f7",
+                    "ink-text": "#2D2926",
+                    "glass-border": "rgba(255, 255, 255, 0.6)",
+                    "primary-fixed-dim": "#c8c6c3",
+                    "on-surface-variant": "#454742",
+                    "surface-container-highest": "#e5e2e1",
+                    "on-primary-fixed": "#1b1c1a",
+                    "secondary-fixed-dim": "#ffb95a",
+                    "on-primary-fixed-variant": "#474744"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "gutter": "24px",
+                    "card-gap": "32px",
+                    "margin-desktop": "64px",
+                    "unit": "8px",
+                    "container-max": "1440px"
+            },
+            "fontFamily": {
+                    "headline-md": ["Manrope"],
+                    "display-lg": ["Manrope"],
+                    "caption": ["Hanken Grotesk"],
+                    "label-md": ["Hanken Grotesk"],
+                    "body-md": ["Hanken Grotesk"],
+                    "body-lg": ["Hanken Grotesk"],
+                    "headline-lg": ["Manrope"]
+            },
+            "fontSize": {
+                    "headline-md": ["24px", {"lineHeight": "1.3", "fontWeight": "600"}],
+                    "display-lg": ["48px", {"lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "caption": ["12px", {"lineHeight": "1.4", "fontWeight": "500"}],
+                    "label-md": ["14px", {"lineHeight": "1.2", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                    "body-md": ["16px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                    "body-lg": ["18px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                    "headline-lg": ["32px", {"lineHeight": "1.2", "fontWeight": "600"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.25);
+            backdrop-filter: blur(20px);
+            border-top: 1px solid rgba(255, 255, 255, 0.4);
+            border-left: 1px solid rgba(255, 255, 255, 0.4);
+            border-bottom: 1px solid rgba(229, 225, 218, 0.4);
+            border-right: 1px solid rgba(229, 225, 218, 0.4);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.1);
+        }
+        .amber-glow {
+            box-shadow: 0 0 20px rgba(255, 191, 0, 0.2);
+        }
+        .timer-glow {
+            text-shadow: 0 0 15px rgba(255, 191, 0, 0.4);
+        }
+        input[type=range] {
+            -webkit-appearance: none;
+            background: rgba(255, 255, 255, 0.3);
+            height: 4px;
+            border-radius: 2px;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 12px;
+            width: 12px;
+            border-radius: 50%;
+            background: #FFBF00;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(255, 191, 0, 0.5);
+        }
+        .pixel-pet {
+            image-rendering: pixelated;
+        }</style>
+</head>
+<body class="bg-background overflow-hidden h-screen w-screen relative font-body-md text-on-surface">
+<!-- Full-screen Ambient Background -->
+<div class="absolute inset-0 z-0 scale-105">
+<img alt="Window view of snowy mountains with warm sunlight and a steaming coffee mug on the wooden ledge" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC3JHcmgVoi8MoL5z88Dth9MES8tnCuRdjYA8jHF_o3EQyEtmgdFU2gzzmWsxsg3xQ2zYWwcSfuR5mYHtD3uYVq4ARJj8_ad4uFbwkIt8Vh5tM8rfJCW0t1Zj7sZXa4KKMJsPVwaYfyza6_U0IRbuLZ2c1qP_OrdP-zCG6oxrjwaD_VRZHsUTDkW_EdrmSyfNNvLmglqjzY24ZIAHygx4rMBJkhiVyJjdq9Kf-22zWsXWmK_usX6lPuTEkKkyjhG5iAvrTv2KUrixQ"/>
+<div class="absolute inset-0 bg-black/5"></div>
+</div>
+<!-- Top Navigation Bar -->
+<header class="fixed top-0 w-full rounded-b-xl bg-glass-fill backdrop-blur-md text-on-surface border-b border-glass-border shadow-[0_0_15px_rgba(255,191,0,0.15)] z-50">
+<div class="flex justify-between items-center px-gutter py-4 w-full max-w-container-max mx-auto">
+<!-- Brand Logo -->
+<div class="font-headline-md text-headline-md font-bold text-on-surface tracking-tight">
+                Soulous 自习室
+            </div>
+<!-- Navigation Links -->
+<nav class="hidden md:flex items-center gap-8 font-label-md text-label-md">
+<a class="text-on-surface-variant hover:text-on-surface transition-colors" href="#">场景</a>
+<a class="text-on-surface-variant hover:text-on-surface transition-colors" href="#">音乐</a>
+<a class="text-on-surface-variant hover:text-on-surface transition-colors" href="#">计划</a>
+</nav>
+<!-- Actions -->
+<div class="flex items-center gap-4">
+<button class="px-6 py-2 rounded-full glass-card text-label-md font-label-md hover:bg-white/40 transition-all active:scale-95">
+                    沉浸模式
+                </button>
+<button class="px-6 py-2 rounded-full bg-on-surface text-white text-label-md font-label-md hover:opacity-90 transition-all active:scale-95">
+                    退出
+                </button>
+</div>
+</div>
+</header>
+<!-- Main Content Area (Focused) -->
+<main class="relative z-10 w-full h-full max-w-container-max mx-auto flex items-center px-margin-desktop">
+<!-- Timer Card (Bottom Left Placement) -->
+<div class="absolute bottom-32 left-margin-desktop">
+<div class="glass-card p-8 rounded-[28px] w-[320px] flex flex-col items-center gap-4 hover:scale-[1.02] transition-transform duration-500">
+<div class="w-full flex flex-col items-start gap-1">
+<span class="font-label-md text-label-md text-on-surface/70 uppercase tracking-widest">专注中</span>
+<div class="h-[1px] w-12 bg-amber-highlight mb-2"></div>
+</div>
+<h1 class="font-display-lg text-[64px] font-extrabold text-on-surface timer-glow tracking-tighter">49:42</h1>
+<div class="w-full space-y-2">
+<div class="flex justify-between font-label-md text-label-md text-on-surface/60">
+<span>本节进度</span>
+<span>1%</span>
+</div>
+<div class="w-full h-1 bg-white/20 rounded-full overflow-hidden">
+<div class="h-full bg-amber-highlight w-[1%] shadow-[0_0_8px_rgba(255,191,0,0.6)]"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Right Side Decor/Ambient Indicators (Optional) -->
+<div class="absolute right-margin-desktop top-1/2 -translate-y-1/2 flex flex-col gap-card-gap">
+<!-- Quiet Decorative Element -->
+</div>
+</main>
+<!-- Floating Bottom Navigation & Controls -->
+<div class="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-6">
+<!-- Bottom Controls Glass Bar -->
+<div class="bg-glass-fill backdrop-blur-xl border border-glass-border rounded-full px-10 py-4 flex items-center gap-10 min-w-[600px] shadow-[0_20px_50px_rgba(0,0,0,0.1)]">
+<!-- Audio Sliders Cluster -->
+<div class="flex items-center gap-8 border-r border-white/20 pr-10">
+<!-- Music Slider -->
+<div class="flex items-center gap-3 group">
+<span class="material-symbols-outlined text-on-surface/70 group-hover:text-amber-highlight transition-colors">music_note</span>
+<input class="w-24 accent-amber-highlight" max="100" min="0" type="range" value="45"/>
+</div>
+<!-- Ambient Slider -->
+<div class="flex items-center gap-3 group">
+<span class="material-symbols-outlined text-on-surface/70 group-hover:text-amber-highlight transition-colors">filter_drama</span>
+<input class="w-24 accent-amber-highlight" max="100" min="0" type="range" value="60"/>
+</div>
+</div>
+<!-- Playback Controls -->
+<div class="flex items-center gap-8">
+<button class="flex flex-col items-center gap-1 group transition-all hover:scale-110 active:scale-95" title="Pause">
+<span class="material-symbols-outlined text-[28px] text-on-surface/70 group-hover:text-amber-highlight">pause_circle</span>
+<span class="font-label-md text-[10px] text-on-surface/50 group-hover:text-on-surface">Pause</span>
+</button>
+<button class="flex flex-col items-center gap-1 group transition-all hover:scale-110 active:scale-95" title="Skip">
+<span class="material-symbols-outlined text-[28px] text-on-surface/70 group-hover:text-amber-highlight">skip_next</span>
+<span class="font-label-md text-[10px] text-on-surface/50 group-hover:text-on-surface">Skip</span>
+</button>
+<button class="flex flex-col items-center gap-1 group transition-all hover:scale-110 active:scale-95" title="Reset">
+<span class="material-symbols-outlined text-[28px] text-on-surface/70 group-hover:text-amber-highlight">restart_alt</span>
+<span class="font-label-md text-[10px] text-on-surface/50 group-hover:text-on-surface">Reset</span>
+</button>
+<button class="flex flex-col items-center gap-1 group transition-all hover:scale-110 active:scale-95" title="End">
+<span class="material-symbols-outlined text-[28px] text-on-surface/70 group-hover:text-error">stop_circle</span>
+<span class="font-label-md text-[10px] text-on-surface/50 group-hover:text-on-surface">End</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Bottom Right Pet Widget -->
+<div class="fixed bottom-8 z-50 flex flex-col items-center gap-2 right-8">
+<div class="relative glass-card rounded-full flex items-center justify-center p-2 cursor-pointer group hover:amber-glow transition-all w-20 h-20">
+<div class="pixel-pet w-10 h-10 bg-contain bg-center bg-no-repeat" data-alt="A small, cute pixel art animal character with warm yellow tones and expressive eyes, sitting comfortably in a circle. The character is designed in a retro gaming aesthetic, looking friendly and supportive for a study companion. The background is a translucent glass circle." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuD7hVLWOntVkRA1YlmQbncnNLpOfN9dxP1hQVvJELVubeAfw8kPZTvPY9gZiKGapKcCmJDxuYl6MiajQPg2FywTrg2jyJg8RSKLk-mW3gV2jH2cJmhExcHhAzEc6-RJhoAV0uF01TuwzDnVegTagG5qURAAUAP24dul1My-yVmXNHbJS9v97WgsT-W-gveWGRG9nczFjpNixj3tLfeyMhMWY_5impi2-hql-a0hMR1wR_aK3rLZ35JFQjN_wsl5pZtBvrkogaPe-ro'); filter: drop-shadow(0 0 5px rgba(255,191,0,0.3));"></div>
+<div class="absolute -bottom-1 -right-1 w-6 h-6 bg-amber-highlight text-on-surface rounded-full flex items-center justify-center shadow-md scale-0 group-hover:scale-100 transition-transform">
+<span class="material-symbols-outlined text-sm font-bold">add</span>
+</div>
+</div>
+</div>
+<!-- Lightweight Atmospheric Interaction Script -->
+<script>
+        // Simple timer logic simulation
+        let seconds = 2982; // 49:42
+        const timerDisplay = document.querySelector('h1');
+        
+        setInterval(() => {
+            if (seconds > 0) {
+                seconds--;
+                const mins = Math.floor(seconds / 60);
+                const secs = seconds % 60;
+                timerDisplay.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+            }
+        }, 1000);
+
+        // Hover audio feedback or visual micro-interactions
+        const buttons = document.querySelectorAll('button');
+        buttons.forEach(btn => {
+            btn.addEventListener('mouseenter', () => {
+                // Subtle interaction logic if needed
+            });
+        });
+    </script>
+</body></html>

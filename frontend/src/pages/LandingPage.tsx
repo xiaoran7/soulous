@@ -2,6 +2,7 @@
  * 【落地页】LandingPage
  * 未登录访问时展示的营销首页：品牌 + 功能亮点 + 行动召唤（开始使用 / 登录）。
  * 真实功能页全程鉴权，点击 CTA 才进入登录/注册。
+ * 视觉：Luminous Ethereal 玻璃拟态（Stitch 重构，设计稿见 design/stitch/soulous_1）。
  */
 import React from 'react';
 import { Bot, CalendarRange, Coins, PawPrint, Sparkles, Timer } from 'lucide-react';
@@ -19,35 +20,50 @@ const FEATURES = [
 export function LandingPage({ onStart }: { onStart: (mode: 'login' | 'register') => void }) {
   return (
     <div className="landing">
-      <header className="landing-nav">
+      {/* 整屏清晨窗景背景（复用自习室场景图） */}
+      <div className="landing-bg" aria-hidden="true">
+        <img src="/studyroom/morning-window.jpg" alt="" />
+      </div>
+
+      {/* 悬浮玻璃胶囊导航 */}
+      <header className="landing-nav glass-card">
         <div className="brand"><span className="brand-mark" aria-hidden="true" /> Soulous <em>灵魂</em></div>
+        <nav className="landing-links" aria-hidden="true">
+          <span>场景</span><span>音乐</span><span>计划</span>
+        </nav>
         <div className="landing-nav-actions">
-          <button className="text-button" onClick={() => onStart('login')}>登录</button>
-          <button className="primary-button" onClick={() => onStart('register')}>开始使用</button>
+          <button className="le-ghost-button" onClick={() => onStart('login')}>登录</button>
+          <button className="le-primary-button" onClick={() => onStart('register')}>开始使用</button>
         </div>
       </header>
 
       <section className="landing-hero">
-        <div className="landing-hero-copy">
-          <p className="page-eyebrow">Study · Grow · Together</p>
-          <h1>把每一次学习<br /><em>凭证</em>，变成<em>成长</em>反馈</h1>
+        <div className="landing-hero-card glass-card le-float">
+          <p className="landing-eyebrow">FOCUS · LEARN · GROW</p>
+          <h1>开启你的<br />清晨自习室</h1>
           <p className="landing-sub">
-            任务打卡、AI 初审、分层经验和宠物养成，都在一个轻量工作台里闭环。
-            完成学习赚金币，陪伴宠物一起升级。
+            选择场景、音乐与节奏，把一天最清醒的时间留给真正重要的学习。
+            任务打卡、AI 初审、金币与宠物养成，在一个工作台里闭环。
           </p>
           <div className="landing-cta">
-            <button className="primary-button large" onClick={() => onStart('register')}>免费开始</button>
-            <button className="secondary-button large" onClick={() => onStart('login')}>已有账号登录</button>
+            <button className="le-primary-button large" onClick={() => onStart('register')}>开始学习 →</button>
+            <button className="le-ghost-button large" onClick={() => onStart('login')}>已有账号登录</button>
           </div>
         </div>
-        <div className="landing-hero-pet">
-          <PetSprite state="waving" size={180} />
+
+        {/* 散点装饰玻璃片（仅宽屏） */}
+        <div className="landing-scatter" aria-hidden="true">
+          <div className="glass-card landing-chip landing-chip-coffee le-float">☕ 晨间咖啡已备好</div>
+          <div className="glass-card landing-chip landing-chip-goal">
+            <div><span>今日专注目标</span><strong>120 min</strong></div>
+            <div className="landing-goal-bar"><i style={{ width: '45%' }} /></div>
+          </div>
         </div>
       </section>
 
       <section className="landing-features">
         {FEATURES.map((f) => (
-          <div className="landing-feature" key={f.title}>
+          <div className="glass-card landing-feature" key={f.title}>
             <div className="landing-feature-icon">{f.icon}</div>
             <strong>{f.title}</strong>
             <p>{f.body}</p>
@@ -55,10 +71,15 @@ export function LandingPage({ onStart }: { onStart: (mode: 'login' | 'register')
         ))}
       </section>
 
-      <footer className="landing-footer">
-        <span>Soulous · 学习打卡 × 宠物成长</span>
+      <footer className="landing-footer glass-card">
+        <span>Soulous · 为你打造纯净的数字自习空间</span>
         <button className="text-button" onClick={() => onStart('register')}>开始使用 →</button>
       </footer>
+
+      {/* 右下角漂浮宠物 */}
+      <button className="landing-pet glass-card amber-glow le-float" onClick={() => onStart('register')} title="和飞雪一起开始">
+        <PetSprite state="waving" size={64} />
+      </button>
     </div>
   );
 }

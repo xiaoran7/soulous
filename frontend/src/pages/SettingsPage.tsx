@@ -275,7 +275,6 @@ export function SettingsPage({ user, onUpdated, onPetUpdated, prefs, onPrefsChan
               onChange={(e) => onPrefsChange({ ...prefs, showSidebarPet: e.target.checked })}
             />
           </label>
-          <p className="muted small" style={{ margin: 0 }}>偏好保存在本设备浏览器，更换设备需重新设置。</p>
         </div>
       </section>
 
@@ -289,9 +288,7 @@ export function SettingsPage({ user, onUpdated, onPetUpdated, prefs, onPrefsChan
             {showPw ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
           </button>
         </div>
-        {!showPw ? (
-          <p className="muted small" style={{ margin: 0 }}>定期更换密码更安全。点右上角「修改密码」展开表单。</p>
-        ) : (
+        {showPw && (
           <form className="stack-form" onSubmit={submitPassword} autoComplete="off">
             <label className="field-label">
               <span>当前密码</span>
@@ -326,7 +323,6 @@ export function SettingsPage({ user, onUpdated, onPetUpdated, prefs, onPrefsChan
         <div className="danger-row">
           <div className="danger-copy">
             <strong>退出所有设备</strong>
-            <span className="muted small">撤销全部登录令牌。本设备与其它所有设备都会被强制登出，需要重新登录。</span>
           </div>
           {confirmLogoutAll ? (
             <div className="row-actions">

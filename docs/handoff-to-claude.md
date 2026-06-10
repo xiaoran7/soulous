@@ -59,7 +59,7 @@ frontend http://localhost:5173
 
 测试：
 
-- `backend/src/test/java/com/soulous/`：238 个测试，0 失败。具体数量以 `mvn test` 输出为准（每加功能会增长）。
+- `backend/src/test/java/com/soulous/`：243 个测试，0 失败。具体数量以 `mvn test` 输出为准（每加功能会增长）。
 
 前端（`frontend/src/`）：
 
@@ -98,16 +98,16 @@ npm run dev
 
 ```bash
 cd backend
-mvn test          # 当前 50 测试
+mvn test
 
 cd ../frontend
-npm test          # 当前 14 测试 (Vitest)
+npm test          # Vitest
 npm run build     # 应无 chunk size 警告
 ```
 
 最近一次本地验证（2026-06-09）：
 
-- `mvn test`：238 通过。
+- `mvn test`：243 通过。
 - `npm test`：41 通过。
 - 数值以实跑为准，每加功能会增长。
 
