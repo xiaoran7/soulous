@@ -12,9 +12,14 @@ backend-run.log
 backend/scratch/
 scratch/
 
-# Python cache (resource scripts)
+# Python cache (resource scripts) + agent-service runtime
 __pycache__/
 *.pyc
+.pytest_cache/
+agent-service/.venv/
+agent-service/data/
+agent-service/.env
+agent-service/*.db
 
 # Node / Vite
 frontend/node_modules/

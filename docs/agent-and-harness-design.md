@@ -2,6 +2,10 @@
 
 This document outlines the architectural proposal and roadmap for integrating autonomous AI Agents and a dedicated Evaluation Harness into the **Soulous** platform. These additions will evolve Soulous from an AI-assisted gamified learning system into an agent-centric educational ecosystem with built-in evaluation capabilities.
 
+> **实现现状（2026-06-11 更新）**：agent 方向已以新形态落地——「通用骨架 agent」（LangGraph 状态机）
+> 适配为 `agent-service/` 边车，承接聊天/审核/复盘三条 AI 链路与实体化 RAG，
+> 设计与偏差见 `docs/agent-service-integration-plan.md`。以下为 2026-06-08 的历史记录：
+>
 > **实现现状（2026-06-08）**：本文是前瞻**提案**，**已不代表当前方向**。其中的 "Study Companion Agent" 曾以一个独立的 Python/FastAPI agent 服务（Anima，自写编排 loop + 多层记忆 + 人格）落地，Soulous 经 `companion` 包 HTTP 调用它做陪伴聊天 + 委托宠物审核；该方向于 **2026-06-08 整体下线**——`com.soulous.companion` 包、前端陪伴页、Anima 服务全部移除，任务审核回归纯本地 `AiService`（见 `docs/ai-review-rules.md`）。产品重心已转向 Flutter Android 专注锁 App（见 agent 记忆 `mobile-direction`）。本文第 2 节的 ReAct/RAG/工具构想、第 3 节评估 Harness 仅作历史概念参考。
 
 ---

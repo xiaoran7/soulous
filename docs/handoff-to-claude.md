@@ -2,7 +2,7 @@
 
 这份文档给接手 Soulous MVP 的 Claude 使用。请先读本文件，再按需查看 `README.md`、`docs/api.md`、`docs/architecture.md`、`docs/database.md`、`docs/user-guide.md`。
 
-最近一次更新：2026-06-09。
+最近一次更新：2026-06-11。
 
 > **注意**：本文件容易过时。**真实状态以 `git status` + `mvn test` + `npm test` 实跑结果为准**，本文件只描述设计意图与高层结构。
 
@@ -63,9 +63,9 @@ frontend http://localhost:5173
 
 前端（`frontend/src/`）：
 
-- `main.tsx`：应用外壳；按 page 调度子页面，含全局侧边栏收起/展开（localStorage `soulous.sidebar.collapsed.v1`，收起后主区自适应铺满）。顶栏已精简（移除通知铃铛与用户卡片，仅工作台保留「新建任务」）。
+- `main.tsx`：应用外壳；按 page 调度子页面。侧边栏已删除——导航是**顶部悬浮玻璃胶囊条**（自习室·计划·宠物·我的 四入口，「计划/我的」为下拉簇）；全局背景是 `studyroom/SceneBackdrop`（当前自习室场景照片铺满全 App）。自习室专注中为全屏沉浸态：导航条移出屏幕，鼠标移到屏幕顶部约 90px 内自动滑回。
 - `pages/`：`LandingPage`（未登录营销页）、`AuthScreen`、`Dashboard`（含每日签到卡）、`TasksPage`、`TimetablePage`、`ChatPage`（AI 拆解对话）、`DailyReviewPage`、`PetPage`（含 `components/PetMarket` 市场弹层）、`FocusPage`（独享 + `studyroom/SharedRooms` 共享）、`ProfilePage`（金币/打卡/收藏/流水）、`SettingsPage`、`AdminPage`。
-- `components/shared.tsx`：跨页面共享组件（NavButton、Metric、TaskRow、PetCard、Empty、ProgressRing、SidebarPet、animationForPet 等）。
+- `components/shared.tsx`：跨页面共享组件（NavButton、NavCluster 导航下拉簇、NavPet 顶栏宠物芯片、Metric、TaskRow、PetCard、Empty、ProgressRing、animationForPet 等）。
 - `components/TrendChart.tsx`：Recharts 趋势图，独立 chunk，被 Dashboard 和 DailyReviewPage 通过 `React.lazy` 懒加载。
 - `api.ts`：API 客户端。
 - `types.ts`：前端类型。
@@ -205,4 +205,4 @@ cd backend && mvn test
 cd ../frontend && npm test && npm run build
 ```
 
-仓库目前仍是 staged-but-not-committed 的初始状态，`git status` 中会看到大量 `A` / `AM` 文件，这是正常的。不要随意 reset 或 checkout，避免丢掉已有实现。
+当前工作分支是 `xiaorana`（UI 玻璃拟态重构系列提交在此分支），主分支为 `main`。工作区常有未提交的进行中改动，不要随意 reset 或 checkout，避免丢掉已有实现。

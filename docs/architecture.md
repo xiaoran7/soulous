@@ -12,10 +12,12 @@ Soulous 采用前后端分离：
   ▼
 nginx（端口 80/443）
   ├── /api/**, /uploads/** → Spring Boot :8080
+  │                            │ （soulous.agent.enabled=true 时）
+  │                            └── agent-service :8100（Python LangGraph 认知边车，仅内网）
   └── /*, /assets/**       → React SPA (dist/)
 ```
 
-- **frontend**：React 19 + Vite + TypeScript，SPA。未登录先看营销**落地页**（点 CTA 才进登录/注册）。页面路由：工作台（含每日签到卡）/ 任务 / 课表（固定本学期，成绩/考试页内分学期下拉）/ 复盘（含近 7 天趋势，原统计页已并入）/ 自习室（独享沉浸 + 共享在线房间）/ AI 拆解 / 宠物（含市场领养/购买/切换）/ 我的（金币/打卡/收藏/流水）/ 管理后台。
+- **frontend**：React 19 + Vite + TypeScript，SPA。未登录先看营销**落地页**（点 CTA 才进登录/注册）。UI 为「Luminous Ethereal」玻璃拟态：全局场景照片背景（SceneBackdrop）+ 顶部悬浮玻璃导航（无侧边栏），登录后默认落在自习室主页。页面路由：工作台（含每日签到卡）/ 任务 / 课表（固定本学期，成绩/考试页内分学期下拉）/ 复盘（含近 7 天趋势，原统计页已并入）/ 自习室（独享沉浸 + 共享在线房间）/ AI 拆解 / 宠物（含市场领养/购买/切换）/ 我的（金币/打卡/收藏/流水）/ 管理后台。
 - **backend**：Spring Boot 3 + Java 21 + JPA + Spring Security，提供业务 REST API；feature-package 拆分（`com.soulous.{admin,auth,focus,goal,task,pet,...}`）。
 - **DB**：默认 H2 文件库（`backend/data/soulous.mv.db`），可切 MySQL。**Flyway 管理迁移**（h2 / mysql 各一套，`db/migration/{vendor}/V*.sql`）。
 
@@ -73,7 +75,8 @@ nginx（端口 80/443）
 | `moderation` | 内容审核（fast-path + LLM，默认关） |
 | `rag` | 历史打卡 RAG（embedding + cosine + 时间衰减，默认关） |
 | `storage` | 本地 / S3 兼容双后端，上传压缩 + 夜间 GC |
-| `ai` | 可插拔 LlmService：mock / anthropic / openai-compatible；LRU+TTL 缓存；失败遥测 |
+| `ai` | 可插拔 LlmService：mock / anthropic / openai-compatible；LRU+TTL 缓存；失败遥测（现为 agent 不可用时的降级路径） |
+| `agent` | **agent-service 边车对接**（2026-06-11）：`AgentClient`（HTTP/1.1 + SSE）把聊天/审核/复盘路由到 Python LangGraph 认知服务（仓库 `agent-service/`）；`/internal/**` 供 agent 回调（工具+moderation fast-path，service token 鉴权）；RAG 写入点异步推送 agent 向量库；`soulous.agent.enabled=false` 或 agent 故障时全部链路自动回退本地。详见 `agent-service/README.md` 与 `docs/agent-service-integration-plan.md` |
 
 ---
 
