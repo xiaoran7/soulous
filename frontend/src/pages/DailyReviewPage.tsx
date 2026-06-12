@@ -152,9 +152,10 @@ export function DailyReviewPage({ summary, review, onReviewChange }: {
   const completionPercent = Math.round((completed / completionRingMax) * 100);
 
   return (
-    <div className="daily-review-page">
-      {/* ===== 【复盘首屏】整宽横幅：日期 / 标题 / 摘要 + 生成按钮 ===== */}
-      <section className="panel daily-review-hero">
+    // 固定外框：顶部横幅锁定，AI 报告区在 .dr-scroll 内部滚动（用户确认「AI 报告区内部滚动」）
+    <div className="dr-fixed">
+      {/* ===== 【复盘首屏】整宽横幅：日期 / 标题 / 摘要 + 生成按钮（固定不滚动）===== */}
+      <section className="panel daily-review-hero dr-top">
         <div className="daily-review-hero-copy">
           <p className="page-eyebrow" style={{ marginBottom: 6 }}>{review?.date ?? new Date().toISOString().slice(0, 10)} · Reflection</p>
           <h2>{review?.title ?? (loading ? '正在生成今日复盘' : '今日复盘')}</h2>
@@ -167,6 +168,8 @@ export function DailyReviewPage({ summary, review, onReviewChange }: {
         </button>
       </section>
 
+      {/* ===== AI 报告滚动区：解读 / 指标 / 图表 / 洞察 / 宠物反馈 ===== */}
+      <div className="dr-scroll">
       {/* ===== 【错误提示】展示错误信息和重试按钮 ===== */}
       {error && (
         <section className="panel">
@@ -268,6 +271,7 @@ export function DailyReviewPage({ summary, review, onReviewChange }: {
         <div className="panel-title"><h2>宠物 <em style={{ fontStyle: 'italic', color: 'var(--ink-3)' }}>反馈</em></h2><PawPrint size={16} /></div>
         <p className="pet-message">"{review?.petMessage ?? '宠物正在等待今天的学习凭证。'}"</p>
       </section>
+      </div>
     </div>
   );
 }
