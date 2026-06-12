@@ -2,7 +2,6 @@
  * 【账号设置页面】SettingsPage
  * 归在「账号」导航组下，集中账号级操作：
  * - 账号资料：修改昵称、邮箱、头像（从原「资料」页迁移而来，编辑统一收口到这里）
- * - 应用偏好：登录默认页、侧边栏宠物显隐（纯前端 localStorage，即时生效）
  * - 修改密码：旧密码 + 新密码 + 确认（走 /api/auth/password，改后会踢掉其它会话）
  *   —— 默认收起，避免一进设置就甩出三个密码框；点「修改密码」才展开。
  * - 危险操作：退出所有设备（撤销全部刷新令牌，当前会话也会失效）
@@ -10,33 +9,24 @@
  * 设计思路：单列堆叠多个 panel，敏感/低频操作（改密、危险操作）下沉。
  */
 import React, { useEffect, useRef, useState } from 'react';
-import { KeyRound, SlidersHorizontal, ShieldAlert, Save, LogOut, Upload, UserCog, ChevronDown, ChevronUp, Cat } from 'lucide-react';
+import { KeyRound, ShieldAlert, Save, LogOut, Upload, UserCog, ChevronDown, ChevronUp, Cat } from 'lucide-react';
 import { api } from '../api';
 import type { Pet, User } from '../types';
 import { ClickableAvatar, animationForPet, petStatusLabel } from '../components/shared';
 import { PetSprite } from '../PetSprite';
 import { downscaleImage } from '../imageResize';
-import {
-  type AppPreferences,
-  type DefaultPage,
-  DEFAULT_PAGE_LABELS
-} from '../preferences';
 
 /**
  * 【账号设置页主组件】
  * @param user - 当前用户
- * @param onUpdated - 资料/改密成功后返回的新用户信息，回传父组件同步（顶栏、侧边栏即时更新）
- * @param onPetUpdated - 宠物改名后同步到 App 全局 pet 状态（侧边栏宠物名即时更新）
- * @param prefs - 当前应用偏好（受控，来自 App）
- * @param onPrefsChange - 偏好变更回调，App 负责落 localStorage 并刷新自身
+ * @param onUpdated - 资料/改密成功后返回的新用户信息，回传父组件同步（顶部导航即时更新）
+ * @param onPetUpdated - 宠物改名后同步到 App 全局 pet 状态（导航宠物芯片名即时更新）
  * @param onSessionEnded - 退出所有设备成功后，清空本地会话（回到登录页）
  */
-export function SettingsPage({ user, onUpdated, onPetUpdated, prefs, onPrefsChange, onSessionEnded }: {
+export function SettingsPage({ user, onUpdated, onPetUpdated, onSessionEnded }: {
   user: User;
   onUpdated: (user: User) => void;
   onPetUpdated?: (pet: Pet) => void;
-  prefs: AppPreferences;
-  onPrefsChange: (prefs: AppPreferences) => void;
   onSessionEnded: () => void;
 }) {
   /** 【账号资料表单】昵称、邮箱 */
@@ -87,7 +77,7 @@ export function SettingsPage({ user, onUpdated, onPetUpdated, prefs, onPrefsChan
     return () => { cancelled = true; };
   }, [user.id]);
 
-  /** 【保存宠物名称】成功后更新本地宠物状态并同步父组件（侧边栏宠物名即时更新） */
+  /** 【保存宠物名称】成功后更新本地宠物状态并同步父组件（导航宠物芯片名即时更新） */
   async function savePetName(event: React.FormEvent) {
     event.preventDefault();
     setPetBusy(true); setPetMessage('');
@@ -248,37 +238,6 @@ export function SettingsPage({ user, onUpdated, onPetUpdated, prefs, onPrefsChan
         </div>
       </section>
 
-      {/* ===== 应用偏好 ===== */}
-      <section className="panel">
-        <div className="panel-title"><h2>应用偏好</h2><SlidersHorizontal size={18} /></div>
-        <div className="stack-form">
-          <label className="field-label">
-            <span>登录后默认进入</span>
-            <select
-              value={prefs.defaultPage}
-              onChange={(e) => onPrefsChange({ ...prefs, defaultPage: e.target.value as DefaultPage })}
-            >
-              {(Object.keys(DEFAULT_PAGE_LABELS) as DefaultPage[]).map((p) => (
-                <option key={p} value={p}>{DEFAULT_PAGE_LABELS[p]}</option>
-              ))}
-            </select>
-          </label>
-
-          <label className="pref-toggle">
-            <span>
-              <strong>侧边栏显示宠物</strong>
-              <em>在左侧底部展示宠物迷你卡片与经验进度</em>
-            </span>
-            <input
-              type="checkbox"
-              checked={prefs.showSidebarPet}
-              onChange={(e) => onPrefsChange({ ...prefs, showSidebarPet: e.target.checked })}
-            />
-          </label>
-          <p className="muted small" style={{ margin: 0 }}>偏好保存在本设备浏览器，更换设备需重新设置。</p>
-        </div>
-      </section>
-
       {/* ===== 修改密码（默认收起） ===== */}
       <section className="panel">
         <div className="panel-title">
@@ -289,9 +248,7 @@ export function SettingsPage({ user, onUpdated, onPetUpdated, prefs, onPrefsChan
             {showPw ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
           </button>
         </div>
-        {!showPw ? (
-          <p className="muted small" style={{ margin: 0 }}>定期更换密码更安全。点右上角「修改密码」展开表单。</p>
-        ) : (
+        {showPw && (
           <form className="stack-form" onSubmit={submitPassword} autoComplete="off">
             <label className="field-label">
               <span>当前密码</span>
@@ -326,7 +283,6 @@ export function SettingsPage({ user, onUpdated, onPetUpdated, prefs, onPrefsChan
         <div className="danger-row">
           <div className="danger-copy">
             <strong>退出所有设备</strong>
-            <span className="muted small">撤销全部登录令牌。本设备与其它所有设备都会被强制登出，需要重新登录。</span>
           </div>
           {confirmLogoutAll ? (
             <div className="row-actions">

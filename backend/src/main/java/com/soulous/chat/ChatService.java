@@ -64,6 +64,14 @@ public class ChatService {
     private final ModerationService moderation;
     private final ObjectMapper mapper = new ObjectMapper();
 
+    /**
+     * 【agent-service 边车客户端（可空）。soulous.agent.enabled=true 时本服务的 LLM 轮次
+     * 优先交给 agent-service（LangGraph 多通道循环 + RAG + 长期记忆 + 业务工具），
+     * agent 不可用时自动回退下方原有本地路径。字段注入以保持测试直构构造器不变。】
+     */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.soulous.agent.AgentClient agent;
+
     public ChatService(ChatCategoryRepository categories,
                        ChatConversationRepository conversations,
                        ChatMessageRepository messages,
@@ -268,6 +276,10 @@ public class ChatService {
             return;
         }
 
+        // agent-service 优先：多通道状态 / 摘要 / RAG / 工具全在 agent 内完成，
+        // Java 只负责消息落库与 PLAN_JSON → pendingPlanJson。失败时落回本地路径。
+        if (agent != null && agent.enabled() && tryAgentTurn(conv, onChunk)) return;
+
         var system = systemPrompt();
         maybeUpdateRunningSummary(conv);
         var userPrompt = buildLayeredUserPrompt(conv);
@@ -337,6 +349,45 @@ public class ChatService {
             }
         }
         appendMessage(conv, ChatRole.ASSISTANT, reply);
+    }
+
+    /**
+     * 【agent-service 轮次执行器。返回 true 表示本轮已由 agent 完成（消息已落库）；
+     * 返回 false 表示 agent 不可用/失败，调用方继续走本地路径。
+     *
+     * <p>对话历史由 agent 侧 LangGraph checkpointer 持有（thread = userId:conversationId），
+     * 这里只传当前这条用户消息；PLAN/CLARIFY 信封在 agent 内已过 Pydantic 校验与修复重抽，
+     * done 载荷中的 plan 字段可直接落 pendingPlanJson。】
+     */
+    private boolean tryAgentTurn(ChatConversation conv, Consumer<String> onChunk) {
+        var lastUser = messages.findByConversationOrderByIdxAsc(conv).stream()
+                .filter(m -> m.role == ChatRole.USER)
+                .reduce((a, b) -> b)
+                .map(m -> m.content)
+                .orElse("");
+        if (lastUser.isBlank()) return false;
+
+        var done = onChunk != null
+                ? agent.chatStream(conv.user.id, conv.id, lastUser, onChunk)
+                : agent.chat(conv.user.id, conv.id, lastUser);
+        if (done.isEmpty()) {
+            log.warn("agent-service 不可用，对话 {} 回退本地 LLM 路径。", conv.id);
+            return false;
+        }
+        var node = done.get();
+        var reply = node.path("reply").asText("");
+        if (reply.isBlank()) return false;
+
+        // 输出审核与本地路径保持同一闸门
+        var outputCheck = moderation.moderateOutput(conv.user, reply, lastUser, List.of(), conv.id);
+        if (outputCheck.blocked()) {
+            log.warn("Output blocked for conversation {}: {}", conv.id, outputCheck.reason());
+            reply = OUTPUT_BLOCKED_REPLY;
+        } else if (node.has("plan") && hasUsablePlanTasks(node.path("plan"))) {
+            conv.pendingPlanJson = node.path("plan").toString();
+        }
+        appendMessage(conv, ChatRole.ASSISTANT, reply);
+        return true;
     }
 
     /** 【分层用户 prompt（精简版）：[SUMMARY] + [RECENT] + [CURRENT]】 */

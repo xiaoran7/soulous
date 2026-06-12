@@ -11,19 +11,22 @@
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  BookOpen, Building2, CheckCircle2, CloudRain, Coffee, Maximize2, Minimize2, Music, Pause, Play, Plus,
-  Snowflake, Sunrise, Target, Trash2, Trees, Volume2, VolumeX, Waves, Wind, X, XCircle,
+  Activity, ArrowRight, BookOpen, Bot, Building2, CalendarCheck, CalendarRange, CheckCircle2, ClipboardList,
+  CloudRain, Coffee, Maximize2, Minimize2, Music, Pause, Play, Plus,
+  Snowflake, Sunrise, Target, Trees, Volume2, VolumeX, Waves, Wind, X,
 } from 'lucide-react';
 import { api } from '../api';
-import type { FocusSession, StudyTask } from '../types';
+import type { FocusSession, Pet, StudyTask, Summary } from '../types';
+import { animationForPet, clampAnimation } from '../components/shared';
 import {
-  AMBIENT_KINDS, CUSTOM_SCENE_GRADIENT, getMusicTrack, getScene, MUSIC_TRACKS, SCENES,
+  AMBIENT_KINDS, CUSTOM_SCENE_GRADIENT, DURATION_PRESETS, getMusicTrack, getScene, MUSIC_TRACKS, SCENES,
   type AmbientKind, type MusicTrack, type StudyScene,
 } from '../studyroom/scenes';
 import { useStudyRoomPrefs } from '../studyroom/useStudyRoomPrefs';
 import { useAudioMixer } from '../studyroom/useAudioMixer';
 import { addCustom, deleteCustom, listCustom, type CustomItem } from '../studyroom/customStore';
 import { SharedRooms } from '../studyroom/SharedRooms';
+import { PetSprite } from '../PetSprite';
 
 /** 【格式化为正计时】秒 → H:MM:SS 或 MM:SS（始终非负，正计时不会出现负数） */
 function fmt(seconds: number): string {
@@ -99,43 +102,6 @@ function sceneBackground(scene: StudyScene, dim: number): string {
   return `${overlay}, ${img}${scene.gradient}`;
 }
 
-/** 【场景卡片】 */
-function SceneCard({ scene, selected, custom, onPick, onDelete }: {
-  scene: StudyScene; selected: boolean; custom: boolean;
-  onPick: () => void; onDelete?: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      className={`scene-card${selected ? ' scene-card-active' : ''}`}
-      style={{ background: sceneBackground(scene, 0.35) }}
-      onClick={onPick}
-      aria-pressed={selected}
-    >
-      {scene.video && (
-        <video className="scene-card-video" src={scene.video} autoPlay loop muted playsInline />
-      )}
-      <span className="scene-card-top">
-        <span className="scene-card-icon">{SCENE_ICON[scene.id] ?? <Sunrise size={15} />}</span>
-        <span className="scene-card-ambient">{AMBIENT_ICON[scene.ambient]}</span>
-      </span>
-      <span className="scene-card-body">
-        <span className="scene-card-name">{scene.name}</span>
-        <span className="scene-card-mood">{scene.mood}</span>
-      </span>
-      {selected && <span className="scene-card-check"><CheckCircle2 size={18} /></span>}
-      {custom && onDelete && (
-        <span className="scene-card-del" role="button" tabIndex={0}
-          onClick={(e) => { e.stopPropagation(); onDelete(); }}
-          onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); onDelete(); } }}
-          title="删除自定义场景">
-          <Trash2 size={13} />
-        </span>
-      )}
-    </button>
-  );
-}
-
 /** 【音量行】 */
 function VolumeRow({ icon, label, hint, value, enabled, onValue, onToggle }: {
   icon: React.ReactNode; label: string; hint?: string;
@@ -164,22 +130,35 @@ function VolumeRow({ icon, label, hint, value, enabled, onValue, onToggle }: {
 }
 
 /**
- * 【沉浸态自习室】全屏正计时
+ * 【沉浸态自习室】全屏计时：正计时向上走 / 倒计时归零自动结算。
+ * 布局（按需求重排）：计时器**透明**居中（无玻璃卡）、顶部两枚深色半透明小胶囊、
+ * 底部深色半透明控制坞（音量 | 声音/暂停/继续/结束——「放弃」已移除，只留结束）。
  */
-function ImmersiveRoom({ session, scene, prefs, audio, audioControls, onUpdate, onPrefsPatch }: {
+function ImmersiveRoom({ session, scene, scenes, prefs, audio, audioControls, onUpdate, onPrefsPatch, onNavigate }: {
   session: FocusSession;
   scene: StudyScene;
+  scenes: StudyScene[];
   prefs: ReturnType<typeof useStudyRoomPrefs>['prefs'];
   audio: ReturnType<typeof useAudioMixer>;
   audioControls: React.ReactNode;
   onUpdate: (s: FocusSession) => void;
   onPrefsPatch: (p: Partial<ReturnType<typeof useStudyRoomPrefs>['prefs']>) => void;
+  onNavigate?: (page: RoomNavTarget) => void;
 }) {
   const [elapsed, setElapsed] = useState(() => currentElapsed(session));
   const [busy, setBusy] = useState(false);
   const [actError, setActError] = useState('');
   const [fullscreen, setFullscreen] = useState(false);
+  /** 【沉浸态换场景条】顶部胶囊唤出横向缩略图，点击即换背景 */
+  const [scenePick, setScenePick] = useState(false);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  /** 【倒计时模式】展示剩余时间；归零自动按「完成」结算 */
+  const countdown = prefs.timerMode === 'down';
+  const totalSeconds = prefs.plannedMinutes * 60;
+  const displaySeconds = countdown ? Math.max(0, totalSeconds - elapsed) : elapsed;
+  /** 【归零只触发一次结算】 */
+  const autoFinished = useRef(false);
 
   useEffect(() => {
     setElapsed(currentElapsed(session));
@@ -189,6 +168,16 @@ function ImmersiveRoom({ session, scene, prefs, audio, audioControls, onUpdate, 
     }
     return () => { if (tickRef.current) clearInterval(tickRef.current); };
   }, [session]);
+
+  // 倒计时归零：自动结束并结算（与点「结束」等价）
+  useEffect(() => {
+    if (!countdown || autoFinished.current) return;
+    if (session.status === 'RUNNING' && totalSeconds - elapsed <= 0) {
+      autoFinished.current = true;
+      void act(() => api.finishFocus(session.id, 'completed'));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [elapsed, countdown, totalSeconds, session.status, session.id]);
 
   // 跟随浏览器全屏状态（用户按 Esc 退出时同步图标）
   useEffect(() => {
@@ -213,34 +202,62 @@ function ImmersiveRoom({ session, scene, prefs, audio, audioControls, onUpdate, 
     finally { setBusy(false); }
   }
 
+  const paused = session.status === 'PAUSED';
+  const statusLabel = countdown
+    ? (paused ? 'PAUSED · 已暂停' : 'COUNTDOWN · 倒计时')
+    : (paused ? 'PAUSED · 已暂停' : 'FOCUSING · 专注中');
+
   return (
-    <div className="immersive-room" style={{ background: sceneBackground(scene, 0.5) }}>
+    <div className="immersive-room" style={{ background: sceneBackground(scene, 0.3) }}>
       {scene.video && (
         <>
           <video className="immersive-video-bg" src={scene.video} autoPlay loop muted playsInline />
           <div className="immersive-video-dim" />
         </>
       )}
-      <div className="immersive-top">
-        <span className="immersive-scene-name">{SCENE_ICON[scene.id] ?? <Sunrise size={15} />} {scene.name}</span>
-        <span className="immersive-status">{session.status === 'PAUSED' ? '· 已暂停' : '· 专注中'}</span>
-        <button type="button" className="immersive-fs-btn" onClick={toggleFullscreen}
+      {/* 顶部：深色半透明小胶囊（场景名/换场景 | 沉浸式），不再用整条玻璃 */}
+      <div className="immersive-top2">
+        <button type="button" className="im-pill im-pill-btn" onClick={() => setScenePick(o => !o)}
+          title="换场景" aria-expanded={scenePick}>
+          {SCENE_ICON[scene.id] ?? <Sunrise size={14} />} {scene.name}
+          <em>{paused ? '已暂停' : '专注中'}</em>
+        </button>
+        <button type="button" className="im-pill im-pill-btn" onClick={toggleFullscreen}
           title={fullscreen ? '退出沉浸式' : '沉浸式'}>
-          {fullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+          {fullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
           <span>{fullscreen ? '退出沉浸' : '沉浸式'}</span>
         </button>
       </div>
 
-      <div className="immersive-center">
-        <div className={`immersive-clock${session.status === 'RUNNING' ? ' is-running' : ''}`}>
-          <div className="immersive-time">{fmt(elapsed)}</div>
-          <div className="immersive-sub">{session.status === 'PAUSED' ? 'PAUSED · 已暂停' : 'FOCUSING · 专注中'}</div>
+      {/* 换场景条：点场景名胶囊唤出，选中即换背景并收起 */}
+      {scenePick && (
+        <div className="immersive-scenes">
+          {scenes.map(s => (
+            <button
+              key={s.id} type="button"
+              className={`room-scene-chip${s.id === prefs.sceneId ? ' on' : ''}`}
+              style={{ background: sceneBackground(s, 0.18) }}
+              title={`${s.name} · ${s.mood}`}
+              aria-pressed={s.id === prefs.sceneId}
+              onClick={() => { onPrefsPatch({ sceneId: s.id }); setScenePick(false); }}
+            >
+              <span>{s.name}</span>
+            </button>
+          ))}
         </div>
+      )}
 
-        <div className="immersive-goal">
+      {/* 居中透明计时器：无玻璃卡，大数字直接浮在场景上 */}
+      <div className="immersive-center">
+        <span className="immersive-center-label">{statusLabel}</span>
+        <div className={`immersive-time-xl${session.status === 'RUNNING' ? ' is-running' : ''}`}>
+          {fmt(displaySeconds)}
+        </div>
+        {countdown && <span className="immersive-center-sub">目标 {prefs.plannedMinutes} 分钟 · 已专注 {fmt(elapsed)}</span>}
+        <div className="immersive-goal2">
           <Target size={14} />
           <input
-            className="immersive-goal-input"
+            className="immersive-goal2-input"
             placeholder="写下今天想做的事…（可选）"
             value={prefs.goal}
             maxLength={120}
@@ -249,43 +266,78 @@ function ImmersiveRoom({ session, scene, prefs, audio, audioControls, onUpdate, 
         </div>
       </div>
 
-      <div className="immersive-bottom">
-        <div className="immersive-audio">{audioControls}</div>
-        <div className="immersive-controls">
-          {/* 声音：开启 / 静音 合并为一个开关按钮 */}
-          <button className="im-btn" onClick={() => audio.playing ? audio.stop() : audio.start()}
-            title={audio.playing ? '静音' : '开启声音'}>
-            {audio.playing ? <><VolumeX size={18} /> 静音</> : <><Volume2 size={18} /> 开启声音</>}
-          </button>
-          {session.status === 'RUNNING' && (
-            <button className="im-btn" disabled={busy} onClick={() => act(() => api.pauseFocus(session.id))}>
-              <Pause size={18} /> 暂停
-            </button>
-          )}
-          {session.status === 'PAUSED' && (
-            <button className="im-btn im-btn-primary" disabled={busy} onClick={() => act(() => api.resumeFocus(session.id))}>
-              <Play size={18} /> 继续
-            </button>
-          )}
-          <button className="im-btn im-btn-primary" disabled={busy} onClick={() => act(() => api.finishFocus(session.id, 'completed'))}>
-            <CheckCircle2 size={18} /> 结束
-          </button>
-          <button className="im-btn im-btn-ghost" disabled={busy} onClick={() => act(() => api.finishFocus(session.id, 'aborted'))}>
-            <XCircle size={18} /> 放弃
-          </button>
-        </div>
+      {/* 底部深色半透明控制坞：音量簇 | 声音/暂停/继续/结束（放弃已移除） */}
+      <div className="immersive-dock-wrap">
         {actError && <p className="immersive-error">{actError}</p>}
+        <div className="immersive-dock">
+          <div className="immersive-audio">{audioControls}</div>
+          <div className="immersive-controls">
+            {/* 声音：开启 / 静音 合并为一个开关按钮 */}
+            <button className="im-btn" onClick={() => audio.playing ? audio.stop() : audio.start()}
+              title={audio.playing ? '静音' : '开启声音'}>
+              {audio.playing ? <VolumeX size={22} /> : <Volume2 size={22} />}
+              <span>{audio.playing ? '静音' : '声音'}</span>
+            </button>
+            {session.status === 'RUNNING' && (
+              <button className="im-btn" disabled={busy} title="暂停"
+                onClick={() => act(() => api.pauseFocus(session.id))}>
+                <Pause size={22} /><span>暂停</span>
+              </button>
+            )}
+            {paused && (
+              <button className="im-btn im-btn-amber" disabled={busy} title="继续"
+                onClick={() => act(() => api.resumeFocus(session.id))}>
+                <Play size={22} /><span>继续</span>
+              </button>
+            )}
+            <button className="im-btn im-btn-amber" disabled={busy} title="结束并结算"
+              onClick={() => act(() => api.finishFocus(session.id, 'completed'))}>
+              <CheckCircle2 size={22} /><span>结束</span>
+            </button>
+          </div>
+        </div>
       </div>
+
+      {/* 右下漂浮宠物：点击跳转宠物页 */}
+      <button type="button" className="immersive-pet glass-card" title="去看看宠物"
+        onClick={() => onNavigate?.('pet')}>
+        <PetSprite state="idle" size={56} />
+      </button>
     </div>
   );
 }
 
+/** 【按时段问候】房间主页大标题的第一行 */
+function greeting(): string {
+  const h = new Date().getHours();
+  if (h < 5) return '夜深了';
+  if (h < 11) return '早上好';
+  if (h < 14) return '中午好';
+  if (h < 18) return '下午好';
+  return '晚上好';
+}
+
+/** 【主页可跳转的功能页】散点瓷片与迷你按钮的目的地 */
+export type RoomNavTarget = 'tasks' | 'timetable' | 'review' | 'chat' | 'pet' | 'dashboard';
+
 /**
- * 【自习室页面主组件】
+ * 【自习室页面主组件】登录后的"主页"：你已经身处自习室。
+ * 全局场景背景由外壳的 SceneBackdrop 渲染；本页只负责悬浮其上的玻璃层——
+ * 中央主卡（目标 + 进入）、四周散点功能瓷片、底部场景坞与声音坞。
+ *
  * @param userId 当前登录用户 id，用于按用户隔离自定义素材（IndexedDB 分库）
- * @param onImmersiveChange 通知外壳进入/退出全屏沉浸态（隐藏侧边栏与顶栏）
+ * @param pet 出战宠物（散点瓷片展示）
+ * @param summary 学习统计摘要（今日专注瓷片展示）
+ * @param onImmersiveChange 通知外壳进入/退出全屏沉浸态（隐藏顶栏）
+ * @param onNavigate 散点瓷片跳转其他功能页
  */
-export function FocusPage({ userId, onImmersiveChange }: { userId?: string | number | null; onImmersiveChange?: (v: boolean) => void } = {}) {
+export function FocusPage({ userId, pet, summary, onImmersiveChange, onNavigate }: {
+  userId?: string | number | null;
+  pet?: Pet | null;
+  summary?: Summary | null;
+  onImmersiveChange?: (v: boolean) => void;
+  onNavigate?: (page: RoomNavTarget) => void;
+} = {}) {
   const { prefs, update } = useStudyRoomPrefs();
   const [active, setActive] = useState<FocusSession | null>(() => focusCache?.active ?? null);
   const [tasks, setTasks] = useState<StudyTask[]>(() => focusCache?.tasks ?? []);
@@ -300,11 +352,39 @@ export function FocusPage({ userId, onImmersiveChange }: { userId?: string | num
   const [startErr, setStartErr] = useState('');
   /** 【自习室模式：独享(默认沉浸专注) / 共享(和别人一起在线自习)】 */
   const [roomMode, setRoomMode] = useState<'solo' | 'shared'>('solo');
+  /** 【共享面板懒挂载】首次切到共享才挂载（避免一进页面就拉房间列表），之后保持挂载让滑动过渡平滑 */
+  const [sharedMounted, setSharedMounted] = useState(false);
+  useEffect(() => { if (roomMode === 'shared') setSharedMounted(true); }, [roomMode]);
 
   // 自定义素材（IndexedDB）
   const [customItems, setCustomItems] = useState<CustomItem[]>([]);
   const urlsRef = useRef<string[]>([]);
   const [addingScene, setAddingScene] = useState(false);
+  /** 【底部声音坞弹层】音量/曲目/背景音的玻璃浮层开关 */
+  const [soundOpen, setSoundOpen] = useState(false);
+  /** 【底部坞引用】场景条滚轮横滑 + 弹层点外部收起 */
+  const dockRef = useRef<HTMLElement>(null);
+  const dockScenesRef = useRef<HTMLDivElement>(null);
+
+  // 【弹层点外部收起】声音氛围/自定义场景弹层打开时，点击坞外任意处关闭
+  useEffect(() => {
+    if (!soundOpen && !addingScene) return;
+    function onPointerDown(e: MouseEvent) {
+      if (dockRef.current && !dockRef.current.contains(e.target as Node)) {
+        setSoundOpen(false);
+        setAddingScene(false);
+      }
+    }
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') { setSoundOpen(false); setAddingScene(false); }
+    }
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [soundOpen, addingScene]);
 
   const reloadCustom = useCallback(async () => {
     try { setCustomItems(await listCustom(userId)); } catch { /* IndexedDB 不可用则忽略 */ }
@@ -402,7 +482,9 @@ export function FocusPage({ userId, onImmersiveChange }: { userId?: string | num
     const linked = linkTaskId === '' ? null : tasks.find(t => t.id === linkTaskId);
     const title = (prefs.goal.trim() || linked?.title || `${scene.name} · 自习`).slice(0, 128);
     try {
-      const session = await api.startFocus(title, PLACEHOLDER_MINUTES, linkTaskId === '' ? null : linkTaskId);
+      // 倒计时把目标时长写进会话；正计时仍用占位时长（后端结算只看实际用时）
+      const minutes = prefs.timerMode === 'down' ? prefs.plannedMinutes : PLACEHOLDER_MINUTES;
+      const session = await api.startFocus(title, minutes, linkTaskId === '' ? null : linkTaskId);
       setActive(session);
       writeActiveHint(true);
     } catch (err) {
@@ -465,78 +547,173 @@ export function FocusPage({ userId, onImmersiveChange }: { userId?: string | num
     </>
   );
 
-  if (loading) return <div className="notice">加载中...</div>;
-  if (loadError) return <div className="notice error-notice">{loadError}</div>;
+  if (loading) {
+    return <div className="room-home room-home-center"><div className="notice">加载中...</div></div>;
+  }
+  if (loadError) {
+    return <div className="room-home room-home-center"><div className="notice error-notice">{loadError}</div></div>;
+  }
 
   // ===== 沉浸态（全屏，仅独享）=====
-  // roomMode 在沉浸态判断之后使用；其状态声明见组件顶部（与其它 hooks 一起）。
   if (active) {
     return (
       <ImmersiveRoom
-        session={active} scene={scene} prefs={prefs}
+        session={active} scene={scene} scenes={allScenes} prefs={prefs}
         audio={audio} audioControls={audioControls}
-        onUpdate={handleUpdate} onPrefsPatch={update}
+        onUpdate={handleUpdate} onPrefsPatch={update} onNavigate={onNavigate}
       />
     );
   }
 
-  /** 【自习室模式切换：独享(默认沉浸专注) / 共享(和别人一起在线自习)】 */
-  const modeTabs = (
-    <div className="sr-mode-tabs">
-      <button type="button" className={roomMode === 'solo' ? 'active' : ''} onClick={() => setRoomMode('solo')}>独享自习</button>
-      <button type="button" className={roomMode === 'shared' ? 'active' : ''} onClick={() => setRoomMode('shared')}>共享自习室</button>
-    </div>
-  );
+  /** 【宠物瓷片动画】未解锁动作回退 idle，与其他展示位行为一致 */
+  const petAnim = clampAnimation(animationForPet(pet ?? null), pet?.level ?? 1);
 
-  // ===== 共享自习室 =====
-  if (roomMode === 'shared') {
-    return (
-      <div className="studyroom-setup">
-        {modeTabs}
-        <SharedRooms />
-      </div>
-    );
-  }
-
-  // ===== 设置态（独享）=====
+  // ===== 房间主页 =====
+  // 你已经身处自习室：全局背景即场景，本层只有玻璃。
+  // 布局：中央主卡（或共享面板） + 右侧散点功能瓷片 + 底部场景坞/声音坞。
   return (
-    <div className="studyroom-setup">
-      {modeTabs}
-      <div className="studyroom-main">
-        {/* 选场景 */}
-        <section className="sr-step">
-          <div className="sr-step-head"><h3>选择场景</h3></div>
-          <div className="scene-grid">
-            {allScenes.map(s => (
-              <SceneCard
-                key={s.id} scene={s}
-                selected={s.id === prefs.sceneId}
-                custom={s.id.startsWith('custom-')}
-                onPick={() => update({ sceneId: s.id })}
-                onDelete={() => void removeCustom(s.id)}
-              />
-            ))}
-            {/* 自定义场景卡 */}
-            {addingScene ? (
-              <AddSceneForm onCancel={() => setAddingScene(false)} onSave={addSceneFile} />
-            ) : (
-              <button type="button" className="scene-card scene-card-add" onClick={() => setAddingScene(true)}>
-                <Plus size={22} />
-                <span>自定义场景</span>
-              </button>
-            )}
-          </div>
-        </section>
+    <div className="room-home">
+      {/* 中央主卡：独享/共享共用同一张玻璃卡，切换只重排内容（不换组件、不跳尺寸） */}
+      <section className="room-hero glass-card">
+        <div className="sr-mode-tabs room-mode-tabs">
+          <button type="button" className={roomMode === 'solo' ? 'active' : ''} onClick={() => setRoomMode('solo')}>独享自习</button>
+          <button type="button" className={roomMode === 'shared' ? 'active' : ''} onClick={() => setRoomMode('shared')}>共享自习室</button>
+        </div>
 
-        {/* 声音氛围 */}
-        <section className="sr-step">
-          <div className="sr-step-head">
-            <h3>声音氛围</h3>
-            <button type="button" className="sr-preview-btn" onClick={() => audio.playing ? audio.stop() : audio.start()}>
-              {audio.playing ? <><Pause size={14} /> 停止试听</> : <><Volume2 size={14} /> 开启声音 / 试听</>}
+        {/* 独享/共享双面板横向滑动切换：两块面板常驻同一轨道，切换只平移轨道（平滑过渡，不换组件不跳尺寸） */}
+        <div className="room-hero-slider">
+          <div className={`room-hero-track${roomMode === 'shared' ? ' show-shared' : ''}`}>
+            <div className="room-hero-pane" aria-hidden={roomMode !== 'solo'}>
+            <p className="room-eyebrow">SOULOUS STUDY ROOM</p>
+            <h1 className="room-title">{greeting()}，<br />要开始今天的专注吗？</h1>
+            <p className="room-sub">当前场景「{scene.name}」· {scene.mood}。计时向上走，不设目标压力，想停就停。</p>
+
+            <div className="room-goal-row">
+              <Target size={15} />
+              <input
+                className="room-goal-input"
+                placeholder="写下今天想做的事…（可选，回车直接进入）"
+                value={prefs.goal} maxLength={120}
+                onChange={e => update({ goal: e.target.value })}
+                onKeyDown={e => { if (e.key === 'Enter' && !starting) void enterRoom(); }}
+              />
+            </div>
+            <select
+              className="room-task-select" value={linkTaskId}
+              onChange={e => setLinkTaskId(e.target.value === '' ? '' : Number(e.target.value))}
+            >
+              <option value="">不关联任务（仅记录专注）</option>
+              {linkable.map(t => <option key={t.id} value={t.id}>{t.title}</option>)}
+            </select>
+
+            {/* 计时方式：正计时（自由） / 倒计时（选目标时长，归零自动结算） */}
+            <div className="room-timer-row">
+              <span className="sr-track-label">计时</span>
+              <button type="button"
+                className={prefs.timerMode === 'up' ? 'sr-track-chip sr-track-on' : 'sr-track-chip'}
+                onClick={() => update({ timerMode: 'up' })}>
+                正计时
+              </button>
+              {DURATION_PRESETS.map(m => (
+                <button key={m} type="button"
+                  className={prefs.timerMode === 'down' && prefs.plannedMinutes === m ? 'sr-track-chip sr-track-on' : 'sr-track-chip'}
+                  onClick={() => update({ timerMode: 'down', plannedMinutes: m })}>
+                  {m} 分
+                </button>
+              ))}
+            </div>
+            {startErr && <p className="room-err">{startErr}</p>}
+            <button type="button" className="room-enter-btn" disabled={starting} onClick={enterRoom}
+              style={{ background: scene.accent }}>
+              进入自习室 <ArrowRight size={18} />
             </button>
+            </div>
+            <div className="room-hero-pane room-shared-body" aria-hidden={roomMode !== 'shared'}>
+              {sharedMounted && <SharedRooms />}
+            </div>
           </div>
-          <div className="sr-audio card">
+        </div>
+      </section>
+
+      {/* 散点功能瓷片：右侧两列等宽方块、错位半格——散而不乱（宽屏） */}
+      <aside className="room-scatter">
+        <div className="room-scatter-col">
+          <button type="button" className="glass-card room-tile" onClick={() => onNavigate?.('review')} title="今日专注 · 点击查看复盘">
+            <span className="room-tile-label">今日专注</span>
+            <strong>{summary?.todayFocusMinutes ?? 0}<small>min</small></strong>
+            <span className="room-tile-hint">{summary?.todayFocusSessions ?? 0} 次入座<br />连续 {summary?.consecutiveDays ?? 0} 天</span>
+          </button>
+          <button type="button" className="glass-card room-tile room-tile-pet" onClick={() => onNavigate?.('pet')} title={`${pet?.name ?? 'Soul'} · 点击进入宠物页`}>
+            <PetSprite state={petAnim} size={62} />
+            <span className="room-tile-hint">{pet?.name ?? 'Soul'} · Lv.{pet?.level ?? 1}</span>
+          </button>
+        </div>
+        <div className="room-scatter-col">
+          <button type="button" className="glass-card room-tile" onClick={() => onNavigate?.('tasks')} title="待办任务 · 点击打开任务页">
+            <span className="room-tile-label">待办任务</span>
+            <strong>{linkable.length}<small>项</small></strong>
+            <span className="room-tile-hint">点击查看全部</span>
+          </button>
+          <div className="glass-card room-tile room-tile-links">
+            <span className="room-tile-label">快捷入口</span>
+            <div className="room-mini-grid">
+              <button type="button" title="工作台" onClick={() => onNavigate?.('dashboard')}><Activity size={17} /></button>
+              <button type="button" title="课表" onClick={() => onNavigate?.('timetable')}><CalendarRange size={17} /></button>
+              <button type="button" title="复盘" onClick={() => onNavigate?.('review')}><CalendarCheck size={17} /></button>
+              <button type="button" title="AI 拆解" onClick={() => onNavigate?.('chat')}><Bot size={17} /></button>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      {/* 底部坞：场景缩略图（点击即换全屋背景，滚轮横滑） + 声音氛围弹层 */}
+      <footer className="room-dock glass-card" ref={dockRef}>
+        <div
+          className="room-dock-scenes"
+          ref={dockScenesRef}
+          onWheel={e => {
+            const el = dockScenesRef.current;
+            if (el) el.scrollLeft += e.deltaY + e.deltaX;
+          }}
+        >
+          {allScenes.map(s => (
+            <span key={s.id} className="room-scene-chip-wrap">
+              <button
+                type="button"
+                className={`room-scene-chip${s.id === prefs.sceneId ? ' on' : ''}`}
+                style={{ background: sceneBackground(s, 0.18) }}
+                onClick={() => update({ sceneId: s.id })}
+                title={`${s.name} · ${s.mood}`}
+                aria-pressed={s.id === prefs.sceneId}
+              >
+                <span>{s.name}</span>
+              </button>
+              {s.id.startsWith('custom-') && (
+                <button type="button" className="room-scene-del" title="删除自定义场景" onClick={() => void removeCustom(s.id)}>
+                  <X size={10} />
+                </button>
+              )}
+            </span>
+          ))}
+          <button type="button" className="room-scene-chip room-scene-add" onClick={() => setAddingScene(o => !o)} title="自定义场景">
+            <Plus size={15} />
+            <span>自定义</span>
+          </button>
+        </div>
+        <i className="room-dock-divider" aria-hidden="true" />
+        <button type="button" className={`room-sound-btn${soundOpen ? ' on' : ''}`} onClick={() => setSoundOpen(o => !o)}>
+          <Music size={15} /> 声音氛围
+        </button>
+
+        {/* 声音氛围弹层：音量 + 曲目 + 背景音 + 试听 */}
+        {soundOpen && (
+          <div className="room-pop room-sound-pop">
+            <div className="room-pop-head">
+              <span>声音氛围</span>
+              <button type="button" className="sr-preview-btn" onClick={() => audio.playing ? audio.stop() : audio.start()}>
+                {audio.playing ? <><Pause size={13} /> 停止试听</> : <><Volume2 size={13} /> 开启声音 / 试听</>}
+              </button>
+            </div>
             {audioControls}
             <div className="sr-track-row">
               <span className="sr-track-label">曲目</span>
@@ -586,34 +763,15 @@ export function FocusPage({ userId, onImmersiveChange }: { userId?: string | num
               </label>
             </div>
           </div>
-        </section>
+        )}
 
-        {/* 目标 + 关联任务 + 进入 */}
-        <section className="sr-step">
-          <div className="sr-pomodoro card">
-            <label className="field-label">今日目标（可选）</label>
-            <input
-              className="text-input"
-              placeholder="例如：读完第三章、随便看看…"
-              value={prefs.goal} maxLength={120}
-              onChange={e => update({ goal: e.target.value })}
-            />
-            <label className="field-label">关联任务（可选）</label>
-            <select
-              className="text-input" value={linkTaskId}
-              onChange={e => setLinkTaskId(e.target.value === '' ? '' : Number(e.target.value))}
-            >
-              <option value="">不关联任务（仅记录专注）</option>
-              {linkable.map(t => <option key={t.id} value={t.id}>{t.title}</option>)}
-            </select>
-            {startErr && <p className="notice error-notice">{startErr}</p>}
-            <button type="button" className="sr-enter-btn" disabled={starting} onClick={enterRoom}
-              style={{ background: scene.accent }}>
-              <Maximize2 size={18} /> 进入自习室
-            </button>
+        {/* 自定义场景弹层 */}
+        {addingScene && (
+          <div className="room-pop room-scene-pop">
+            <AddSceneForm onCancel={() => setAddingScene(false)} onSave={addSceneFile} />
           </div>
-        </section>
-      </div>
+        )}
+      </footer>
     </div>
   );
 }

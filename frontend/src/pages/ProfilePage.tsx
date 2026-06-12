@@ -103,7 +103,6 @@ export function ProfilePage({ user }: { user: User }) {
           <div><span>邮箱</span><strong>{user.email || '未填写'}</strong></div>
           <div><span>头像</span><strong>{user.avatarUrl ? '已配置' : '未配置'}</strong></div>
         </div>
-        <p className="muted small" style={{ margin: '8px 0 0' }}>编辑昵称、邮箱、头像与宠物名称请前往「设置」。</p>
       </section>
 
       {/* ===== 数据概览 ===== */}

@@ -131,7 +131,6 @@ export function ChatWelcome({ onSubmit, busy }: { onSubmit: (content: string) =>
       <div className="chat-welcome-inner">
         <div className="chat-welcome-icon"><Bot size={28} /></div>
         <h2>嗨，今天想拆解点什么？</h2>
-        <p className="muted">问我学习问题，或让我把目标拆成一组可执行的学习任务。支持上传 md / pdf / txt。</p>
         <ChatComposer variant="welcome" onSubmit={onSubmit} busy={busy} />
       </div>
     </div>

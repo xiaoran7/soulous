@@ -5,11 +5,9 @@
  * App 组件是整个前端应用的顶层组件，负责：
  * - 全局状态管理（用户、任务、宠物、统计数据）
  * - 页面路由（通过 page 状态切换，非 React Router）
- * - 侧边栏导航渲染
- * - 顶部栏（页面标题、通知铃铛、用户头像）
+ * - 顶部悬浮玻璃导航渲染（Luminous Ethereal "Floating Navigation"，无侧边栏）
  * - 认证状态判断（未登录显示 AuthScreen）
  * - 管理员角色自动重定向到审核页
- * - 页面标题/副标题/眉毛文本的中英文映射
  *
  * 页面列表：dashboard / tasks / timetable / chat / review / pet / stats / focus / profile / settings / admin
  */
@@ -22,18 +20,14 @@ import {
   CalendarRange,
   ClipboardList,
   LogOut,
-  Menu,
-  PanelLeftClose,
-  PanelLeftOpen,
   PawPrint,
-  Plus,
   Settings,
   ShieldCheck,
   Timer,
   UserCog
 } from 'lucide-react';
 import { api, UnauthorizedError } from './api';
-import { NavButton, SidebarPet } from './components/shared';
+import { NavButton, NavCluster, NavPet } from './components/shared';
 import type { DailyReview, Pet, StudyTask, Summary, User } from './types';
 import { AuthScreen } from './pages/AuthScreen';
 import { LandingPage } from './pages/LandingPage';
@@ -47,14 +41,19 @@ import { SettingsPage } from './pages/SettingsPage';
 import { AdminPage } from './pages/AdminPage';
 import { FocusPage, resetFocusCache } from './pages/FocusPage';
 import { TimetablePage, resetTimetableCache, type TimetableImportState } from './pages/TimetablePage';
-import { type AppPreferences, loadPreferences, savePreferences } from './preferences';
+import { SceneBackdrop } from './studyroom/SceneBackdrop';
 import './styles.css';
 
 /** 【页面路由类型】 */
 type Page = 'dashboard' | 'tasks' | 'timetable' | 'chat' | 'review' | 'pet' | 'focus' | 'profile' | 'settings' | 'admin';
 
-/** 【侧边栏收起状态存储键】纯前端 localStorage，记住用户上次的收起/展开选择 */
-const SIDEBAR_COLLAPSE_KEY = 'soulous.sidebar.collapsed.v1';
+/**
+ * 【允许整页滚动的长内容页白名单】
+ * 桌面式固定视口：绝大多数页面锁定、滚轮不动整页。
+ * 个人资料/设置按需求改为固定页（应用偏好已删，内容收敛进单屏），
+ * 仅审核管理（列表长度不可控）放行 main 的整页滚动。
+ */
+const SCROLL_PAGES: ReadonlySet<Page> = new Set(['admin']);
 
 /**
  * 【App 根组件】
@@ -69,25 +68,16 @@ function App() {
   const [pet, setPet] = useState<Pet | null>(null);
   /** 【学习统计数据摘要】 */
   const [summary, setSummary] = useState<Summary | null>(null);
-  /** 【应用偏好】纯前端 localStorage，控制默认登录页与侧边栏宠物显隐 */
-  const [prefs, setPrefs] = useState<AppPreferences>(loadPreferences);
-  /** 【当前页面路由状态】初始页取自偏好（默认登录页） */
-  const [page, setPage] = useState<Page>(() => loadPreferences().defaultPage);
+  /** 【当前页面路由状态】产品形态「房间即主页」：登录后固定进自习室 */
+  const [page, setPage] = useState<Page>('focus');
   /** 【沉浸态】自习室进行中时全屏：隐藏侧边栏与顶栏 */
   const [immersive, setImmersive] = useState(false);
+  /** 【沉浸态导航唤出】鼠标移到屏幕顶部区域时导航条滑下来，移开收回 */
+  const [navReveal, setNavReveal] = useState(false);
   /** 【未登录时是否已点「开始使用」进入登录页】false 时展示落地页 */
   const [showAuth, setShowAuth] = useState(false);
   /** 【进入登录页时的默认标签】login=登录 / register=注册 */
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
-  /** 【侧边栏抽屉】沉浸态下从左侧滑出导航 */
-  const [navDrawerOpen, setNavDrawerOpen] = useState(false);
-  /** 【侧边栏收起态】普通模式下手动收起侧边栏，主工作区自适应铺满 */
-  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
-    try { return localStorage.getItem(SIDEBAR_COLLAPSE_KEY) === '1'; } catch { return false; }
-  });
-  useEffect(() => {
-    try { localStorage.setItem(SIDEBAR_COLLAPSE_KEY, sidebarCollapsed ? '1' : '0'); } catch { /* ignore */ }
-  }, [sidebarCollapsed]);
 
   /**
    * 【管理员自动重定向效果】
@@ -171,105 +161,102 @@ function App() {
     clearSession();
   }
 
-  /** 【更新应用偏好】落 localStorage 并刷新本地状态（侧边栏宠物等即时生效） */
-  function updatePreferences(next: AppPreferences) {
-    setPrefs(next);
-    savePreferences(next);
-  }
-
-  // 离开自习室页立即退出沉浸态；退出沉浸态时收起抽屉
+  // 离开自习室页立即退出沉浸态
   useEffect(() => { if (page !== 'focus') setImmersive(false); }, [page]);
-  useEffect(() => { if (!immersive) setNavDrawerOpen(false); }, [immersive]);
+
+  // 沉浸态：鼠标进入顶部 90px 唤出导航，离开 170px 以下收回（滞回区间防抖动）
+  useEffect(() => {
+    if (!immersive) { setNavReveal(false); return; }
+    function onMove(e: MouseEvent) {
+      setNavReveal(prev => e.clientY <= 90 ? true : (e.clientY > 170 ? false : prev));
+    }
+    window.addEventListener('mousemove', onMove);
+    return () => window.removeEventListener('mousemove', onMove);
+  }, [immersive]);
 
   if (!user) {
     if (!showAuth) {
       return <LandingPage onStart={(mode) => { setAuthMode(mode); setShowAuth(true); }} />;
     }
-    return <AuthScreen initialMode={authMode} onAuthed={() => { resetAllCaches(); void bootstrap(); }} message={message} />;
+    // 登录页同样铺场景背景：满足「一进入就置身自习室（背景图 + 玻璃）」的全局体验
+    return (
+      <>
+        <SceneBackdrop userId={null} />
+        <AuthScreen initialMode={authMode} onAuthed={() => { resetAllCaches(); void bootstrap(); }} message={message} />
+      </>
+    );
   }
 
   const isAdmin = user.role === 'ADMIN';
-  /** 【仅在 Dashboard 页面显示"新建任务"快捷按钮】 */
-  const showQuickCreate = page === 'dashboard';
+
+  /** 【页面切换】 */
+  function go(next: Page) {
+    setPage(next);
+  }
 
   return (
-    <div className={`app-shell${immersive ? ' immersive' : ''}${immersive && navDrawerOpen ? ' nav-open' : ''}${sidebarCollapsed && !immersive ? ' sidebar-collapsed' : ''}`}>
-      {/* 沉浸态：左侧抽屉把手 + 遮罩，用于唤回被隐藏的侧边栏 */}
-      {immersive && (
-        <>
-          <button className="nav-drawer-handle" onClick={() => setNavDrawerOpen(o => !o)} aria-label="菜单">
-            <Menu size={18} />
-          </button>
-          {navDrawerOpen && <div className="nav-drawer-backdrop" onClick={() => setNavDrawerOpen(false)} />}
-        </>
-      )}
-      {/* 普通模式收起后：左上角悬浮把手，用于重新展开侧边栏 */}
-      {!immersive && sidebarCollapsed && (
-        <button className="sidebar-expand-handle" onClick={() => setSidebarCollapsed(false)} aria-label="展开侧边栏" title="展开侧边栏">
-          <PanelLeftOpen size={18} />
-        </button>
-      )}
-      <aside className="sidebar">
-        <div className="brand">
-          <button className="sidebar-collapse-btn" onClick={() => setSidebarCollapsed(true)} aria-label="收起侧边栏" title="收起侧边栏">
-            <PanelLeftClose size={18} />
-          </button>
-          <span>Soulous <em>灵魂</em></span>
-        </div>
+    <div className={`app-shell${immersive ? ' immersive' : ''}${immersive && navReveal ? ' nav-reveal' : ''}`}>
+      {/* 全局场景背景：登录后所有页面都"住在"当前自习室场景里，切场景即换全屋背景 */}
+      <SceneBackdrop userId={user.id} />
 
-        {!isAdmin && (
-          <>
-            <div className="nav-group">
-              <div className="nav-group-label">Daily · 日常</div>
-              <NavButton active={page === 'dashboard'} icon={<Activity size={16} />} label="工作台" onClick={() => setPage('dashboard')} />
-              <NavButton active={page === 'tasks'} icon={<ClipboardList size={16} />} label="任务" onClick={() => setPage('tasks')} />
-              <NavButton active={page === 'timetable'} icon={<CalendarRange size={16} />} label="课表" onClick={() => setPage('timetable')} />
-              <NavButton active={page === 'review'} icon={<CalendarCheck size={16} />} label="复盘" onClick={() => setPage('review')} />
-              <NavButton active={page === 'focus'} icon={<Timer size={16} />} label="自习室" onClick={() => setPage('focus')} />
-            </div>
+      {/* 顶部悬浮玻璃胶囊导航（DESIGN.md "Floating Navigation"）：
+          品牌标 | 自习室 · 计划 · 宠物 · 我的（四入口）| 宠物芯片。沉浸态下平移出屏、由把手唤回。 */}
+      <header className="top-nav">
+        <div className="brand"><span>Soulous <em>灵魂</em></span></div>
 
-            <div className="nav-group">
-              <div className="nav-group-label">Tools · 工具</div>
-              <NavButton active={page === 'chat'} icon={<Bot size={16} />} label="AI 拆解" onClick={() => setPage('chat')} />
-            </div>
-          </>
-        )}
-
-        <div className="nav-group">
-          <div className="nav-group-label">Account · 账号</div>
-          {isAdmin && (
-            <NavButton active={page === 'admin'} icon={<ShieldCheck size={16} />} label="审核管理" onClick={() => setPage('admin')} />
-          )}
-          <NavButton active={page === 'profile'} icon={<UserCog size={16} />} label="我的" onClick={() => setPage('profile')} />
+        {/* 自习室为主，其余功能收进「计划」「我的」两个下拉簇，保持导航稀疏（soulous_1 密度） */}
+        <nav className="top-nav-links">
           {!isAdmin && (
-            <NavButton active={page === 'pet'} icon={<PawPrint size={16} />} label="宠物" onClick={() => setPage('pet')} />
+            <>
+              <NavButton active={page === 'focus'} icon={<Timer size={16} />} label="自习室" onClick={() => go('focus')} />
+              <NavCluster
+                label="计划"
+                icon={<CalendarRange size={16} />}
+                active={page === 'dashboard' || page === 'tasks' || page === 'timetable' || page === 'review' || page === 'chat'}
+                items={[
+                  { key: 'dashboard', icon: <Activity size={15} />, label: '工作台', active: page === 'dashboard', onClick: () => go('dashboard') },
+                  { key: 'tasks', icon: <ClipboardList size={15} />, label: '任务', active: page === 'tasks', onClick: () => go('tasks') },
+                  { key: 'timetable', icon: <CalendarRange size={15} />, label: '课表', active: page === 'timetable', onClick: () => go('timetable') },
+                  { key: 'review', icon: <CalendarCheck size={15} />, label: '复盘', active: page === 'review', onClick: () => go('review') },
+                  { key: 'chat', icon: <Bot size={15} />, label: 'AI 拆解', active: page === 'chat', onClick: () => go('chat') }
+                ]}
+              />
+              <NavButton active={page === 'pet'} icon={<PawPrint size={16} />} label="宠物" onClick={() => go('pet')} />
+            </>
           )}
-          <NavButton active={page === 'settings'} icon={<Settings size={16} />} label="设置" onClick={() => setPage('settings')} />
+          {isAdmin && (
+            <NavButton active={page === 'admin'} icon={<ShieldCheck size={16} />} label="审核管理" onClick={() => go('admin')} />
+          )}
+          <NavCluster
+            label="我的"
+            icon={<UserCog size={16} />}
+            active={page === 'profile' || page === 'settings'}
+            items={[
+              { key: 'profile', icon: <UserCog size={15} />, label: '个人资料', active: page === 'profile', onClick: () => go('profile') },
+              { key: 'settings', icon: <Settings size={15} />, label: '设置', active: page === 'settings', onClick: () => go('settings') },
+              { key: 'logout', icon: <LogOut size={15} />, label: '退出登录', danger: true, onClick: () => void handleLogout() }
+            ]}
+          />
+        </nav>
+
+        <div className="top-nav-side">
+          {!isAdmin && <NavPet pet={pet} onOpen={() => go('pet')} />}
         </div>
+      </header>
 
-        {!isAdmin && prefs.showSidebarPet && <SidebarPet pet={pet} onOpen={() => setPage('pet')} />}
-
-        <button className="ghost-button logout" onClick={() => void handleLogout()}>
-          <LogOut size={14} /> 退出
-        </button>
-      </aside>
-
-      <main className={page === 'chat' ? 'is-chat' : undefined}>
-        {/* 顶栏精简：通知铃铛与用户信息已移除（个人资料走侧栏「我的」）。
-            仅在工作台保留「新建任务」快捷入口，其余页面不渲染顶栏，让内容铺满。 */}
-        {showQuickCreate && (
-          <header className="topbar">
-            <div />
-            <div className="topbar-actions">
-              <button className="primary-button" onClick={() => setPage('tasks')}>
-                <Plus size={14} /> 新建任务
-              </button>
-            </div>
-          </header>
+      <main className={[
+        page === 'chat' ? 'is-chat' : '',
+        page === 'focus' ? 'is-room' : '',
+        SCROLL_PAGES.has(page) ? 'page-scroll' : ''
+      ].filter(Boolean).join(' ') || undefined}>
+        {/* 顶栏已移除：工作台重构为 soulous_4 三卡单屏（新建任务入口走「计划→任务」），
+            其余页面内容铺满，整页固定不滚动。同步/消息提示改为浮层，不占据布局高度。 */}
+        {(loading || message) && (
+          <div className="page-notice-float">
+            {loading && <div className="notice">正在同步数据...</div>}
+            {message && <div className="notice">{message}</div>}
+          </div>
         )}
-
-        {loading && <div className="notice">正在同步数据...</div>}
-        {message && <div className="notice">{message}</div>}
 
         {page === 'dashboard' && <Dashboard tasks={tasks} pet={pet} summary={summary} onRefresh={bootstrap} onPetSync={setPet} onOpenTasks={() => setPage('tasks')} onOpenReview={() => setPage('review')} onOpenPet={() => setPage('pet')} />}
         {page === 'tasks' && <TasksPage tasks={tasks} onRefresh={bootstrap} />}
@@ -278,8 +265,16 @@ function App() {
         {page === 'review' && <DailyReviewPage summary={summary} review={dailyReview} onReviewChange={setDailyReview} />}
         {page === 'pet' && <PetPage pet={pet} onRefresh={bootstrap} onFed={setPet} />}
         {page === 'profile' && <ProfilePage user={user} />}
-        {page === 'settings' && <SettingsPage user={user} onUpdated={setUser} onPetUpdated={setPet} prefs={prefs} onPrefsChange={updatePreferences} onSessionEnded={clearSession} />}
-        {page === 'focus' && <FocusPage userId={user.id} onImmersiveChange={setImmersive} />}
+        {page === 'settings' && <SettingsPage user={user} onUpdated={setUser} onPetUpdated={setPet} onSessionEnded={clearSession} />}
+        {page === 'focus' && (
+          <FocusPage
+            userId={user.id}
+            pet={pet}
+            summary={summary}
+            onImmersiveChange={setImmersive}
+            onNavigate={(p) => go(p)}
+          />
+        )}
         {page === 'admin' && <AdminPage user={user} onRefresh={bootstrap} />}
       </main>
     </div>

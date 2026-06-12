@@ -1,0 +1,23 @@
+# Python compile artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+env/
+venv/
+ENV/
+
+# SQLite databases (Dynamic local runtimes)
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# IDE settings
+.vscode/
+.idea/
+
+# Local configuration
+.env
+!README.md

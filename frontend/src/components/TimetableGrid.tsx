@@ -211,9 +211,11 @@ export function TimetableGrid({ courses, onDelete, onAdd, semester, selectedWeek
                   gridColumn: i + 2, gridRow: 1,
                   display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', lineHeight: 1.15,
                   fontWeight: 600,
-                  color: isToday ? 'var(--accent, #1a56db)' : undefined,
-                  background: isToday ? 'color-mix(in srgb, var(--accent, #1a56db) 12%, transparent)' : undefined,
-                  borderRadius: 4
+                  // 今天列：琥珀高亮（design/stitch/soulous_5 表头）
+                  color: isToday ? '#a36b00' : undefined,
+                  background: isToday ? 'rgba(255, 191, 0, 0.12)' : undefined,
+                  boxShadow: isToday ? '0 0 10px rgba(255, 179, 71, 0.2)' : undefined,
+                  borderRadius: 8
                 }}
               >
                 <span>{d}</span>
@@ -256,12 +258,14 @@ export function TimetableGrid({ courses, onDelete, onAdd, semester, selectedWeek
                 onClick={() => setDetail(b.items)}
                 title="点击查看完整信息"
                 style={{
+                  // 白雾卡 + 左侧课程色条（design/stitch/soulous_5 课程块），色条沿用同名同色调色盘
                   gridColumn: b.day + 1,
                   gridRow: `${b.start + 1} / ${b.end + 2}`,
-                  background: PALETTE[ci],
-                  color: PALETTE_FG[ci],
-                  border: 'none',
-                  borderRadius: 6,
+                  background: 'rgba(255, 255, 255, 0.92)',
+                  color: 'var(--le-ink, #2D2926)',
+                  border: '1px solid rgba(255, 255, 255, 0.6)',
+                  borderLeft: `3px solid ${PALETTE_FG[ci]}`,
+                  borderRadius: 8,
                   padding: '4px 5px',
                   overflow: 'hidden',
                   display: 'flex',
@@ -269,7 +273,7 @@ export function TimetableGrid({ courses, onDelete, onAdd, semester, selectedWeek
                   gap: 1,
                   textAlign: 'left',
                   cursor: 'pointer',
-                  boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.04)',
+                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)',
                   font: 'inherit'
                 }}
               >

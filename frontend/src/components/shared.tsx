@@ -2,19 +2,19 @@
  * 【共享 UI 组件库】
  * 提供项目中多处复用的基础 UI 组件，包括：
  * - ClickableAvatar：可点击放大的头像组件
- * - NavButton：侧边栏导航按钮
+ * - NavButton：顶部悬浮导航按钮（玻璃胶囊，激活态琥珀辉光）
  * - Metric：指标展示卡片
  * - TaskRow：任务列表行
  * - PetCard：宠物信息卡片
  * - Empty：空状态占位符
  * - StatBar：统计进度条
  * - ProgressRing：环形进度条
- * - SidebarPet：侧边栏宠物摘要
+ * - NavPet：顶部导航宠物芯片
  *
  * 以及状态标签映射表（petStatusLabel、statusLabel）和动画状态映射函数（animationForPet）。
  */
-import React, { useState } from 'react';
-import { GraduationCap, PawPrint, Sparkles } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { ChevronDown, GraduationCap, PawPrint } from 'lucide-react';
 import { PetSprite } from '../PetSprite';
 import type { PetAnimationState } from '../PetSprite';
 import type { Pet, StudyTask } from '../types';
@@ -70,7 +70,7 @@ export function ClickableAvatar({
 /**
  * 【宠物状态中文标签映射】
  * 将后端返回的宠物状态枚举值转换为用户友好的中文描述。
- * 用于 SidebarPet 和 PetCard 组件中展示宠物当前情绪。
+ * 用于 NavPet 和 PetCard 组件中展示宠物当前情绪。
  */
 export const petStatusLabel: Record<string, string> = {
   NORMAL: '安静陪伴',
@@ -109,7 +109,7 @@ export const statusLabel: Record<string, string> = {
 /**
  * 【宠物状态到动画状态的映射函数】
  * 根据宠物当前的情绪状态，返回对应的精灵图动画状态。
- * 用于 PetCard 和 SidebarPet 组件中驱动宠物动画播放。
+ * 用于 PetCard 和 NavPet 组件中驱动宠物动画播放。
  *
  * @param pet - 宠物对象（可为 null）
  * @returns 对应的 PetAnimationState
@@ -136,8 +136,33 @@ export function animationForPet(pet: Pet | null): PetAnimationState {
 }
 
 /**
+ * 【动作解锁等级表】每个宠物动画动作对应的解锁等级（唯一数据源）。
+ * 宠物页动作预览、首页宠物卡片、顶部导航宠物芯片共用，确保"未解锁动作不播放"行为一致。
+ * idle / waiting 在 Lv1 即可用，最后一个动作（review）恰好在满级 Lv30 解锁。
+ */
+export const PET_ACTION_UNLOCK_LEVEL: Record<PetAnimationState, number> = {
+  idle: 1,
+  waiting: 1,
+  waving: 3,
+  failed: 5,
+  running: 8,
+  'running-right': 12,
+  'running-left': 16,
+  jumping: 22,
+  review: 30
+};
+
+/**
+ * 【钳制到已解锁动作】给定动画状态在当前等级尚未解锁时回退到始终可用的 idle，
+ * 避免在任意展示位（卡片/导航芯片/详情页）播放尚未解锁的动作。
+ */
+export function clampAnimation(state: PetAnimationState, level: number): PetAnimationState {
+  return (PET_ACTION_UNLOCK_LEVEL[state] ?? 1) <= level ? state : 'idle';
+}
+
+/**
  * 【导航按钮组件】
- * 侧边栏中的导航项，支持激活状态高亮。
+ * 顶部悬浮玻璃导航条中的导航项，激活态以琥珀辉光高亮（非实底色块）。
  *
  * @param active - 是否为当前激活页面
  * @param icon - 按钮图标（lucide-react 组件）
@@ -154,6 +179,92 @@ export function NavButton({ active, icon, label, onClick }: {
     <button className={`nav-button ${active ? 'active' : ''}`} onClick={onClick}>
       {icon}<span>{label}</span>
     </button>
+  );
+}
+
+/** 【导航下拉簇的子项】 */
+export type NavClusterItem = {
+  key: string;
+  icon: React.ReactNode;
+  label: string;
+  /** 是否为当前激活页 */
+  active?: boolean;
+  /** 危险操作（退出登录），悬停泛红 */
+  danger?: boolean;
+  onClick: () => void;
+};
+
+/**
+ * 【导航下拉簇组件】
+ * 顶部悬浮导航的"功能簇"：一个胶囊按钮收纳多个二级页面入口，
+ * 悬停即展开第三层玻璃弹层（DESIGN.md Tonal Stacking），保持导航条稀疏；
+ * 点击也可切换（兼容触屏）。移出簇 160ms 后收起 / 点击子项 / 点击外部 / Esc 均收起。
+ *
+ * @param label - 簇名（如「计划」「我的」）
+ * @param icon - 簇图标
+ * @param active - 簇内任一页面激活时整簇高亮
+ * @param items - 子项列表
+ */
+export function NavCluster({ label, icon, active, items }: {
+  label: string;
+  icon: React.ReactNode;
+  active: boolean;
+  items: NavClusterItem[];
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  /** 【悬停离开的延时收起】短暂离开（按钮→弹层之间的缝隙）不闪关 */
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  function hoverOpen() {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    setOpen(true);
+  }
+  function hoverClose() {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    closeTimer.current = setTimeout(() => setOpen(false), 160);
+  }
+  useEffect(() => () => { if (closeTimer.current) clearTimeout(closeTimer.current); }, []);
+  useEffect(() => {
+    if (!open) return;
+    function onPointerDown(e: MouseEvent) {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false);
+    }
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open]);
+  return (
+    <div className="nav-cluster" ref={rootRef} onMouseEnter={hoverOpen} onMouseLeave={hoverClose}>
+      <button
+        className={`nav-button ${active ? 'active' : ''}`}
+        onClick={() => setOpen(o => !o)}
+        aria-expanded={open}
+        aria-haspopup="menu"
+      >
+        {icon}<span>{label}</span>
+        <ChevronDown size={13} className={`nav-caret${open ? ' open' : ''}`} />
+      </button>
+      {open && (
+        <div className="nav-cluster-menu" role="menu">
+          {items.map((item) => (
+            <button
+              key={item.key}
+              role="menuitem"
+              className={`nav-cluster-item${item.active ? ' active' : ''}${item.danger ? ' danger' : ''}`}
+              onClick={() => { setOpen(false); item.onClick(); }}
+            >
+              {item.icon}<span>{item.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -212,7 +323,9 @@ export function PetCard({ pet, activeTaskCount = 0, reviewTaskCount = 0 }: {
   reviewTaskCount?: number;
 }) {
   const percent = pet ? Math.round((pet.currentExp / pet.nextLevelExp) * 100) : 0;
-  const petState = activeTaskCount > 0 ? 'running' : reviewTaskCount > 0 ? 'review' : animationForPet(pet);
+  const rawState = activeTaskCount > 0 ? 'running' : reviewTaskCount > 0 ? 'review' : animationForPet(pet);
+  /** 【钳制到已解锁动作】未解锁的动作（如低等级的 running/review）回退 idle，不在卡片上播放 */
+  const petState = clampAnimation(rawState, pet?.level ?? 1);
   return (
     <section className="panel pet-card">
       <div className="panel-title"><h2>宠物 <em style={{ fontStyle: 'italic', color: 'var(--ink-3)' }}>成长</em></h2><PawPrint size={16} /></div>
@@ -322,36 +435,29 @@ export function ProgressRing({ value, max, size = 128, stroke = 12, label, subla
 }
 
 /**
- * 【侧边栏宠物摘要组件】
- * 侧边栏底部的宠物迷你卡片，展示宠物头像、名字、等级、
- * 心情状态和经验值进度条。点击可跳转到宠物详情页。
+ * 【顶部导航宠物芯片组件】
+ * 悬浮导航条右侧的迷你出战宠物：精灵头像 + 名字 + 等级 + 微型经验条。
+ * 悬停泛琥珀辉光，点击跳转宠物详情页；心情文案放 title 提示。
  *
  * @param pet - 宠物数据对象（可为 null）
  * @param onOpen - 点击跳转到宠物页的回调
  */
-export function SidebarPet({ pet, onOpen }: { pet: Pet | null; onOpen: () => void }) {
+export function NavPet({ pet, onOpen }: { pet: Pet | null; onOpen: () => void }) {
   const percent = pet ? Math.min(100, Math.round((pet.currentExp / Math.max(pet.nextLevelExp, 1)) * 100)) : 0;
   const mood = petStatusLabel[pet?.status ?? 'NORMAL'] ?? '安静陪伴';
-  const animState = animationForPet(pet);
+  const animState = clampAnimation(animationForPet(pet), pet?.level ?? 1);
   return (
-    <button className="sidebar-pet" onClick={onOpen} style={{ textAlign: 'left', cursor: 'pointer' }}>
-      <div className="sidebar-pet-top">
-        <div className="sidebar-pet-frame">
-          <PetSprite state={animState} size={32} />
-        </div>
-        <div className="sidebar-pet-meta">
-          <strong>
-            {pet?.name ?? 'Soul'}
-            <span className="lvl-pill" style={{ marginLeft: 6 }}>Lv.{pet?.level ?? 1}</span>
-          </strong>
-          <span>{mood}</span>
-        </div>
+    <button className="top-nav-pet" onClick={onOpen} title={`${pet?.name ?? 'Soul'} · ${mood}`}>
+      <div className="top-nav-pet-frame">
+        <PetSprite state={animState} size={26} />
       </div>
-      <div className="sidebar-pet-bar"><span style={{ width: `${percent}%` }} /></div>
-      <span className="sidebar-pet-link">
-        <Sparkles size={11} style={{ verticalAlign: '-1px', marginRight: 4 }} />
-        {pet?.name ?? 'Soul'} · 详情
-      </span>
+      <div className="top-nav-pet-meta">
+        <strong>
+          {pet?.name ?? 'Soul'}
+          <span className="lvl-pill" style={{ marginLeft: 6 }}>Lv.{pet?.level ?? 1}</span>
+        </strong>
+        <div className="top-nav-pet-bar"><span style={{ width: `${percent}%` }} /></div>
+      </div>
     </button>
   );
 }

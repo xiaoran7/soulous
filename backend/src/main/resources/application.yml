@@ -150,6 +150,20 @@ soulous:
       from: ${SOULOUS_NOTIFICATION_EMAIL_FROM:no-reply@soulous.local}
       # 【中文：邮件主题前缀】
       subject-prefix: ${SOULOUS_NOTIFICATION_EMAIL_SUBJECT_PREFIX:[Soulous] }
+  agent:
+    # 【中文：agent-service 边车总开关。开启后 AI 拆解对话 / 任务审核 / 每日复盘优先走
+    #   Python LangGraph 认知服务（agent-service/），不可用时自动回退本地 LlmService / 规则路径】
+    enabled: ${SOULOUS_AGENT_ENABLED:false}
+    # 【中文：agent-service 基地址（仅内网/localhost，不对外暴露）】
+    base-url: ${SOULOUS_AGENT_BASE_URL:http://127.0.0.1:8100}
+    # 【中文：Spring ⇄ agent 共享密钥，双向校验（出向 X-Service-Token + /internal/** 回调校验）】
+    token: ${SOULOUS_AGENT_TOKEN:}
+    # 【中文：非流式调用超时（秒），与原任务审核超时一致】
+    timeout-seconds: ${SOULOUS_AGENT_TIMEOUT_SECONDS:30}
+    # 【中文：流式调用全程超时（秒）】
+    stream-timeout-seconds: ${SOULOUS_AGENT_STREAM_TIMEOUT_SECONDS:300}
+    # 【中文：启动时把存量 memory_embedding 语料回灌进 agent 向量库（一次性迁移，完成后关掉）】
+    backfill: ${SOULOUS_AGENT_BACKFILL:false}
   llm:
     # —— 单 provider 模式（向后兼容）——
     # provider: mock | anthropic | openai (openai 兼容 DeepSeek/Moonshot/通义/Ollama 等)

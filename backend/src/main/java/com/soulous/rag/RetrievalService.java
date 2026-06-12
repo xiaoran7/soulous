@@ -76,6 +76,13 @@ public class RetrievalService {
     private final Clock clock;
 
     /**
+     * 【agent-service 边车客户端（可空）。启用后每次 upsert/remove 同步推送 agent 向量库
+     * （异步 best-effort，失败只记日志不影响业务）。字段注入以保持测试构造器不变。】
+     */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.soulous.agent.AgentClient agent;
+
+    /**
      * 【主构造器】由 Spring 自动注入依赖，使用系统默认时钟。
      *
      * @param repo       嵌入向量数据仓库
@@ -133,13 +140,18 @@ public class RetrievalService {
      */
     @Transactional
     public void indexOrUpdate(UserAccount user, EmbeddingSourceType type, Long sourceId, String content) {
-        if (!isEnabled()) return;
         if (user == null || type == null || sourceId == null) return;
 
         if (content == null || content.isBlank()) {
             remove(user, type, sourceId);
             return;
         }
+
+        // agent 向量库推送与本地 RAG 开关解耦：agent 侧用自己的 embedding 模型重新向量化，
+        // 本地 embedding 不可用（mock）时 agent 记忆仍持续累积
+        if (agent != null) agent.ragUpsertAsync(user.id, type.name(), sourceId, content);
+
+        if (!isEnabled()) return;
 
         var maybeVec = embeddings.embed(content);
         if (maybeVec.isEmpty()) return; // upstream already logged
@@ -196,6 +208,7 @@ public class RetrievalService {
     public void remove(UserAccount user, EmbeddingSourceType type, Long sourceId) {
         if (user == null || type == null || sourceId == null) return;
         repo.deleteByUserAndSourceTypeAndSourceId(user, type, sourceId);
+        if (agent != null) agent.ragDeleteAsync(user.id, type.name(), sourceId);
     }
 
     // ----- 检索操作 ----------------------------------------------------

@@ -1,64 +1,77 @@
 /**
  * 【落地页】LandingPage
- * 未登录访问时展示的营销首页：品牌 + 功能亮点 + 行动召唤（开始使用 / 登录）。
- * 真实功能页全程鉴权，点击 CTA 才进入登录/注册。
+ * 未登录访问时展示的营销首页：高保真还原 design/stitch/soulous_1。
+ * 结构 = 悬浮玻璃胶囊导航（品牌 + 场景/音乐/计划/会员 + 语言 + 登录）
+ *      + 单屏 Hero 玻璃卡（一个 CTA）+ 右侧散点装饰玻璃片
+ *      + 简化玻璃页脚（品牌句 + 版权，弃用链接列）
+ *      + 右下角悬浮宠物。无功能网格、无内部滚动区。
  */
 import React from 'react';
-import { Bot, CalendarRange, Coins, PawPrint, Sparkles, Timer } from 'lucide-react';
+import { ArrowRight, Coffee, Globe } from 'lucide-react';
 import { PetSprite } from '../PetSprite';
-
-const FEATURES = [
-  { icon: <Bot size={20} />, title: '任务打卡 · AI 初审', body: '建任务、传凭证，AI 先帮你把关，再分层发放经验。' },
-  { icon: <PawPrint size={20} />, title: '宠物养成 · 市场', body: '免费领养第一只伙伴，升级解锁动作，金币去市场收集更多。' },
-  { icon: <Coins size={20} />, title: '金币 · 每日签到', body: '完成任务、专注、连续签到都能赚金币，连击越久奖励越高。' },
-  { icon: <Timer size={20} />, title: '自习室 · 专注', body: '场景 + 白噪音的沉浸自习，陪你把时间真正用在学习上。' },
-  { icon: <CalendarRange size={20} />, title: '课表 · 成绩', body: '一键同步教务课表、考试与成绩，本学期一目了然。' },
-  { icon: <Sparkles size={20} />, title: '每日复盘', body: 'AI 根据当天任务、提交与时长生成复盘，帮你持续改进。' }
-];
 
 export function LandingPage({ onStart }: { onStart: (mode: 'login' | 'register') => void }) {
   return (
     <div className="landing">
-      <header className="landing-nav">
-        <div className="brand"><span className="brand-mark" aria-hidden="true" /> Soulous <em>灵魂</em></div>
+      {/* 整屏清晨窗景背景（复用自习室场景图） */}
+      <div className="landing-bg" aria-hidden="true">
+        <img src="/studyroom/morning-window.jpg" alt="" />
+      </div>
+
+      {/* 悬浮玻璃胶囊导航：品牌 | 四个锚点 | 语言 + 登录（与设计稿一致，保持稀疏） */}
+      <header className="landing-nav glass-card">
+        <div className="landing-brand">Soulous</div>
+        <nav className="landing-links" aria-hidden="true">
+          <span>场景</span><span>音乐</span><span>计划</span><span>会员</span>
+        </nav>
         <div className="landing-nav-actions">
-          <button className="text-button" onClick={() => onStart('login')}>登录</button>
-          <button className="primary-button" onClick={() => onStart('register')}>开始使用</button>
+          <button className="landing-globe" aria-label="语言" title="语言">
+            <Globe size={18} />
+          </button>
+          <button className="le-primary-button" onClick={() => onStart('login')}>登录</button>
         </div>
       </header>
 
       <section className="landing-hero">
-        <div className="landing-hero-copy">
-          <p className="page-eyebrow">Study · Grow · Together</p>
-          <h1>把每一次学习<br /><em>凭证</em>，变成<em>成长</em>反馈</h1>
+        <div className="landing-hero-card glass-card">
+          <p className="landing-eyebrow">FOCUS LEARN GROW</p>
+          <h1>开启你的<br />清晨自习室</h1>
           <p className="landing-sub">
-            任务打卡、AI 初审、分层经验和宠物养成，都在一个轻量工作台里闭环。
-            完成学习赚金币，陪伴宠物一起升级。
+            选择场景、音乐与节奏，把一天最清醒的时间留给真正重要的学习。沉浸式体验，告别焦虑。
           </p>
           <div className="landing-cta">
-            <button className="primary-button large" onClick={() => onStart('register')}>免费开始</button>
-            <button className="secondary-button large" onClick={() => onStart('login')}>已有账号登录</button>
+            <button className="le-primary-button large" onClick={() => onStart('register')}>
+              开始学习 <ArrowRight size={18} />
+            </button>
           </div>
         </div>
-        <div className="landing-hero-pet">
-          <PetSprite state="waving" size={180} />
+
+        {/* 散点装饰玻璃片（仅宽屏，模拟书桌上随手摆放的物件） */}
+        <div className="landing-scatter" aria-hidden="true">
+          <div className="glass-card landing-chip landing-chip-coffee le-float">
+            <Coffee size={36} strokeWidth={1.6} />
+            <span>晨间咖啡已备好</span>
+          </div>
+          <div className="glass-card landing-chip landing-chip-goal">
+            <div><span>今日专注目标</span><strong>120 min</strong></div>
+            <div className="landing-goal-bar"><i style={{ width: '45%' }} /></div>
+          </div>
         </div>
       </section>
 
-      <section className="landing-features">
-        {FEATURES.map((f) => (
-          <div className="landing-feature" key={f.title}>
-            <div className="landing-feature-icon">{f.icon}</div>
-            <strong>{f.title}</strong>
-            <p>{f.body}</p>
-          </div>
-        ))}
-      </section>
-
-      <footer className="landing-footer">
-        <span>Soulous · 学习打卡 × 宠物成长</span>
-        <button className="text-button" onClick={() => onStart('register')}>开始使用 →</button>
+      {/* 简化页脚：只留品牌句与版权（设计稿的链接列按需求弃用） */}
+      <footer className="landing-footer glass-card">
+        <div className="landing-footer-brand">Soulous</div>
+        <p className="landing-footer-tagline">
+          为你打造纯净的数字自习空间。用设计与科技的力量，重塑学习体验，找回心流时刻。
+        </p>
+        <div className="landing-footer-copy">© 2026 Soulous. All rights reserved.</div>
       </footer>
+
+      {/* 右下角漂浮宠物 */}
+      <button className="landing-pet glass-card amber-glow le-float" onClick={() => onStart('register')} title="和飞雪一起开始">
+        <PetSprite state="waving" size={64} />
+      </button>
     </div>
   );
 }

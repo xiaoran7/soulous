@@ -64,7 +64,12 @@ export function ExamPanel({ exams, loading, selectedSemester }: {
 function ExamCard({ exam }: { exam: ExamEntry }) {
   const place = [exam.campus, exam.room].filter(Boolean).join(' · ');
   return (
-    <div style={{ border: '1px solid var(--line)', borderRadius: 10, padding: '12px 14px' }}>
+    <div style={{
+      background: 'rgba(255, 255, 255, 0.92)',
+      border: '1px solid rgba(255, 255, 255, 0.6)',
+      borderRadius: 12, padding: '12px 14px',
+      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.04)'
+    }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
         <strong style={{ fontSize: 14.5 }}>{exam.courseName || '未知课程'}</strong>
         {exam.session && <span className="chip small">{exam.session}</span>}
@@ -145,11 +150,17 @@ export function GradePanel({ grades, loading, selectedSemester }: {
         const s = semesterSummary(rows);
         return (
           <section key={sem} style={{ marginBottom: 18 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, flexWrap: 'wrap', margin: '4px 0 8px' }}>
-              <span className="muted small" style={{ fontWeight: 600 }}>{sem}</span>
-              <span className="muted small">
-                {s.count} 门 · 已修 {s.credits} 学分{s.gpa != null ? ` · 加权绩点 ${s.gpa}` : ''}
-              </span>
+            {/* 学期小结玻璃条（design/stitch/soulous_6 Semester Summary Bar）：门数 / 已修学分 / 加权绩点 */}
+            <div className="grade-sem-bar glass-card">
+              <div className="grade-sem-name">
+                <GraduationCap size={18} />
+                <span>{sem}</span>
+              </div>
+              <div className="grade-sem-stats">
+                <div><span>总门数</span><strong>{s.count}</strong></div>
+                <div><span>已修学分</span><strong>{s.credits}</strong></div>
+                {s.gpa != null && <div className="grade-sem-gpa"><span>平均绩点</span><strong>{s.gpa}</strong></div>}
+              </div>
             </div>
             <div style={{ display: 'grid', gap: 6 }}>
               {rows.map((g) => <GradeRow key={g.id} grade={g} />)}
@@ -167,7 +178,10 @@ function GradeRow({ grade }: { grade: GradeEntry }) {
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 10,
-      border: '1px solid var(--line)', borderRadius: 8, padding: '9px 12px'
+      background: 'rgba(255, 255, 255, 0.92)',
+      border: '1px solid rgba(255, 255, 255, 0.6)',
+      borderRadius: 12, padding: '9px 12px',
+      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.04)'
     }}>
       <GraduationCap size={15} style={{ color: 'var(--ink-4)', flexShrink: 0 }} />
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -180,9 +194,10 @@ function GradeRow({ grade }: { grade: GradeEntry }) {
             .filter(Boolean).join(' · ')}
         </div>
       </div>
+      {/* 分数：及格用琥珀深色突出（design/stitch/soulous_6 成绩列），不及格保持警示红 */}
       <span style={{
-        fontSize: 16, fontWeight: 700, flexShrink: 0,
-        color: fail ? 'var(--danger)' : 'var(--ink)'
+        fontSize: 17, fontWeight: 700, flexShrink: 0,
+        color: fail ? 'var(--danger)' : '#845400'
       }}>
         {grade.score || '—'}
       </span>
