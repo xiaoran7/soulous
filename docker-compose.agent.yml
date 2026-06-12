@@ -1,0 +1,28 @@
+# Soulous agent-service 边车（单容器）。
+# 用法：docker compose -f docker-compose.agent.yml up -d --build
+# 端口只绑 127.0.0.1：agent 仅供同机 Spring Boot 内网调用，不对外暴露。
+services:
+  agent:
+    build: ./agent-service
+    container_name: soulous-agent
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8100:8100"
+    environment:
+      ACTIVE_PROVIDER: ${ACTIVE_PROVIDER:-deepseek}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-chat}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
+      EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-v4}
+      AGENT_SERVICE_TOKEN: ${SOULOUS_AGENT_TOKEN:?需要与 Spring 侧 SOULOUS_AGENT_TOKEN 一致}
+      # Linux 容器访问宿主机 Spring 用 host.docker.internal（compose 已加 host-gateway 映射）
+      SOULOUS_BASE_URL: ${SOULOUS_BASE_URL:-http://host.docker.internal:8080}
+      SOULOUS_SERVICE_TOKEN: ${SOULOUS_AGENT_TOKEN:?}
+    volumes:
+      - agent-data:/srv/agent/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  agent-data:

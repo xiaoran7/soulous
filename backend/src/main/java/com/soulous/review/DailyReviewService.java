@@ -58,6 +58,14 @@ public class DailyReviewService {
     private final RetrievalService retrieval;
 
     /**
+     * 【agent-service 边车客户端（可空）。soulous.agent.enabled=true 时复盘生成优先走
+     * agent-service（结构化输出 + agent 侧 RAG），失败回退本地 LLM → 规则默认值。
+     * 字段注入以保持测试直构构造器不变。】
+     */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.soulous.agent.AgentClient agent;
+
+    /**
      * 【主构造器】注入所有依赖，包含 RAG 检索服务。
      *
      * @param tasks       任务仓库
@@ -171,10 +179,14 @@ public class DailyReviewService {
         var defaultSummary = buildSummary(completed.size(), submissionList.size(), minutes, exp);
         var defaultPetMessage = petMessage(pet, exp, rejected.size());
 
-        // 【RAG 检索 + LLM 增强】
-        var ragBlock = buildRetrievedBlock(user, completed, rejected, taskList);
-        var enhanced = tryLlmEnhance(completed.size(), submissionList.size(), minutes, exp,
-                rejected.size(), taskList, completed, rejected, pet, ragBlock);
+        // 【agent-service 优先 → 本地 RAG 检索 + LLM 增强】
+        var enhanced = tryAgentEnhance(user, completed.size(), submissionList.size(), minutes, exp,
+                rejected.size(), taskList, completed, rejected, pet);
+        if (enhanced.isEmpty()) {
+            var ragBlock = buildRetrievedBlock(user, completed, rejected, taskList);
+            enhanced = tryLlmEnhance(completed.size(), submissionList.size(), minutes, exp,
+                    rejected.size(), taskList, completed, rejected, pet, ragBlock);
+        }
 
         // 【组装最终响应体，LLM 增强内容优先，降级为规则默认值】
         var body = new LinkedHashMap<String, Object>();
@@ -314,7 +326,8 @@ public class DailyReviewService {
      */
     public Map<String, Object> generateStream(com.soulous.auth.UserAccount user,
                                               java.util.function.Consumer<String> onChunk) {
-        if (!llm.supportsStreaming()) {
+        var agentActive = agent != null && agent.enabled();
+        if (!agentActive && !llm.supportsStreaming()) {
             // Best we can do: produce the full structured review and pretend to stream
             // by emitting the summary text as one chunk. The UI degrades gracefully.
             // 【降级处理：生成完整结构化复盘，将摘要文本作为单个 chunk 推送。UI 可优雅降级。】
@@ -336,6 +349,24 @@ public class DailyReviewService {
         var minutes = todayRecords.stream().mapToInt(r -> r.studyMinutes == null ? 0 : r.studyMinutes).sum();
         var exp = todayLogs.stream().mapToInt(l -> l.expAmount == null ? 0 : l.expAmount).sum();
         var pet = pets.findByUserAndActiveTrue(user).orElse(null);
+
+        // 【agent-service 优先：叙述 token 透传，REVIEW_JSON 信封在 agent 侧拦下并结构化返回】
+        if (agentActive) {
+            var done = agent.dailyReviewStream(
+                    agentPayload(user, completed.size(), submissionList.size(), minutes, exp,
+                            rejected.size(), taskList, completed, rejected, pet), onChunk);
+            if (done.isPresent()) {
+                return buildFinalBody(user, completed, rejected, submissionList, todayLogs, todayRecords,
+                        taskList, minutes, exp, pet, mapAgentReview(done.get()));
+            }
+            if (!llm.supportsStreaming()) {
+                // agent 失败且本地不支持流式：降级为同步 generate 并整段推送摘要
+                var body = generate(user);
+                var summary = String.valueOf(body.getOrDefault("summary", ""));
+                if (!summary.isBlank()) onChunk.accept(summary);
+                return body;
+            }
+        }
         var ragBlock = buildRetrievedBlock(user, completed, rejected, taskList);
 
         // System prompt: ask the LLM to narrate THEN emit envelope. Same envelope schema
@@ -496,6 +527,57 @@ public class DailyReviewService {
         body.put("metrics", metrics);
         indexTodayReview(user, body);
         return body;
+    }
+
+    /**
+     * 【尝试 agent-service 增强复盘（非流式）。失败返回空 Map，调用方回退本地 LLM。】
+     */
+    private Map<String, Object> tryAgentEnhance(com.soulous.auth.UserAccount user,
+                                                int completed, int submissions, int minutes, int exp,
+                                                int rejectedCount, List<StudyTask> allTasks,
+                                                List<StudyTask> completedTasks, List<StudyTask> rejectedTasks,
+                                                Pet pet) {
+        if (agent == null || !agent.enabled()) return Map.of();
+        var payload = agentPayload(user, completed, submissions, minutes, exp,
+                rejectedCount, allTasks, completedTasks, rejectedTasks, pet);
+        return agent.dailyReview(payload).map(this::mapAgentReview).orElse(Map.of());
+    }
+
+    /** 【组装 agent DailyReviewRequest 契约载荷】 */
+    private com.fasterxml.jackson.databind.node.ObjectNode agentPayload(
+            com.soulous.auth.UserAccount user,
+            int completed, int submissions, int minutes, int exp, int rejectedCount,
+            List<StudyTask> allTasks, List<StudyTask> completedTasks, List<StudyTask> rejectedTasks, Pet pet) {
+        var payload = agent.mapper().createObjectNode();
+        payload.put("userId", String.valueOf(user.id));
+        payload.put("completedTasks", completed);
+        payload.put("submissions", submissions);
+        payload.put("studyMinutes", minutes);
+        payload.put("earnedExp", exp);
+        payload.put("rejectedCount", rejectedCount);
+        if (!completedTasks.isEmpty()) payload.put("representativeCompleted", completedTasks.getFirst().title);
+        if (!rejectedTasks.isEmpty()) payload.put("needFix", rejectedTasks.getFirst().title);
+        allTasks.stream().filter(t -> t.status == TaskStatus.TODO || t.status == TaskStatus.DOING).findFirst()
+                .ifPresent(t -> payload.put("inProgress", t.title));
+        if (pet != null) {
+            var p = payload.putObject("pet");
+            p.put("name", pet.name == null ? "" : pet.name);
+            p.put("level", pet.level == null ? 1 : pet.level);
+            p.put("status", pet.status == null ? "NORMAL" : pet.status.name());
+        }
+        return payload;
+    }
+
+    /** 【agent DailyReviewResult JSON → 增强字段 Map（与 tryLlmEnhance 同构）】 */
+    private Map<String, Object> mapAgentReview(com.fasterxml.jackson.databind.JsonNode json) {
+        var result = new LinkedHashMap<String, Object>();
+        putIfText(result, "title", json.path("title").asText(""));
+        putIfText(result, "summary", json.path("summary").asText(""));
+        putIfText(result, "petMessage", json.path("petMessage").asText(""));
+        putIfArray(result, "highlights", json.path("highlights"));
+        putIfArray(result, "risks", json.path("risks"));
+        putIfArray(result, "tomorrowSuggestions", json.path("tomorrowSuggestions"));
+        return result;
     }
 
     /**

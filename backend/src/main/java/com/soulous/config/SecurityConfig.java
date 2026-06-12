@@ -90,6 +90,9 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> {
                     // 【公开端点：认证接口和错误页面无需认证】
                     auth.requestMatchers("/api/auth/**", "/error").permitAll();
+                    // 【内网端点：agent-service 回调专用，绕过 JWT；
+                    //   由 InternalAgentController 自行校验 X-Service-Token（token 未配置时一律 401）】
+                    auth.requestMatchers("/internal/**").permitAll();
                     // 【H2 控制台端点（仅开发环境）】
                     if (h2ConsoleEnabled) auth.requestMatchers("/h2-console/**").permitAll();
                     auth.requestMatchers("/actuator/health", "/actuator/info").permitAll()

@@ -38,6 +38,14 @@ public class AiService {
     private final RetrievalService retrieval;
 
     /**
+     * 【agent-service 边车客户端（可空）。soulous.agent.enabled=true 时审核优先走
+     * agent-service 的结构化裁决（Pydantic 校验 + 自纠重试 + agent 侧 RAG），
+     * 失败回退本地 tryLlmReview → 规则兜底三级链路。字段注入以保持测试直构构造器不变。】
+     */
+    @Autowired(required = false)
+    private com.soulous.agent.AgentClient agent;
+
+    /**
      * 【Spring 自动注入构造函数。注入 LLM 服务和 RAG 检索服务。】
      */
     @Autowired
@@ -67,9 +75,64 @@ public class AiService {
      * @return 【AI 审核结果，包含评分、通过状态、原因和建议】
      */
     public AiReview review(StudyTask task, TaskSubmission submission) {
+        var agentReview = tryAgentReview(task, submission);
+        if (agentReview != null) return agentReview;
         var llmReview = tryLlmReview(task, submission);
         if (llmReview != null) return llmReview;
         return ruleBasedReview(task, submission);
+    }
+
+    /**
+     * 【尝试 agent-service 审核。组装 ReviewRequest 契约调用 /agent/review，
+     * 拿回结构化 ReviewVerdict 映射为 AiReview；agent 未启用或失败返回 null（走本地链路）。】
+     */
+    private AiReview tryAgentReview(StudyTask task, TaskSubmission submission) {
+        if (agent == null || !agent.enabled()) return null;
+        var baseExp = task.baseExp == null ? 20 : task.baseExp;
+        var mapper = agent.mapper();
+        var payload = mapper.createObjectNode();
+        payload.put("userId", task.user == null || task.user.id == null ? "" : String.valueOf(task.user.id));
+        var t = payload.putObject("task");
+        t.put("title", safe(task.title));
+        t.put("description", safe(task.description));
+        t.put("taskType", task.taskType == null ? "STUDY" : task.taskType.name());
+        t.put("difficulty", task.difficulty == null ? "NORMAL" : task.difficulty.name());
+        t.put("courseName", safe(task.courseName));
+        t.put("baseExp", baseExp);
+        var s = payload.putObject("submission");
+        s.put("textProof", safe(submission.textProof));
+        s.put("codeSnippet", safe(submission.codeSnippet));
+        s.put("proofLink", safe(submission.proofLink));
+        s.put("hasScreenshot", submission.screenshotUrl != null && !submission.screenshotUrl.isBlank());
+        s.put("studyMinutes", submission.studyMinutes == null ? 0 : submission.studyMinutes);
+
+        var json = agent.review(payload).orElse(null);
+        if (json == null) return null;
+        try {
+            var hits = retrieveHits(task.user, safe(task.title) + " " + safe(task.description));
+            var review = new AiReview();
+            review.submission = submission;
+            review.relevanceScore = clampInt(json.path("relevanceScore").asInt(0), 0, 100);
+            review.completenessScore = clampInt(json.path("completenessScore").asInt(0), 0, 100);
+            review.qualityScore = clampInt(json.path("qualityScore").asInt(0), 0, 100);
+            review.score = clampInt(json.path("score").asInt(
+                    (review.relevanceScore + review.completenessScore + review.qualityScore) / 3), 0, 100);
+            var result = json.path("result").asText("NEED_MORE").toUpperCase(Locale.ROOT);
+            review.result = switch (result) {
+                case "PASS" -> AiReviewResult.PASS;
+                case "REJECT" -> AiReviewResult.REJECT;
+                case "MANUAL" -> AiReviewResult.MANUAL;
+                default -> AiReviewResult.NEED_MORE;
+            };
+            review.reason = nonBlank(json.path("reason").asText(""), "AI 审核已完成。");
+            review.suggestion = nonBlank(json.path("suggestion").asText(""), "请保持当前节奏，下次继续。");
+            review.recommendedExp = clampInt(json.path("recommendedExp").asInt(baseExp * review.score / 100), 0, baseExp);
+            review.needManual = json.path("needManual").asBoolean(review.score >= 45 && review.score < 55);
+            review.ragHits = hitsView(hits);
+            return review;
+        } catch (Exception ex) {
+            return null;
+        }
     }
 
     /**
