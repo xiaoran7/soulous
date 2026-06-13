@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -19,6 +20,8 @@ import java.util.Map;
 public class RoomService {
     /** 【在线判定窗口（秒）：lastSeen 在此窗口内视为在线。前端心跳间隔应小于此值】 */
     static final long ONLINE_WINDOW_SECONDS = 90;
+    /** 【僵尸房回收窗口（秒）：全员超过此时长无心跳（如关页未退房）的房间在广场列表时惰性回收】 */
+    static final long STALE_ROOM_SECONDS = 30 * 60;
     /** 【房间名最大长度】 */
     private static final int MAX_NAME = 40;
 
@@ -34,18 +37,37 @@ public class RoomService {
         return LocalDateTime.now().minusSeconds(ONLINE_WINDOW_SECONDS);
     }
 
-    /** 【房间广场：列出全部房间 + 各自在线人数】 */
-    @Transactional(readOnly = true)
-    public List<Map<String, Object>> listRooms() {
+    /** 【房间广场：列出全部房间 + 各自在线人数；顺手惰性回收僵尸房（全员长时间无心跳）】 */
+    @Transactional
+    public List<Map<String, Object>> listRooms(UserAccount viewer) {
         var since = onlineSince();
-        return rooms.findAllByOrderByCreatedAtDesc().stream().map(r -> {
+        var staleSince = LocalDateTime.now().minusSeconds(STALE_ROOM_SECONDS);
+        var out = new ArrayList<Map<String, Object>>();
+        for (var r : rooms.findAllByOrderByCreatedAtDesc()) {
+            // 关页/断网不会触发 leave，房间会带着离线成员永久滞留；列表时整房回收
+            if (members.countByRoomAndLastSeenAtAfter(r, staleSince) == 0) {
+                members.deleteByRoom(r);
+                rooms.delete(r);
+                continue;
+            }
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("id", r.id);
             m.put("name", r.name);
             m.put("ownerName", displayName(r.owner));
             m.put("onlineCount", members.countByRoomAndLastSeenAtAfter(r, since));
-            return m;
-        }).toList();
+            m.put("mine", viewer != null && r.owner.id.equals(viewer.id));
+            out.add(m);
+        }
+        return out;
+    }
+
+    /** 【房主删房：成员一并清空。非房主删除走 leave 即可】 */
+    @Transactional
+    public void deleteRoom(UserAccount user, Long roomId) {
+        var room = rooms.findById(roomId).orElseThrow(() -> new NotFoundException("自习室不存在"));
+        if (!room.owner.id.equals(user.id)) throw new BadRequestException("只有房主可以删除自习室");
+        members.deleteByRoom(room);
+        rooms.delete(room);
     }
 
     /** 【创建房间并自动进入】 */

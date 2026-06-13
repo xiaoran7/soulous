@@ -98,6 +98,8 @@ async def chat_stream(req: ChatRequest):
             async for evt in loop.stream_chat(req):
                 if evt["type"] == "token":
                     yield _sse("token", {"text": evt["text"]})
+                elif evt["type"] == "status":
+                    yield _sse("status", {"stage": evt["stage"], "name": evt.get("name", "")})
                 elif evt["type"] == "done":
                     yield _sse("done", _chat_done_payload(evt["result"]))
         except Exception as e:

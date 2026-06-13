@@ -22,6 +22,20 @@ export class UnauthorizedError extends Error {
 }
 
 /**
+ * 【API 错误类：携带 HTTP 状态码】
+ * 调用方可据状态码区分「资源已不存在(404)/请求不合法(400)」与网络抖动，
+ * 例如共享自习室心跳遇 404 说明房间已被删，应退出房间而非无限重试。
+ */
+export class ApiError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+  }
+}
+
+/**
  * Single-flight refresh: if a request gets 401, ask the server to rotate our
  * refresh-token cookie and retry once. Concurrent 401s share one in-flight refresh
  * (otherwise 10 stale requests during a token transition fire 10 refresh calls and
@@ -95,7 +109,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   }
   if (response.status === 401) throw new UnauthorizedError();
   if (!response.ok) {
-    throw new Error(await errorMessage(response));
+    throw new ApiError(await errorMessage(response), response.status);
   }
   // 后端对"无数据"场景（如尚未领养宠物）返回 200 + 空体，直接 .json() 会抛
   // "Unexpected end of JSON input" 导致整个 bootstrap 失败，这里把空体归一为 null
@@ -207,7 +221,11 @@ async function upload<T>(path: string, formData: FormData, onProgress?: (pct: nu
  * @param onToken - 增量文本片段的回调函数
  * @returns 最终的完整响应数据
  */
-async function streamSse<T>(path: string, body: unknown, onToken: (chunk: string) => void): Promise<T> {
+/** 【SSE status 事件载荷：agent 工具调用状态（stage: tool=开始 / tool_done=结束）】 */
+export interface StreamStatus { stage: string; name?: string }
+
+async function streamSse<T>(path: string, body: unknown, onToken: (chunk: string) => void,
+                            onStatus?: (status: StreamStatus) => void): Promise<T> {
   const doFetch = () => fetch(`${API_BASE}${path}`, {
     method: 'POST',
     credentials: 'include',
@@ -256,6 +274,8 @@ async function streamSse<T>(path: string, body: unknown, onToken: (chunk: string
     dataLines = [];
     if (evName === 'token') {
       try { onToken(JSON.parse(raw) as string); } catch { /* skip malformed */ }
+    } else if (evName === 'status') {
+      try { onStatus?.(JSON.parse(raw) as StreamStatus); } catch { /* skip malformed */ }
     } else if (evName === 'done') {
       try { finalPayload = JSON.parse(raw) as T; } catch { /* malformed; fail at end */ }
     } else if (evName === 'error') {
@@ -475,17 +495,22 @@ export const api = {
   chatPostMessage: (id: number, content: string) => request<ChatConversationView>(`/api/chat/conversations/${id}/messages`, {
     method: 'POST', body: JSON.stringify({ content })
   }),
-  /** 【发送消息（SSE 流式）：增量文本经 onToken 推送，done 时 resolve 完整对话视图】 */
-  chatPostMessageStream: (id: number, content: string, onToken: (chunk: string) => void): Promise<ChatConversationView> =>
-    streamSse<ChatConversationView>(`/api/chat/conversations/${id}/messages/stream`, { content }, onToken),
+  /** 【发送消息（SSE 流式）：增量文本经 onToken 推送，工具调用状态经 onStatus 推送，done 时 resolve 完整对话视图】 */
+  chatPostMessageStream: (id: number, content: string, onToken: (chunk: string) => void,
+                          onStatus?: (status: StreamStatus) => void): Promise<ChatConversationView> =>
+    streamSse<ChatConversationView>(`/api/chat/conversations/${id}/messages/stream`, { content }, onToken, onStatus),
   /** 【编辑计划草案中的单个任务】 */
   chatEditPlanTask: (id: number, index: number, patch: {
     title?: string; description?: string; estimatedMinutes?: number; difficulty?: string; taskType?: string; baseExp?: number;
   }) => request<ChatConversationView>(`/api/chat/conversations/${id}/plan/tasks/${index}`, {
     method: 'PATCH', body: JSON.stringify(patch)
   }),
-  /** 【删除计划草案中的单个任务】 */
+  /** 【删除计划草案中的单个任务（删到零等价于弃用整份草案）】 */
   chatDeletePlanTask: (id: number, index: number) => request<ChatConversationView>(`/api/chat/conversations/${id}/plan/tasks/${index}`, {
+    method: 'DELETE'
+  }),
+  /** 【弃用整份计划草案（对所有任务都不满意时的一键出口）】 */
+  chatDismissPlan: (id: number) => request<ChatConversationView>(`/api/chat/conversations/${id}/plan`, {
     method: 'DELETE'
   }),
   /** 【确认计划草案，落地为真实任务（不挂目标）】 */
@@ -509,6 +534,12 @@ export const api = {
     request<RoomDetail>(`/api/rooms/${id}/heartbeat`, { method: 'POST', body: JSON.stringify({ focusing, focusSeconds }) }),
   /** 【退出房间】 */
   leaveRoom: (id: number) => request(`/api/rooms/${id}/leave`, { method: 'DELETE' }),
+  /** 【退出房间（页面卸载/关闭时用 keepalive，保证请求在页面销毁后仍发出）】 */
+  leaveRoomBeacon: (id: number) => {
+    void fetch(`${API_BASE}/api/rooms/${id}/leave`, { method: 'DELETE', credentials: 'include', keepalive: true }).catch(() => { /* 尽力而为 */ });
+  },
+  /** 【房主删房】 */
+  deleteRoom: (id: number) => request(`/api/rooms/${id}`, { method: 'DELETE' }),
   /** 【宠物市场：全部上架品种】 */
   petSpecies: () => request<PetSpecies[]>('/api/pet/species'),
   /** 【当前用户拥有的全部宠物】 */

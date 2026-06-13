@@ -59,6 +59,8 @@ class ReActLoop:
 
         self._conn: Optional[aiosqlite.Connection] = None
         self.compiled = None
+        # 记忆后台任务强引用集合：create_task 的返回值若不持有会被 GC 提前回收
+        self._memory_tasks: set = set()
 
     # ----------------------------------------------------------- lifecycle --
 
@@ -71,9 +73,15 @@ class ReActLoop:
         logger.info("[LOOP] 状态图已编译，checkpointer 就绪（%s）。", self.state_db)
 
     async def shutdown(self):
+        await self.flush_memory_tasks()
         if self._conn:
             await self._conn.close()
             self._conn = None
+
+    async def flush_memory_tasks(self):
+        """等待所有后台记忆任务完成（优雅停机与测试用；业务路径不调用）。"""
+        if self._memory_tasks:
+            await asyncio.gather(*tuple(self._memory_tasks), return_exceptions=True)
 
     # --------------------------------------------------------------- graph --
 
@@ -214,21 +222,41 @@ class ReActLoop:
         return "end"
 
     async def _memory_node(self, state: AgentState, config: RunnableConfig = None):
-        """收尾节点：思维链蒸馏入 DAL、情景/语义记忆提取（情景→向量库、画像→DAL）、清空临时通道。"""
+        """收尾节点：把蒸馏/记忆提炼（2 次 LLM 调用 + 落库）甩到后台任务，仅同步清空临时通道。
+
+        重活若留在图内，stream 的 done 事件要等它跑完才发——用户看到回复已生成
+        却还要干等数秒（前端体感卡死），故 fire-and-forget。"""
         runtime = state["runtime_state"]
         user_id = runtime.user_id or "default_user"
         session_id = (config or {}).get("configurable", {}).get("thread_id", "default_thread")
         query = runtime.current_query
         final_response = state["conversation_messages"][-1].content if state["conversation_messages"] else "无回答"
 
+        # 轻量快照推理步骤（后台任务不能引用会被 RemoveMessage 清掉的消息对象）
+        steps = []
+        for idx, msg in enumerate(state["reasoning_messages"]):
+            steps.append(f"Step {idx + 1}: {msg.content or ''}")
+            if getattr(msg, "tool_calls", None):
+                steps.append(f"  [计划执行工具]: {[tc['name'] for tc in msg.tool_calls]}")
+
+        task = asyncio.create_task(
+            self._persist_memories(user_id, session_id, query, str(final_response), steps))
+        self._memory_tasks.add(task)
+        task.add_done_callback(self._memory_tasks.discard)
+
+        # 清空临时通道（Token 瘦身）并复位运行时
+        remove_reasoning = [RemoveMessage(id=m.id) for m in state["reasoning_messages"] if m.id]
+        remove_tools = [RemoveMessage(id=m.id) for m in state["tool_messages"] if m.id]
+        runtime_reset = RuntimeStateSchema(user_id=user_id, current_query="", session_active=False)
+        return {"reasoning_messages": remove_reasoning, "tool_messages": remove_tools,
+                "runtime_state": runtime_reset}
+
+    async def _persist_memories(self, user_id: str, session_id: str, query: str,
+                                final_response: str, steps: list):
+        """后台记忆持久化：思维链蒸馏入 DAL、情景→向量库、画像→DAL。任何失败只记日志。"""
         # 1. 思维链蒸馏归档
         distilled = "无中间推理过程。"
-        if state["reasoning_messages"]:
-            steps = []
-            for idx, msg in enumerate(state["reasoning_messages"]):
-                steps.append(f"Step {idx + 1}: {msg.content or ''}")
-                if getattr(msg, "tool_calls", None):
-                    steps.append(f"  [计划执行工具]: {[tc['name'] for tc in msg.tool_calls]}")
+        if steps:
             prompt = ("你是一个思维链蒸馏器。请用简明扼要的中文总结以下智能体决策路径"
                       "（决策动机、验证逻辑与最终发现）：\n\n" + "\n".join(steps) + "\n\n总结控制在 100 字以内。")
             try:
@@ -236,8 +264,11 @@ class ReActLoop:
             except Exception as e:
                 logger.error("[MEMORY_NODE] 思维链蒸馏失败: %s", e)
 
-        await asyncio.to_thread(
-            self.dal.log_interaction, session_id, query, str(final_response), distilled)
+        try:
+            await asyncio.to_thread(
+                self.dal.log_interaction, session_id, query, final_response, distilled)
+        except Exception as e:
+            logger.error("[MEMORY_NODE] 交互日志落库失败: %s", e)
 
         # 2. 情景/语义记忆提取（重要度评分）
         analysis_prompt = (
@@ -274,13 +305,6 @@ class ReActLoop:
             if profile:
                 await asyncio.to_thread(self.dal.save_user_profile, user_id, profile)
                 logger.info("[MEMORY_NODE] 画像更新已持久化。")
-
-        # 3. 清空临时通道（Token 瘦身）并复位运行时
-        remove_reasoning = [RemoveMessage(id=m.id) for m in state["reasoning_messages"] if m.id]
-        remove_tools = [RemoveMessage(id=m.id) for m in state["tool_messages"] if m.id]
-        runtime_reset = RuntimeStateSchema(user_id=user_id, current_query="", session_active=False)
-        return {"reasoning_messages": remove_reasoning, "tool_messages": remove_tools,
-                "runtime_state": runtime_reset}
 
     # ----------------------------------------------------------- entrypoints --
 
@@ -328,8 +352,10 @@ class ReActLoop:
 
     async def stream_chat(self, req: ChatRequest) -> AsyncIterator[Dict[str, Any]]:
         """
-        流式入口：产出 {"type": "token", "text": ...} 增量与最终 {"type": "done", "result": ChatResult}。
+        流式入口：产出 {"type": "token", "text": ...} 增量、{"type": "status", "stage": "tool"/"tool_done",
+        "name": 工具名} 工具调用状态，与最终 {"type": "done", "result": ChatResult}。
         仅透出 agent 主调用（MAIN_LLM_TAG）的 token，摘要/蒸馏等内部调用不外泄。
+        status 事件让前端能显式展示「正在调用工具 xxx」，而不是光标停住像卡死。
         """
         state, config = self._initial_state(req)
         final_state = None
@@ -340,6 +366,14 @@ class ReActLoop:
                 text = getattr(chunk, "content", "")
                 if text:
                     yield {"type": "token", "text": text}
+            elif kind == "on_chat_model_end" and MAIN_LLM_TAG in (event.get("tags") or []):
+                # 主模型这一轮决定调用工具：把工具名透出去（工具在 action 节点内直接 invoke，
+                # 不经 callback 体系，不会自己产生 on_tool_start 事件）
+                output = event.get("data", {}).get("output")
+                for tc in (getattr(output, "tool_calls", None) or []):
+                    yield {"type": "status", "stage": "tool", "name": tc.get("name", "")}
+            elif kind == "on_chain_end" and event.get("name") == "action":
+                yield {"type": "status", "stage": "tool_done", "name": ""}
             elif kind == "on_chain_end" and event.get("name") == "LangGraph":
                 final_state = event.get("data", {}).get("output")
         if final_state is None:

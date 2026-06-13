@@ -3,14 +3,17 @@ package com.soulous.room;
 import com.soulous.auth.RegisterRequest;
 import com.soulous.auth.UserAccount;
 import com.soulous.auth.UserService;
+import com.soulous.common.exception.BadRequestException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * 【RoomService 端到端：建房自动进入、他人加入后在线成员可见、心跳上报专注状态、退房空房清理。
@@ -23,6 +26,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 class RoomServiceTests {
     @Autowired UserService users;
     @Autowired RoomService rooms;
+    @Autowired StudyRoomRepository roomRepo;
+    @Autowired RoomMemberRepository memberRepo;
 
     @Test
     @SuppressWarnings("unchecked")
@@ -48,11 +53,16 @@ class RoomServiceTests {
         assertThat(bobView.get("focusing")).isEqualTo(true);
         assertThat(bobView.get("focusSeconds")).isEqualTo(1500);
 
-        // 广场能看到该房间且在线 2
-        var plaza = rooms.listRooms();
+        // 广场能看到该房间且在线 2；alice 视角是自己的房，bob 视角不是
+        var plaza = rooms.listRooms(alice);
         assertThat(plaza).anySatisfy(r -> {
             assertThat(r.get("id")).isEqualTo(roomId);
             assertThat(r.get("onlineCount")).isEqualTo(2L);
+            assertThat(r.get("mine")).isEqualTo(true);
+        });
+        assertThat(rooms.listRooms(bob)).anySatisfy(r -> {
+            assertThat(r.get("id")).isEqualTo(roomId);
+            assertThat(r.get("mine")).isEqualTo(false);
         });
     }
 
@@ -64,7 +74,7 @@ class RoomServiceTests {
 
         rooms.join(u, r2id);
         // u 现在只在房间二；房间一只剩 0 在线（u 已退出，房主 host... r1 owner 是 u 本人 → r1 现在无成员被删）
-        var plaza = rooms.listRooms();
+        var plaza = rooms.listRooms(u);
         assertThat(plaza).noneSatisfy(r -> assertThat(r.get("name")).isEqualTo("房间一"));
     }
 
@@ -73,7 +83,35 @@ class RoomServiceTests {
         var u = fresh("lonely");
         var roomId = (Long) rooms.create(u, "独自一人").get("id");
         rooms.leave(u, roomId);
-        assertThat(rooms.listRooms()).noneSatisfy(r -> assertThat(r.get("id")).isEqualTo(roomId));
+        assertThat(rooms.listRooms(u)).noneSatisfy(r -> assertThat(r.get("id")).isEqualTo(roomId));
+    }
+
+    @Test
+    void ownerCanDeleteRoomButOthersCannot() {
+        var host = fresh("host");
+        var guest = fresh("guest");
+        var roomId = (Long) rooms.create(host, "要删的房").get("id");
+        rooms.join(guest, roomId);
+
+        assertThatThrownBy(() -> rooms.deleteRoom(guest, roomId))
+                .isInstanceOf(BadRequestException.class);
+
+        rooms.deleteRoom(host, roomId);
+        assertThat(rooms.listRooms(host)).noneSatisfy(r -> assertThat(r.get("id")).isEqualTo(roomId));
+    }
+
+    @Test
+    void staleRoomIsRecycledOnList() {
+        var u = fresh("ghost");
+        var roomId = (Long) rooms.create(u, "僵尸房").get("id");
+        // 模拟全员长时间无心跳（关页未退房）
+        var room = roomRepo.findById(roomId).orElseThrow();
+        var m = memberRepo.findByRoomAndUser(room, u).orElseThrow();
+        m.lastSeenAt = LocalDateTime.now().minusSeconds(RoomService.STALE_ROOM_SECONDS + 60);
+        memberRepo.save(m);
+
+        assertThat(rooms.listRooms(u)).noneSatisfy(r -> assertThat(r.get("id")).isEqualTo(roomId));
+        assertThat(roomRepo.findById(roomId)).isEmpty();
     }
 
     private UserAccount fresh(String prefix) {

@@ -25,7 +25,8 @@ let chatTreeCache: ChatTree | null = null;
 let chatActiveConvCache: ChatConversationView | null = null;
 export function resetChatCache() { chatTreeCache = null; chatActiveConvCache = null; }
 
-export function ChatPage() {
+/** @param onTasksCommitted 计划落地为任务后回调（透传给 ChatConversation），上层用来刷新全局任务列表 */
+export function ChatPage({ onTasksCommitted }: { onTasksCommitted?: () => void } = {}) {
   const [tree, setTree] = useState<ChatTree>(() => chatTreeCache ?? { categories: [], conversations: [] });
   const [activeConv, setActiveConv] = useState<ChatConversationView | null>(() => chatActiveConvCache);
   const [pendingInitial, setPendingInitial] = useState<{ id: number; text: string } | null>(null);
@@ -227,6 +228,7 @@ export function ChatPage() {
             conversation={activeConv}
             initialMessage={pendingInitial && pendingInitial.id === activeConv.id ? pendingInitial.text : null}
             onChanged={() => { setPendingInitial(null); void reloadTree(); }}
+            onTasksCommitted={onTasksCommitted}
           />
         ) : (
           <ChatWelcome onSubmit={handleWelcomeSubmit} busy={busy} />

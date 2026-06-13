@@ -7,8 +7,10 @@
  * 结构化选项卡、用户消息里附件的可折叠展示。
  */
 import React, { useEffect, useRef, useState } from 'react';
-import { Send, CheckCircle2, Pencil, Trash2, Save, XCircle, ListChecks, ChevronDown, ChevronUp } from 'lucide-react';
-import { api } from '../api';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { Send, CheckCircle2, Pencil, Trash2, Save, XCircle, ListChecks, ChevronDown, ChevronUp, Wrench } from 'lucide-react';
+import { api, type StreamStatus } from '../api';
 import type { ChatConversationView, PendingClarifyQuestion, PendingPlanTask } from '../types';
 import { ChatComposer, ChatWelcome } from './ChatComposer';
 
@@ -60,6 +62,26 @@ function AttachmentCard({ name, chars, truncated, text }: { name: string; chars:
   );
 }
 
+/** 【助手消息正文：GFM Markdown 渲染（表格/代码块/列表），流式中也实时渲染。导出供测试】 */
+export function AssistantMarkdown({ text }: { text: string }) {
+  return (
+    <div className="md-body">
+      <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
+    </div>
+  );
+}
+
+/** 【工具名 → 用户可读文案】未知工具回退显示原始名 */
+const TOOL_LABELS: Record<string, string> = {
+  query_focus_history: '查询专注历史',
+  query_timetable: '查询课表',
+  query_pet_status: '查询宠物状态',
+};
+function toolLabel(name?: string): string {
+  if (!name) return '查询数据';
+  return TOOL_LABELS[name] ?? name;
+}
+
 function UserBubbleContent({ content }: { content: string }) {
   const segs = parseUserContent(content);
   return (
@@ -77,9 +99,11 @@ function UserBubbleContent({ content }: { content: string }) {
  * @param onChanged    对话内容变化（标题/计划落地）后通知父组件刷新侧边栏/任务
  * @param initialMessage 可选首条消息（已含附件信封）：挂载即自动发送一次
  */
-export function ChatConversation({ conversation: initial, onChanged, initialMessage }: {
+export function ChatConversation({ conversation: initial, onChanged, onTasksCommitted, initialMessage }: {
   conversation: ChatConversationView;
   onChanged?: () => void;
+  /** 计划草案落地为任务后触发：用于刷新全局任务列表缓存，使「任务」页无需刷新即可见新任务 */
+  onTasksCommitted?: () => void;
   initialMessage?: string | null;
 }) {
   const [conv, setConv] = useState<ChatConversationView>(initial);
@@ -87,6 +111,8 @@ export function ChatConversation({ conversation: initial, onChanged, initialMess
   const [busyKind, setBusyKind] = useState<'send' | 'commit' | null>(null);
   const [error, setError] = useState('');
   const [streamingText, setStreamingText] = useState('');
+  /** 正在执行的工具调用（agent status 事件驱动）：非空时显示「正在调用工具…」指示 */
+  const [activeTool, setActiveTool] = useState<string | null>(null);
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
   const [editDraft, setEditDraft] = useState<PendingPlanTask>({ title: '' });
   const [clarifyPick, setClarifyPick] = useState<Record<string, string[]>>({});
@@ -96,7 +122,7 @@ export function ChatConversation({ conversation: initial, onChanged, initialMess
   // 切换对话时重置内部状态
   useEffect(() => {
     setConv(initial);
-    setError(''); setStreamingText('');
+    setError(''); setStreamingText(''); setActiveTool(null);
     setEditingIdx(null); setClarifyPick({}); setClarifyOther({});
   }, [initial]);
 
@@ -122,7 +148,9 @@ export function ChatConversation({ conversation: initial, onChanged, initialMess
     try {
       const optimisticId = -Date.now();
       setConv((c) => ({ ...c, messages: [...c.messages, { id: optimisticId, idx: c.messages.length, role: 'USER', content }] }));
-      const next = await api.chatPostMessageStream(conv.id, content, (chunk) => setStreamingText((p) => p + chunk));
+      const next = await api.chatPostMessageStream(conv.id, content,
+        (chunk) => setStreamingText((p) => p + chunk),
+        (status: StreamStatus) => setActiveTool(status.stage === 'tool' ? (status.name ?? '') : null));
       setConv(next);
       onChanged?.();
     } catch (err) {
@@ -134,7 +162,7 @@ export function ChatConversation({ conversation: initial, onChanged, initialMess
         setError(fallbackErr instanceof Error ? fallbackErr.message : (err instanceof Error ? err.message : '发送失败'));
       }
     } finally {
-      setBusy(false); setBusyKind(null); setStreamingText('');
+      setBusy(false); setBusyKind(null); setStreamingText(''); setActiveTool(null);
     }
   }
 
@@ -163,14 +191,28 @@ export function ChatConversation({ conversation: initial, onChanged, initialMess
   }
 
   async function deletePendingTask(idx: number) {
-    if (!confirm('删除这个任务？')) return;
+    const isLast = (plan?.tasks?.length ?? 0) <= 1;
+    if (!confirm(isLast ? '这是草案里最后一个任务，删除后整份草案将被弃用。确定？' : '删除这个任务？')) return;
     setBusy(true); setError('');
     try {
       const next = await api.chatDeletePlanTask(conv.id, idx);
       setConv(next);
-      if (editingIdx === idx) setEditingIdx(null);
+      setEditingIdx(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : '删除失败');
+    } finally { setBusy(false); }
+  }
+
+  /** 整份草案都不满意时的一键出口：清空待确认计划，可继续对话让 AI 重新生成 */
+  async function dismissPlan() {
+    if (!confirm('弃用整份计划草案？之后可以继续对话让 AI 重新生成。')) return;
+    setBusy(true); setError('');
+    try {
+      const next = await api.chatDismissPlan(conv.id);
+      setConv(next);
+      setEditingIdx(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '弃用失败');
     } finally { setBusy(false); }
   }
 
@@ -180,6 +222,7 @@ export function ChatConversation({ conversation: initial, onChanged, initialMess
       const next = await api.chatCommit(conv.id);
       setConv(next);
       onChanged?.();
+      onTasksCommitted?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : '提交失败');
     } finally { setBusy(false); setBusyKind(null); }
@@ -234,7 +277,7 @@ export function ChatConversation({ conversation: initial, onChanged, initialMess
             <div key={m.id} className={`planner-chat-row ${isUser ? 'user' : 'assistant'}`}>
               <span className="planner-chat-role">{isUser ? '你' : 'AI'}</span>
               <div className={`planner-chat-bubble ${isUser ? 'user' : 'assistant'}${blocked ? ' blocked' : ''}`}>
-                {isUser ? <UserBubbleContent content={m.content} /> : assistantText}
+                {isUser ? <UserBubbleContent content={m.content} /> : <AssistantMarkdown text={assistantText} />}
               </div>
             </div>
           );
@@ -243,8 +286,16 @@ export function ChatConversation({ conversation: initial, onChanged, initialMess
           <div className="planner-chat-row assistant">
             <span className="planner-chat-role">AI</span>
             <div className="planner-chat-bubble assistant streaming">
-              {stripEnvelopes(streamingText, '（计划草案生成中…）')}
-              <span className="planner-chat-cursor" aria-hidden="true">▋</span>
+              <AssistantMarkdown text={stripEnvelopes(streamingText, '（计划草案生成中…）')} />
+              {/* 工具调用中：流式停顿不是卡死，显式给出「正在调用工具」+ 动态点点点 */}
+              {activeTool !== null
+                ? (
+                  <span className="chat-tool-status">
+                    <Wrench size={12} /> 正在调用工具：{toolLabel(activeTool)}
+                    <span className="planner-chat-typing"><span /><span /><span /></span>
+                  </span>
+                )
+                : <span className="planner-chat-cursor" aria-hidden="true">▋</span>}
             </div>
           </div>
         )}
@@ -252,6 +303,11 @@ export function ChatConversation({ conversation: initial, onChanged, initialMess
           <div className="planner-chat-row assistant">
             <span className="planner-chat-role">AI</span>
             <div className="planner-chat-bubble assistant streaming">
+              {activeTool !== null && (
+                <span className="chat-tool-status">
+                  <Wrench size={12} /> 正在调用工具：{toolLabel(activeTool)}
+                </span>
+              )}
               <span className="planner-chat-typing"><span /><span /><span /></span>
             </div>
           </div>
@@ -357,6 +413,9 @@ export function ChatConversation({ conversation: initial, onChanged, initialMess
           <div className="row-actions" style={{ marginTop: 8 }}>
             <button className="primary-button" disabled={busy || editingIdx !== null} onClick={commit}>
               <CheckCircle2 size={14} /> 确认并创建任务
+            </button>
+            <button className="secondary-button" disabled={busy} onClick={() => void dismissPlan()}>
+              <Trash2 size={14} /> 弃用草案
             </button>
             {busyKind === 'commit' && <span className="muted small">正在创建任务…</span>}
           </div>

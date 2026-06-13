@@ -26,4 +26,7 @@ interface RoomMemberRepository extends JpaRepository<RoomMember, Long> {
 
     /** 【房间内全部成员数（含离线），用于空房清理】 */
     long countByRoom(StudyRoom room);
+
+    /** 【整房成员清空：房主删房 / 僵尸房回收时级联】 */
+    void deleteByRoom(StudyRoom room);
 }

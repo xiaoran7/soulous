@@ -7,7 +7,8 @@ import react from '@vitejs/plugin-react';
  * 当开发服务器跑在其它端口（PORT 环境变量 / 端口被占自动顺延）时代理请求依然放行。
  */
 const backendProxy: ProxyOptions = {
-  target: 'http://127.0.0.1:8080',
+  // BACKEND_PORT 覆盖：与 PORT 同理，多实例并行验证（如 8080 被常驻后端占用）时指向副本后端
+  target: `http://127.0.0.1:${Number(process.env.BACKEND_PORT) || 8080}`,
   changeOrigin: true,
   configure: (proxy) => {
     proxy.on('proxyReq', (proxyReq) => {

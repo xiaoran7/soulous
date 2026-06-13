@@ -164,6 +164,8 @@ export interface RoomSummary {
   name: string;
   ownerName: string;
   onlineCount: number;
+  /** 是否当前用户创建的房间（决定是否显示删除入口） */
+  mine: boolean;
 }
 
 /** 【共享自习室：在线成员】 */

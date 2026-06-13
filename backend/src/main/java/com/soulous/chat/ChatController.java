@@ -120,6 +120,13 @@ class ChatController extends BaseController {
                         out.write(("event: token\ndata: " + data + "\n\n").getBytes(StandardCharsets.UTF_8));
                         out.flush();
                     } catch (Exception ignored) { /* client disconnected */ }
+                }, status -> {
+                    // agent 工具调用状态 {stage, name}：前端据此显示「正在调用工具…」指示
+                    try {
+                        out.write(("event: status\ndata: " + STREAM_MAPPER.writeValueAsString(status) + "\n\n")
+                                .getBytes(StandardCharsets.UTF_8));
+                        out.flush();
+                    } catch (Exception ignored) { /* client disconnected */ }
                 });
                 var payload = STREAM_MAPPER.writeValueAsString(view);
                 out.write(("event: done\ndata: " + payload + "\n\n").getBytes(StandardCharsets.UTF_8));
@@ -147,6 +154,12 @@ class ChatController extends BaseController {
     ChatDtos.ConversationView deletePlanTask(HttpServletRequest request, @PathVariable Long id,
                                              @PathVariable int index) {
         return service.deletePlanTask(current(request), id, index);
+    }
+
+    /** 【弃用整份计划草案：对所有任务都不满意时的一键出口】 */
+    @DeleteMapping("/conversations/{id}/plan")
+    ChatDtos.ConversationView dismissPlan(HttpServletRequest request, @PathVariable Long id) {
+        return service.dismissPlan(current(request), id);
     }
 
     @PostMapping("/conversations/{id}/commit")

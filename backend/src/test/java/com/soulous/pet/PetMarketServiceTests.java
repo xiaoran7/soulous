@@ -33,13 +33,13 @@ class PetMarketServiceTests {
         assertThat(pet.species.slug).isEqualTo("feixue");
         assertThat(pets.getActiveOrNull(user)).isNotNull();
 
-        assertThatThrownBy(() -> pets.adoptStarter(user, "mochi")).isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> pets.adoptStarter(user, "clawd")).isInstanceOf(BadRequestException.class);
     }
 
     @Test
     void cannotAdoptNonStarter() {
         var user = fresh("nonstarter");
-        assertThatThrownBy(() -> pets.adoptStarter(user, "ember")).isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> pets.adoptStarter(user, "guga")).isInstanceOf(BadRequestException.class);
     }
 
     @Test
@@ -48,9 +48,9 @@ class PetMarketServiceTests {
         pets.adoptStarter(user, "feixue");      // 首只，免费，出战
         coins.grant(user, 200, "TEST", null, null, "测试发币");
 
-        var ember = pets.buy(user, "ember");     // 价格 120
-        assertThat(coins.balance(user)).isEqualTo(80);
-        assertThat(ember.active).isFalse();       // 非首只，不自动出战
+        var ikun = pets.buy(user, "ikun");      // 价格 150
+        assertThat(coins.balance(user)).isEqualTo(50);
+        assertThat(ikun.active).isFalse();        // 非首只，不自动出战
         assertThat(pets.getActiveOrNull(user).species.slug).isEqualTo("feixue");
         assertThat(pets.owned(user)).hasSize(2);
     }
@@ -59,7 +59,7 @@ class PetMarketServiceTests {
     void buyRejectedWhenInsufficientCoins() {
         var user = fresh("poor");
         pets.adoptStarter(user, "feixue");
-        assertThatThrownBy(() -> pets.buy(user, "aurora")).isInstanceOf(BadRequestException.class); // 300 金币，余额 0
+        assertThatThrownBy(() -> pets.buy(user, "tianyi")).isInstanceOf(BadRequestException.class); // 300 金币，余额 0
     }
 
     @Test
@@ -67,25 +67,25 @@ class PetMarketServiceTests {
         var user = fresh("switch");
         pets.adoptStarter(user, "feixue");
         coins.grant(user, 200, "TEST", null, null, "测试发币");
-        var ember = pets.buy(user, "ember");
+        var ikun = pets.buy(user, "ikun");
 
         // 给出战(feixue)加经验
         pets.addCheckinExp(user, 50, 1.0, "刷经验");
         int feixueExp = pets.getActiveOrNull(user).currentExp;
         assertThat(feixueExp).isGreaterThan(0);
 
-        // 切换到 ember：它应从 0 经验开始（每宠独立，不共享）
-        pets.setActive(user, ember.id);
-        assertThat(pets.getActiveOrNull(user).species.slug).isEqualTo("ember");
+        // 切换到 ikun：它应从 0 经验开始（每宠独立，不共享）
+        pets.setActive(user, ikun.id);
+        assertThat(pets.getActiveOrNull(user).species.slug).isEqualTo("ikun");
         assertThat(pets.getActiveOrNull(user).currentExp).isZero();
 
-        // 给 ember 加经验后，feixue 的经验不变
+        // 给 ikun 加经验后，feixue 的经验不变
         pets.addCheckinExp(user, 30, 1.0, "刷经验");
         var owned = pets.owned(user);
         var feixue = owned.stream().filter(p -> p.species.slug.equals("feixue")).findFirst().orElseThrow();
-        var emberAfter = owned.stream().filter(p -> p.species.slug.equals("ember")).findFirst().orElseThrow();
+        var ikunAfter = owned.stream().filter(p -> p.species.slug.equals("ikun")).findFirst().orElseThrow();
         assertThat(feixue.currentExp).isEqualTo(feixueExp); // 未被影响
-        assertThat(emberAfter.currentExp).isGreaterThan(0);
+        assertThat(ikunAfter.currentExp).isGreaterThan(0);
     }
 
     private UserAccount fresh(String prefix) {

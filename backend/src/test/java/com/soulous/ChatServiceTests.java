@@ -258,6 +258,56 @@ class ChatServiceTests {
     }
 
     @Test
+    void deletingLastPlanTaskDismissesWholeDraft() {
+        // 痛点3：对草案所有任务都不满意时，必须能删到零——删除最后一个任务等价于弃用整份草案，
+        // 不再被「至少保留一个任务」卡住。
+        var user = newUser("delzero");
+        var conv = service.createConversation(user, null);
+        llm.enqueueText("""
+                <PLAN_JSON>
+                {"category":"测试","tasks":[
+                  {"title":"a","description":"d","estimatedMinutes":30,"difficulty":"EASY","taskType":"STUDY"},
+                  {"title":"b","description":"d","estimatedMinutes":30,"difficulty":"EASY","taskType":"STUDY"}
+                ]}
+                </PLAN_JSON>
+                """);
+        var view = service.postMessage(user, conv.id(), "给我计划");
+        assertThat(view.pendingPlan()).isNotNull();
+
+        var afterFirst = service.deletePlanTask(user, conv.id(), 0);
+        assertThat(afterFirst.pendingPlan()).isNotNull();
+
+        var afterLast = service.deletePlanTask(user, conv.id(), 0);
+        assertThat(afterLast.pendingPlan()).isNull();
+        assertThat(afterLast.suggestedActions()).isEmpty();
+        assertThatThrownBy(() -> service.commitPlan(user, conv.id()))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void dismissPlanClearsWholeDraftInOneCall() {
+        var user = newUser("dismiss");
+        var conv = service.createConversation(user, null);
+        llm.enqueueText("""
+                <PLAN_JSON>
+                {"category":"测试","tasks":[
+                  {"title":"a","description":"d","estimatedMinutes":30,"difficulty":"EASY","taskType":"STUDY"},
+                  {"title":"b","description":"d","estimatedMinutes":30,"difficulty":"EASY","taskType":"STUDY"}
+                ]}
+                </PLAN_JSON>
+                """);
+        var view = service.postMessage(user, conv.id(), "给我计划");
+        assertThat(view.pendingPlan()).isNotNull();
+
+        var dismissed = service.dismissPlan(user, conv.id());
+        assertThat(dismissed.pendingPlan()).isNull();
+
+        // 已无草案时再弃用应报错
+        assertThatThrownBy(() -> service.dismissPlan(user, conv.id()))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
     void newUserMessageInvalidatesStalePendingPlan() {
         var user = newUser("stale");
         var conv = service.createConversation(user, null);

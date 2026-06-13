@@ -109,7 +109,7 @@ SPRING_DATASOURCE_USERNAME=soulous
 SPRING_DATASOURCE_PASSWORD=...
 ```
 
-**prod profile 下 `ddl-auto=validate`**（Flyway 管表结构）。新增实体字段必须同步写迁移文件 `db/migration/{vendor}/V{n}__*.sql`，否则 Hibernate 校验失败拒绝启动。已有库需手动 `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`，详见 `docs/deployment.md`。
+**prod profile 下 `ddl-auto=validate`**（Flyway 管表结构）。新增实体字段必须同步写迁移文件 `db/migration/{vendor}/V{n}__*.sql`，否则 Hibernate 校验失败拒绝启动。已有库漏写迁移时的手动补列见 §9。
 
 ---
 
@@ -205,3 +205,40 @@ server {
 - **`audit_log` 不会自动清理**，长期运行建议定期归档/分区。
 - **改密 / logout-all 会自增 `tokenVersion`** 让旧 access token 立即失效；多设备登录场景下用户需重新登录所有设备。
 - **prod `ddl-auto=validate`**：新增实体字段不会自动建列，必须写 Flyway 迁移文件，否则启动失败。
+
+---
+
+## 9. 当前 VPS 实例（参考）
+
+记录当前在跑的生产实例，供运维快速定位；换机时更新此表即可。
+
+| 项目 | 值 |
+|---|---|
+| 服务器 | `107.175.236.156`，SSH 端口 `54078` |
+| 前端 | nginx 静态托管，`0.0.0.0:80`，根目录 `/var/www/soulous` |
+| 后端 | systemd `soulous.service`，Spring Boot `localhost:8080` |
+| 数据库 | H2 文件库 `/opt/soulous/backend/data/soulous.mv.db` |
+| 上传文件 | `/opt/soulous/backend/uploads/` |
+| 环境变量文件 | `/opt/soulous/backend/soulous.env` |
+| 日志 | `journalctl -u soulous -f` |
+
+### 更新流程
+
+1. `cd frontend && npm run build` → scp `dist/` 到 `/var/www/soulous/`
+2. `cd backend && mvn package -Dmaven.test.skip=true` → scp `target/soulous-backend-*.jar` 到 `/opt/soulous/backend/`
+3. `systemctl restart soulous`（后端）/ `systemctl reload nginx`（前端静态文件，reload 即可）
+
+### 漏迁移补列（启动报 `missing column` 时）
+
+prod `ddl-auto=validate` 下漏写迁移会启动失败。临时补列（根本解仍是补 `db/migration/h2/V{n}__*.sql` 写 `ADD COLUMN IF NOT EXISTS`）：
+
+```bash
+systemctl stop soulous
+cd /opt/soulous/backend
+java -cp soulous-backend-*.jar -Dloader.main=org.h2.tools.Shell \
+  org.springframework.boot.loader.launch.PropertiesLauncher \
+  -url 'jdbc:h2:file:./data/soulous;MODE=MySQL;DATABASE_TO_LOWER=TRUE' \
+  -user sa -password '' \
+  -sql 'ALTER TABLE <table> ADD COLUMN IF NOT EXISTS <col> <type>;'
+systemctl start soulous
+```
