@@ -7,10 +7,10 @@ import { LandingPage } from '../pages/LandingPage';
 
 /**
  * 【LandingPage 测试】落地页已按 stitch 设计精简为单屏 Hero（一个主 CTA + 导航登录 +
- * 右下角宠物）：验证各 CTA 正确触发进入登录/注册。
+ * 右下角「领养伙伴」引导胶囊）：验证各 CTA 正确触发进入登录/注册。
  */
 describe('LandingPage 落地页', () => {
-  it('「开始学习」进入注册，「登录」进入登录，宠物按钮进入注册', async () => {
+  it('「开始学习」进入注册，「登录」进入登录，领养胶囊进入注册', async () => {
     const onStart = vi.fn();
     render(<LandingPage onStart={onStart} />);
 
@@ -23,7 +23,7 @@ describe('LandingPage 落地页', () => {
     await userEvent.click(screen.getByRole('button', { name: '登录' }));
     expect(onStart).toHaveBeenLastCalledWith('login');
 
-    await userEvent.click(screen.getByTitle('和飞雪一起开始'));
+    await userEvent.click(screen.getByTitle('注册领养你的学习伙伴'));
     expect(onStart).toHaveBeenLastCalledWith('register');
   });
 });

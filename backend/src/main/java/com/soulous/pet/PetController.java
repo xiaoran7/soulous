@@ -114,15 +114,19 @@ class PetController extends BaseController {
     }
 
     /**
-     * 【重命名宠物：如果名称为空或空白则恢复为用户名，名称最长32字符。】
+     * 【设置伴侣昵称（全局、跨宠物共享）：空白则恢复为用户名，最长 32 字符。
+     *  保留 PATCH /api/pet 路由与 {name} 字段名以兼容前端；语义已从「单只宠物改名」
+     *  改为「给灵魂伴侣起一个不随换宠物而变的昵称」。返回更新后的出战宠物视图
+     *  （其中 companionNickname 字段即时反映新昵称）。】
      *
      * @param request 【HTTP 请求，用于解析当前用户】
      * @param body 【包含 name 字段的 Map】
-     * @return 【更新后的宠物实体】
+     * @return 【更新后的出战宠物视图】
      */
     @PatchMapping
     Object rename(HttpServletRequest request, @RequestBody Map<String, String> body) {
         var name = body == null ? null : body.get("name");
-        return PetService.view(pets.rename(current(request), name));
+        var user = users.setCompanionNickname(current(request), name);
+        return PetService.view(pets.getActiveOrNull(user));
     }
 }

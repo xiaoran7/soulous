@@ -41,6 +41,14 @@ public class UserAccount {
     /** 【用户昵称，用于界面展示，不要求唯一。可为 null（未设置时前端可回退到 username）】 */
     public String nickname;
 
+    /**
+     * 【伴侣昵称：用户给「灵魂伴侣」起的名字，全局共享、跨宠物固定——换出战宠物/换品种都用这一个名字。
+     *  与每只宠物自带、不可改的品种名（owned_pet 通过 species.name 展示）形成「昵称 · 名称」双段。
+     *  可为 null（注册时默认填用户名，旧数据由迁移回填）。最长 32 字符。】
+     */
+    @Column(length = 32)
+    public String companionNickname;
+
     /** 【用户邮箱地址，用于通知和密码找回等功能。可为 null】 */
     public String email;
 
@@ -67,6 +75,14 @@ public class UserAccount {
     /** 【金币余额：完成任务/打卡/专注赚取，用于宠物市场购买。账号级共享（与每宠独立的经验不同）。】 */
     @Column(nullable = false)
     public int coinBalance = 0;
+
+    /**
+     * 【AI 长期记忆开关：是否允许 AI 记住该用户（回填/检索个人语料）。默认开启。
+     *  关闭后 {@link com.soulous.rag.RetrievalService} 的索引与检索对该用户一律空操作——
+     *  新内容不再被记住、已存记忆不再参与检索（清空需用户在设置页另行触发）。】
+     */
+    @Column(nullable = false)
+    public boolean aiMemoryEnabled = true;
 
     /** 【账户创建时间，在实体持久化时自动设置，用于审计和展示】 */
     public LocalDateTime createdAt = LocalDateTime.now();

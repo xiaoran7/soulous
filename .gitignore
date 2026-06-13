@@ -64,3 +64,5 @@ frontend/tsconfig.tsbuildinfo
 .claude/
 .design/
 *.bat
+CLAUDE.md
+.posters2/

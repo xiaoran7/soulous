@@ -7,7 +7,7 @@
  *
  * 所有 API 方法均返回 Promise，调用方无需关心认证刷新和错误重试细节。
  */
-import type { ChatCategory, ChatConversationView, ChatTree, CourseCreateInput, CourseEntry, DailyReview, ExamEntry, ExpLog, FocusSession, GradeEntry, MetricsSnapshot, Pet, PetSpecies, RoomDetail, RoomSummary, StudyTask, SubmissionDetail, Summary, TimetableSyncResult, User } from './types';
+import type { AiMemory, ChatCategory, ChatConversationView, ChatTree, CourseCreateInput, CourseEntry, DailyReview, ExamEntry, ExpLog, FocusSession, GradeEntry, MetricsSnapshot, Pet, PetSpecies, RoomDetail, RoomSummary, SecurityActivity, StorageAsset, StudyTask, SubmissionDetail, Summary, TimetableSyncResult, User } from './types';
 
 /** 【API 基础路径，可通过环境变量 VITE_API_BASE 覆盖，空字符串表示同源请求】 */
 const API_BASE = import.meta.env.VITE_API_BASE ?? '';
@@ -363,6 +363,24 @@ export const api = {
   logout: () => request<{ ok: boolean }>('/api/auth/logout', { method: 'POST' }),
   /** 【退出所有设备】 */
   logoutAll: () => request<{ ok: boolean }>('/api/auth/logout-all', { method: 'POST' }),
+  /** 【安全与设备活动：当前用户最近的审计事件（登录/登出/改密等）】 */
+  securityActivity: () => request<SecurityActivity[]>('/api/account/activity'),
+  /** 【存储资产聚合：头像/凭证图清单 + 总占用】 */
+  storageAssets: () => request<{ items: StorageAsset[]; totalBytes: number }>('/api/account/assets'),
+  /** 【删除一项存储资产（仅头像类可删）】 */
+  deleteAsset: (url: string) => request<{ ok: boolean }>(`/api/account/assets?url=${encodeURIComponent(url)}`, { method: 'DELETE' }),
+  /** 【AI 记忆与隐私状态：RAG 是否启用 + 本人是否开启记忆】 */
+  ragStatus: () => request<{ enabled: boolean; memoryEnabled: boolean }>('/api/rag/status'),
+  /** 【列出本人的全部长期记忆】 */
+  ragMemories: () => request<AiMemory[]>('/api/rag/memories'),
+  /** 【删除单条记忆】 */
+  deleteMemory: (id: number) => request<{ ok: boolean }>(`/api/rag/memories/${id}`, { method: 'DELETE' }),
+  /** 【清空全部记忆】 */
+  clearMemories: () => request<{ cleared: number }>('/api/rag/memories', { method: 'DELETE' }),
+  /** 【设置 AI 记忆开关】 */
+  setMemoryEnabled: (enabled: boolean) => request<{ memoryEnabled: boolean }>('/api/rag/settings', {
+    method: 'PUT', body: JSON.stringify({ enabled })
+  }),
   // Rotates the refresh-token cookie and returns a fresh access token. Usually NOT
   // called directly — the request() interceptor calls /api/auth/refresh-token
   // automatically on 401 and retries the original request.

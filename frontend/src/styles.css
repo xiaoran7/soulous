@@ -171,11 +171,18 @@ a { color: inherit; text-decoration: none; }
 }
 .app-bg img,
 .app-bg video {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
-  animation: app-bg-fade 0.7s ease;
 }
+/* 静态底图：切场景时淡入 */
+.app-bg img { animation: app-bg-fade 0.7s ease; }
+/* 动态视频：覆盖在底图之上，默认透明，onPlaying 标记 .is-ready 后柔和淡入，
+   静→动过渡无跳变（底图先顶住，视频出帧后才浮现） */
+.app-bg video { opacity: 0; transition: opacity 0.6s ease; }
+.app-bg video.is-ready { opacity: 1; }
 @keyframes app-bg-fade { from { opacity: 0; } to { opacity: 1; } }
 .app-bg-veil {
   position: absolute;
@@ -326,6 +333,69 @@ a { color: inherit; text-decoration: none; }
 .nav-cluster-item.active svg { color: var(--amber-deep); }
 .nav-cluster-item.danger:hover { background: var(--danger-bg); color: var(--danger); }
 
+/* ===== 顶部通知铃铛（轻量版） ===== */
+.nav-bell { position: relative; flex: none; }
+.nav-bell-btn {
+  position: relative;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  color: var(--ink-2);
+  background: rgba(255, 255, 255, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.nav-bell-btn:hover { background: rgba(255, 191, 0, 0.14); color: var(--ink); }
+/* 红点徽标：右上角小药丸，数字现算 */
+.nav-bell-dot {
+  position: absolute; top: -3px; right: -3px;
+  min-width: 16px; height: 16px; padding: 0 4px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-family: var(--mono); font-size: 10px; font-weight: 700; line-height: 1;
+  color: #fff; background: var(--danger, #e5484d);
+  border-radius: 999px;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85);
+}
+.nav-bell-menu {
+  position: absolute; top: calc(100% + 12px); right: 0;
+  z-index: 90;
+  width: 268px;
+  display: grid; gap: 2px;
+  padding: 6px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.82);
+  -webkit-backdrop-filter: blur(28px);
+  backdrop-filter: blur(28px);
+  border: 1.5px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.18);
+  animation: nav-bell-in 0.16s ease;
+}
+@keyframes nav-bell-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.nav-bell-head {
+  padding: 6px 12px 4px;
+  font-size: 12px; font-weight: 700; letter-spacing: 0.04em;
+  color: var(--ink-3);
+}
+.nav-bell-empty {
+  padding: 14px 12px; font-size: 13px; color: var(--ink-3); text-align: center;
+}
+.nav-bell-item {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  text-align: left;
+  font-size: 13px; font-weight: 500; line-height: 1.45;
+  color: var(--ink-2);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.nav-bell-item:hover { background: rgba(255, 191, 0, 0.10); color: var(--ink); }
+.nav-bell-item-ic { flex: none; margin-top: 1px; color: var(--amber-deep); }
+.nav-bell-item.rose .nav-bell-item-ic { color: var(--danger, #e5484d); }
+.nav-bell-item-tx { flex: 1; }
+
 .ghost-button {
   display: inline-flex;
   align-items: center;
@@ -400,6 +470,102 @@ a { color: inherit; text-decoration: none; }
   border-radius: 4px;
   line-height: 1.3;
 }
+
+/* 「昵称 · 名称」里的品种名（副名）：弱化、非斜体、略小，让伴侣昵称当主角 */
+.pet-species-tag {
+  font-style: normal;
+  font-weight: 500;
+  color: var(--ink-3);
+  font-size: 0.82em;
+}
+
+/* 表单字段下方的浅色辅助说明（伴侣昵称等） */
+.field-hint {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--ink-3);
+}
+
+/* ===== 设置页：设备活动 / 存储资产 / AI 记忆 / 关于 ===== */
+.icon-button {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; border-radius: 9px; flex: none;
+  color: var(--ink-3); transition: background 0.15s ease, color 0.15s ease;
+}
+.icon-button:hover { background: rgba(0, 0, 0, 0.06); }
+.icon-button.danger-text:hover { background: var(--danger-bg); color: var(--danger); }
+
+/* 设备活动列表 */
+.activity-list { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 6px; }
+.activity-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 11px; border-radius: 12px;
+  background: rgba(255, 255, 255, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+}
+.activity-badge {
+  flex: none; width: 22px; height: 22px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center; color: #fff;
+}
+.activity-badge.ok { background: #3aa76d; }
+.activity-badge.bad { background: var(--danger, #e5484d); }
+.activity-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.activity-main strong { font-size: 13.5px; }
+.activity-meta { font-size: 11px; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.activity-time { font-family: var(--mono); font-size: 11px; color: var(--ink-3); flex: none; }
+
+/* 存储资产网格 */
+.asset-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
+.asset-card {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px; border-radius: 12px;
+  background: rgba(255, 255, 255, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+}
+.asset-thumb { width: 44px; height: 44px; border-radius: 9px; object-fit: cover; flex: none; background: rgba(0,0,0,0.05); }
+.asset-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.asset-info strong { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.asset-locked { flex: none; padding: 2px 7px; border-radius: 7px; background: rgba(0,0,0,0.05); }
+
+/* 开关行 + 拨动开关 */
+.toggle-row { display: flex; align-items: flex-start; gap: 14px; justify-content: space-between; padding: 6px 0 12px; }
+.toggle-row > span { display: flex; flex-direction: column; gap: 3px; }
+.toggle-row small { font-size: 11.5px; line-height: 1.5; max-width: 46ch; }
+.switch {
+  flex: none; width: 44px; height: 26px; border-radius: 999px; padding: 3px;
+  background: rgba(0, 0, 0, 0.18); transition: background 0.18s ease; position: relative;
+}
+.switch.on { background: var(--amber); }
+.switch-knob {
+  display: block; width: 20px; height: 20px; border-radius: 50%; background: #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3); transition: transform 0.18s ease;
+}
+.switch.on .switch-knob { transform: translateX(18px); }
+
+/* AI 记忆列表 */
+.memory-head { display: flex; align-items: center; justify-content: space-between; margin: 4px 0 8px; }
+.memory-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; max-height: 360px; overflow-y: auto; }
+.memory-row {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 10px 12px; border-radius: 12px;
+  background: rgba(255, 255, 255, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+}
+.memory-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.memory-main p { margin: 0; font-size: 13px; line-height: 1.55; color: var(--ink-2); }
+.memory-tag {
+  align-self: flex-start; font-size: 10.5px; font-weight: 700;
+  padding: 1px 8px; border-radius: 7px; color: var(--amber-deep);
+  background: rgba(255, 191, 0, 0.14);
+}
+
+/* 关于 */
+.about-rows { display: grid; gap: 8px; margin-bottom: 14px; }
+.about-row { display: flex; align-items: center; gap: 12px; font-size: 13.5px; }
+.about-row > span:first-child { width: 48px; flex: none; color: var(--ink-3); font-size: 12px; }
+.about-row .muted { display: inline-flex; align-items: center; gap: 5px; }
 
 /* 窄屏：导航只留图标，宠物芯片缩成头像 */
 @media (max-width: 880px) {
@@ -1836,6 +2002,16 @@ textarea.code, .textarea.code { font-family: var(--mono); font-size: 12.5px; }
   backdrop-filter: blur(var(--glass-blur));
   pointer-events: none;
 }
+/* 返回首页：玻璃幽灵胶囊，置于品牌上方 */
+.auth-back {
+  display: inline-flex; align-items: center; gap: 6px;
+  margin-bottom: 14px; padding: 7px 14px 7px 10px;
+  border: 1px solid var(--line); border-radius: 999px;
+  background: rgba(255, 255, 255, 0.4);
+  color: var(--ink-3); font-size: 13px; font-weight: 600; cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+.auth-back:hover { background: rgba(255, 255, 255, 0.72); color: var(--ink); }
 .auth-panel .brand { padding: 0 0 16px; }
 .auth-panel h1 {
   font-family: var(--serif);
@@ -3972,7 +4148,7 @@ textarea.code, .textarea.code { font-family: var(--mono); font-size: 12.5px; }
   /* 钉住合成层：避免邻近动画（宠物精灵逐帧）触发 backdrop 重采样导致玻璃闪烁 */
   transform: translateZ(0);
 }
-/* 模糊在空伪元素上：room-tile-pet / immersive-pet / landing-pet 等玻璃卡内
+/* 模糊在空伪元素上：room-tile-pet / immersive-pet 等玻璃卡内
    嵌着逐帧精灵，模糊挂元素本体 = 精灵图层每帧更新强制整卡重栅格化（闪烁） */
 .glass-card::before {
   content: "";
@@ -4427,9 +4603,14 @@ button.room-tile:hover { box-shadow: var(--glow-amber); background: var(--le-gla
   padding: 12px 32px; border-radius: 999px;
 }
 .landing-brand { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; color: var(--le-ink); }
-.landing-links { display: inline-flex; gap: 18px; color: var(--le-ink-soft); font-size: 14px; font-weight: 600; letter-spacing: 0.05em; }
-.landing-links span { padding: 8px 16px; border-radius: 999px; transition: background 0.2s, color 0.2s; }
-.landing-links span:hover { background: rgba(255, 255, 255, 0.25); color: var(--le-ink); }
+.landing-links { display: inline-flex; gap: 8px; }
+.landing-links button {
+  border: 0; background: transparent; cursor: pointer;
+  padding: 8px 16px; border-radius: 999px;
+  color: var(--le-ink-soft); font-size: 14px; font-weight: 600; letter-spacing: 0.05em;
+  transition: background 0.2s, color 0.2s;
+}
+.landing-links button:hover { background: rgba(255, 255, 255, 0.32); color: var(--le-ink); }
 .landing-nav-actions { display: inline-flex; align-items: center; gap: 16px; }
 .landing-globe {
   display: grid; place-items: center;
@@ -4438,16 +4619,17 @@ button.room-tile:hover { box-shadow: var(--glow-amber); background: var(--le-gla
   transition: background 0.2s, color 0.2s;
 }
 .landing-globe:hover { background: rgba(255, 255, 255, 0.25); color: var(--le-ink); }
-/* Hero：占满剩余视口，左玻璃卡 + 右散点 */
+/* Hero：占满剩余视口，左文案玻璃卡 + 右功能预览列，两栏填满不留空 */
 .landing-hero {
   position: relative; z-index: 1;
-  display: flex; align-items: center;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: clamp(32px, 5vw, 72px);
   flex: 1;
   min-height: 0;
   padding: 100px clamp(20px, 5vw, 64px) 28px;
   max-width: 1440px; width: 100%; margin: 0 auto;
 }
-.landing-hero-card { border-radius: 28px; padding: clamp(32px, 4vw, 48px); max-width: 640px; }
+.landing-hero-card { flex: 1 1 540px; border-radius: 28px; padding: clamp(32px, 4vw, 48px); max-width: 600px; }
 .landing-eyebrow { margin: 0 0 16px; font-size: 14px; font-weight: 600; letter-spacing: 0.18em; color: var(--amber-deep); opacity: 0.85; }
 .landing-hero h1 { font-weight: 700; font-size: clamp(36px, 4.5vw, 52px); line-height: 1.15; letter-spacing: -0.02em; margin: 0 0 22px; }
 .landing-sub { color: var(--le-ink-soft); line-height: 1.7; font-size: 17px; max-width: 480px; margin: 0; }
@@ -4456,26 +4638,31 @@ button.room-tile:hover { box-shadow: var(--glow-amber); background: var(--le-gla
   display: inline-flex; align-items: center; gap: 10px;
   padding: 16px 32px; font-size: 18px; font-weight: 600;
 }
-/* 散点装饰卡（呼吸浮动） */
-.landing-scatter { position: absolute; inset: 0; pointer-events: none; }
-.landing-chip { position: absolute; font-size: 14px; font-weight: 600; color: var(--le-ink-soft); }
-.landing-chip-coffee {
-  right: 10%; top: 20%; transform: rotate(3deg);
-  width: 184px; padding: 18px 16px; border-radius: 14px;
-  display: flex; flex-direction: column; align-items: center; gap: 12px;
-  text-align: center; opacity: 0.9;
+/* 右侧功能预览玻璃列（琥珀渐变图标徽章 + 精炼排版，统一 18px 圆角） */
+.landing-features { flex: 0 0 clamp(280px, 26vw, 340px); display: grid; gap: 14px; align-content: center; }
+.landing-chip-badge {
+  display: grid; place-items: center; flex: none;
+  width: 38px; height: 38px; border-radius: 12px;
+  background: linear-gradient(135deg, var(--le-amber), var(--amber-deep));
+  color: #fff; box-shadow: 0 6px 16px rgba(245, 158, 11, 0.35);
 }
-.landing-chip-coffee svg { color: var(--amber-deep); filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.12)); }
-.landing-chip-goal {
-  right: 25%; bottom: 15%; transform: rotate(-2deg);
-  display: grid; gap: 10px; width: 256px;
-  padding: 22px 24px; border-radius: 24px;
+.landing-chip-badge.sm { width: 24px; height: 24px; border-radius: 8px; box-shadow: 0 4px 10px rgba(245, 158, 11, 0.3); }
+/* 功能卡：徽章 + 双行文案，横向排列 */
+.landing-feature {
+  display: flex; align-items: center; gap: 14px;
+  padding: 16px 20px; border-radius: 18px; color: var(--le-ink);
 }
-.landing-chip-goal > div:first-child { display: flex; justify-content: space-between; align-items: baseline; }
-.landing-chip-goal span { font-size: 12px; font-weight: 500; color: var(--amber-deep); }
-.landing-chip-goal strong { font-size: 14px; color: var(--le-ink); }
-.landing-goal-bar { height: 8px; border-radius: 999px; background: rgba(255, 255, 255, 0.55); overflow: hidden; }
-.landing-goal-bar i { display: block; height: 100%; border-radius: 999px; background: var(--le-amber); }
+.landing-feature-body { display: grid; gap: 3px; min-width: 0; }
+.landing-feature-body strong { font-size: 15px; font-weight: 700; color: var(--le-ink); }
+.landing-feature-body span { font-size: 12px; font-weight: 500; color: var(--le-ink-soft); }
+/* 今日目标进度卡：标题行 + 进度行（条 + 当前/目标数字） */
+.landing-feature-goal { display: grid; gap: 12px; align-items: stretch; }
+.landing-chip-goal-top { display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; color: var(--le-ink); }
+.landing-chip-goal-meter { display: flex; align-items: center; gap: 12px; }
+.landing-goal-bar { flex: 1; height: 8px; border-radius: 999px; background: rgba(255, 255, 255, 0.5); overflow: hidden; }
+.landing-goal-bar i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--le-amber), var(--amber-deep)); }
+.landing-chip-goal-num { font-size: 12px; font-weight: 600; color: var(--le-ink-soft); white-space: nowrap; }
+.landing-chip-goal-num strong { font-size: 15px; font-weight: 800; color: var(--le-ink); }
 /* 简化页脚：单行玻璃条（品牌 | 标语 | 版权），收进固定视口 */
 .landing-footer {
   position: relative; z-index: 1; margin-top: auto; flex: none;
@@ -4488,20 +4675,29 @@ button.room-tile:hover { box-shadow: var(--glow-amber); background: var(--le-gla
 .landing-footer-brand { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; color: var(--le-ink); flex: none; }
 .landing-footer-tagline { margin: 0; line-height: 1.6; opacity: 0.85; flex: 1; min-width: 0; }
 .landing-footer-copy { font-size: 12px; opacity: 0.6; flex: none; white-space: nowrap; }
-/* 右下角漂浮宠物（全站统一：80x80，距边 2rem） */
-.landing-pet {
-  position: fixed; right: 2rem; bottom: 2rem; z-index: 50;
-  width: 80px; height: 80px; border-radius: 50%;
+/* 右下角「领养伙伴」引导胶囊（未登录无宠物，替代真实精灵）
+   bottom 抬高到页脚之上，避免遮住页脚版权行 */
+.landing-adopt {
+  position: fixed; right: 2rem; bottom: 96px; z-index: 50;
+  display: inline-flex; align-items: center; gap: 12px;
+  padding: 12px 18px 12px 14px; border-radius: 18px;
   border: 1.5px solid rgba(255, 255, 255, 0.8);
-  display: grid; place-items: center; overflow: hidden;
-  cursor: pointer; padding: 0;
+  cursor: pointer; text-align: left;
+  font-size: 13px; font-weight: 700; line-height: 1.25; color: var(--le-ink);
   transition: transform 0.2s;
 }
-.landing-pet:hover { transform: scale(1.05); }
+.landing-adopt:hover { transform: translateY(-2px); }
+.landing-adopt-egg {
+  position: relative; display: grid; place-items: center; flex: none;
+  width: 40px; height: 40px; border-radius: 50%;
+  background: rgba(255, 255, 255, 0.5); color: var(--amber-deep);
+}
+.landing-adopt-spark { position: absolute; top: 4px; right: 5px; color: var(--le-amber); }
+.landing-adopt-text { color: var(--le-ink); }
 @media (max-width: 760px) {
   .landing-links { display: none; }
   .landing-hero { padding-top: 96px; }
-  .landing-scatter { display: none; }
+  .landing-features { display: none; }
   .landing-footer { flex-direction: column; gap: 8px; text-align: center; }
 }
 /* 矮窗口兜底：放不下时允许落地页滚动，避免内容被裁切 */

@@ -208,19 +208,6 @@ server {
 
 ---
 
-## 9. 当前 VPS 实例（参考）
-
-记录当前在跑的生产实例，供运维快速定位；换机时更新此表即可。
-
-| 项目 | 值 |
-|---|---|
-| 服务器 | `107.175.236.156`，SSH 端口 `54078` |
-| 前端 | nginx 静态托管，`0.0.0.0:80`，根目录 `/var/www/soulous` |
-| 后端 | systemd `soulous.service`，Spring Boot `localhost:8080` |
-| 数据库 | H2 文件库 `/opt/soulous/backend/data/soulous.mv.db` |
-| 上传文件 | `/opt/soulous/backend/uploads/` |
-| 环境变量文件 | `/opt/soulous/backend/soulous.env` |
-| 日志 | `journalctl -u soulous -f` |
 
 ### 更新流程
 

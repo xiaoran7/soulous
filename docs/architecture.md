@@ -56,7 +56,8 @@ nginx（端口 80/443）
 
 | 包 | 职责 |
 |---|---|
-| `auth` | 注册 / 登录 / refresh / logout / 改密；双 token；PasswordPolicy |
+| `auth` | 注册 / 登录 / refresh / logout / 改密；双 token；PasswordPolicy。`user_account` 含 `companion_nickname`（伴侣昵称，全局跨宠物共享，经 `PATCH /api/pet` 设置）、`ai_memory_enabled`（AI 记忆开关） |
+| `account` | 账号自助（设置页）：`GET /api/account/activity`（复用 `audit_log` 的本人设备活动）、`GET/DELETE /api/account/assets`（**轻量存储资产聚合**——不建文件登记表，从账号头像+宠物头像+任务凭证图现算，仅头像类可删） |
 | `task` | 任务 CRUD、开始、提交凭证、AI 初审、内容审核 |
 | `focus` | 专注计时会话，关联到 task |
 | `chat` | **AI 拆解对话（当前）**：Gemini 式「分类 → 对话 → 消息」聊天，流式回复、`PLAN_JSON` 计划草案落地为 `StudyTask`（不挂目标）、`CLARIFY_JSON` 结构化追问、滚动摘要控长、输入/输出审核；附件 md/pdf/txt 由前端提取文本拼进消息 |
@@ -70,10 +71,10 @@ nginx（端口 80/443）
 | `stats` | 今日指标、近 7 天趋势、课程占比 |
 | `review` | 管理员提交队列、人工复核 |
 | `appeal` | 内容审核误拦申诉流程 |
-| `notification` | 站内通知（AI 审核 / 申诉事件）；后端保留，前端铃铛入口已移除 |
+| `notification` | 站内通知（AI 审核 / 申诉事件）；后端保留。前端顶部铃铛 `NavBell` 是**轻量客户端聚合**（从已加载的 pet/tasks 现算「待喂/心情低/待审核/被驳回」，不落库不推送），与本模块无关 |
 | `audit` | 统一 `audit_log`：login/logout/password/refresh-replay/admin 操作 |
 | `moderation` | 内容审核（fast-path + LLM，默认关） |
-| `rag` | 历史打卡 RAG（embedding + cosine + 时间衰减，默认关） |
+| `rag` | 历史打卡 RAG（embedding + cosine + 时间衰减，默认关）；`RetrievalService` 是索引/检索的 choke point，按 `user.ai_memory_enabled` 逐用户拦截；`RagController` 暴露自助记忆管理（列表/删除/清空/开关，见 api.md） |
 | `storage` | 本地 / S3 兼容双后端，上传压缩 + 夜间 GC |
 | `ai` | 可插拔 LlmService：mock / anthropic / openai-compatible；LRU+TTL 缓存；失败遥测（现为 agent 不可用时的降级路径） |
 | `agent` | **agent-service 边车对接**（2026-06-11）：`AgentClient`（HTTP/1.1 + SSE）把聊天/审核/复盘路由到 Python LangGraph 认知服务（仓库 `agent-service/`）；`/internal/**` 供 agent 回调（工具+moderation fast-path，service token 鉴权）；RAG 写入点异步推送 agent 向量库；`soulous.agent.enabled=false` 或 agent 故障时全部链路自动回退本地。详见 `agent-service/README.md` |
@@ -100,6 +101,9 @@ Flyway 迁移版本（h2 / mysql 各一套）：
 | checkin | `daily_checkin` 表：h2 V13、mysql V14 |
 | pet market | `pet_species` + `owned_pet` 表（旧 `pet` 表保留不删，数据已迁入）：h2 V14、mysql V15 |
 | study room | `study_room` + `room_member` 表：h2 V15、mysql V16 |
+| pet species batch2 | 追加上架品种：h2 V16、mysql V17 |
+| companion nickname | `user_account.companion_nickname` 列（伴侣昵称，回填账号昵称/用户名）：h2 V17、mysql V18 |
+| ai memory toggle | `user_account.ai_memory_enabled` 列（默认 true，AI 记忆开关）：h2 V18、mysql V19 |
 
 > 自 wallet 起 h2/mysql 版本号差 1（mysql 早期多一条 V9 `ai_turn_mediumtext`）。
 

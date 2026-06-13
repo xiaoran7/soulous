@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { api, ApiError } from '../api';
 import type { FocusSession, Pet, RoomDetail, StudyTask, Summary } from '../types';
-import { animationForPet, clampAnimation } from '../components/shared';
+import { animationForPet, clampAnimation, petNick } from '../components/shared';
 import {
   AMBIENT_KINDS, CUSTOM_SCENE_GRADIENT, DURATION_PRESETS, getMusicTrack, getScene, MUSIC_TRACKS, SCENES,
   type AmbientKind, type MusicTrack, type StudyScene,
@@ -134,7 +134,7 @@ function VolumeRow({ icon, label, hint, value, enabled, onValue, onToggle }: {
  * 布局（按需求重排）：计时器**透明**居中（无玻璃卡）、顶部两枚深色半透明小胶囊、
  * 底部深色半透明控制坞（音量 | 声音/暂停/继续/结束——「放弃」已移除，只留结束）。
  */
-function ImmersiveRoom({ session, scene, scenes, prefs, audio, audioControls, onUpdate, onPrefsPatch, onNavigate, sharedRoom }: {
+function ImmersiveRoom({ session, scene, scenes, prefs, audio, audioControls, onUpdate, onPrefsPatch, onNavigate, sharedRoom, pet }: {
   session: FocusSession;
   scene: StudyScene;
   scenes: StudyScene[];
@@ -146,6 +146,8 @@ function ImmersiveRoom({ session, scene, scenes, prefs, audio, audioControls, on
   onNavigate?: (page: RoomNavTarget) => void;
   /** 【共享自习室】非空 = 这是共享房里的专注：左侧浮出房间名与在线成员（含各自专注计时） */
   sharedRoom?: RoomDetail | null;
+  /** 【出战宠物】用于右下漂浮宠物展示正确品种 sprite */
+  pet?: Pet | null;
 }) {
   const [elapsed, setElapsed] = useState(() => currentElapsed(session));
   const [busy, setBusy] = useState(false);
@@ -319,7 +321,7 @@ function ImmersiveRoom({ session, scene, scenes, prefs, audio, audioControls, on
       {/* 右下漂浮宠物：点击跳转宠物页 */}
       <button type="button" className="immersive-pet glass-card" title="去看看宠物"
         onClick={() => onNavigate?.('pet')}>
-        <PetSprite state="idle" size={56} />
+        <PetSprite state="idle" size={56} sheet={pet?.species?.spritePath} />
       </button>
     </div>
   );
@@ -640,7 +642,7 @@ export function FocusPage({ userId, pet, summary, onImmersiveChange, onNavigate 
         session={active} scene={scene} scenes={allScenes} prefs={prefs}
         audio={audio} audioControls={audioControls}
         onUpdate={handleUpdate} onPrefsPatch={update} onNavigate={onNavigate}
-        sharedRoom={sharedRoom}
+        sharedRoom={sharedRoom} pet={pet}
       />
     );
   }
@@ -723,9 +725,9 @@ export function FocusPage({ userId, pet, summary, onImmersiveChange, onNavigate 
             <strong>{summary?.todayFocusMinutes ?? 0}<small>min</small></strong>
             <span className="room-tile-hint">{summary?.todayFocusSessions ?? 0} 次入座<br />连续 {summary?.consecutiveDays ?? 0} 天</span>
           </button>
-          <button type="button" className="glass-card room-tile room-tile-pet" onClick={() => onNavigate?.('pet')} title={`${pet?.name ?? 'Soul'} · 点击进入宠物页`}>
-            <PetSprite state={petAnim} size={62} />
-            <span className="room-tile-hint">{pet?.name ?? 'Soul'} · Lv.{pet?.level ?? 1}</span>
+          <button type="button" className="glass-card room-tile room-tile-pet" onClick={() => onNavigate?.('pet')} title={`${petNick(pet)} · 点击进入宠物页`}>
+            <PetSprite state={petAnim} size={62} sheet={pet?.species?.spritePath} />
+            <span className="room-tile-hint">{petNick(pet)} · Lv.{pet?.level ?? 1}</span>
           </button>
         </div>
         <div className="room-scatter-col">

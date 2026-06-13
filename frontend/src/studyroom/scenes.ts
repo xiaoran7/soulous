@@ -70,6 +70,7 @@ export const SCENES: StudyScene[] = [
       'radial-gradient(120% 100% at 70% 10%, #6b4a32 0%, #4a3526 40%, #2a2018 75%, #140f0b 100%)',
     accent: '#c98a4b',
     image: '/studyroom/rainy-cafe.jpg',
+    video: '/studyroom/video/rainy-cafe.mp4?v=2',
     ambient: 'rain',
     ambientFile: '/studyroom/audio/cafe.mp3',
   },
@@ -93,6 +94,7 @@ export const SCENES: StudyScene[] = [
       'radial-gradient(120% 100% at 50% 0%, #aee0e6 0%, #6fb6c4 32%, #3d7a8f 65%, #1c3a4a 100%)',
     accent: '#4ba3bf',
     image: '/studyroom/seaside-study.jpg',
+    video: '/studyroom/video/seaside-study.mp4?v=2',
     ambient: 'waves',
     ambientFile: '/studyroom/audio/ocean-waves.mp3',
   },
@@ -105,6 +107,7 @@ export const SCENES: StudyScene[] = [
       'radial-gradient(110% 100% at 40% 15%, #5e7a52 0%, #3c5238 42%, #20301f 75%, #0e160d 100%)',
     accent: '#7faa63',
     image: '/studyroom/rainy-forest-cabin.jpg',
+    video: '/studyroom/video/rainy-forest-cabin.mp4?v=2',
     ambient: 'rain',
     ambientFile: '/studyroom/audio/rain.mp3',
   },
@@ -117,6 +120,7 @@ export const SCENES: StudyScene[] = [
       'radial-gradient(120% 100% at 75% 20%, #4b3b8f 0%, #322a63 38%, #1c1838 72%, #0c0a1a 100%)',
     accent: '#8a7fe0',
     image: '/studyroom/city-night.jpg',
+    video: '/studyroom/video/city-night.mp4?v=2',
     ambient: 'whitenoise',
   },
   {
@@ -128,6 +132,7 @@ export const SCENES: StudyScene[] = [
       'radial-gradient(110% 100% at 60% 10%, #d6e2ec 0%, #9fb2c6 34%, #5b6a82 68%, #232a3a 100%)',
     accent: '#7e9bc4',
     image: '/studyroom/nordic-snow.jpg',
+    video: '/studyroom/video/nordic-snow.mp4?v=2',
     ambient: 'wind',
     ambientFile: '/studyroom/audio/wind.mp3',
   },
@@ -140,8 +145,34 @@ export const SCENES: StudyScene[] = [
       'radial-gradient(110% 100% at 45% 12%, #7c8a76 0%, #4f5c4c 40%, #2c352b 74%, #131712 100%)',
     accent: '#8fa07d',
     image: '/studyroom/courtyard-rain.jpg',
+    video: '/studyroom/video/courtyard-rain.mp4?v=2',
     ambient: 'rain',
     ambientFile: '/studyroom/audio/rain.mp3',
+  },
+  {
+    id: 'cherry-path',
+    name: '樱花小径',
+    mood: '樱花、暖阳、蒲公英绿径',
+    tags: ['春日', '樱花', '明媚'],
+    gradient:
+      'radial-gradient(120% 100% at 50% 0%, #f6d0d8 0%, #e8a9bf 30%, #8fae7a 64%, #3a4a32 100%)',
+    accent: '#e58aa8',
+    image: '/studyroom/cherry-path.jpg',
+    video: '/studyroom/video/cherry-path.mp4?v=2',
+    ambient: 'forest',
+    ambientFile: '/studyroom/audio/forest-birds.mp3',
+  },
+  {
+    id: 'starry-lake',
+    name: '星空湖畔',
+    mood: '银河、静湖、夜色倒影',
+    tags: ['夜晚', '星空', '静谧'],
+    gradient:
+      'radial-gradient(110% 100% at 50% 0%, #2a3a5c 0%, #1b2540 40%, #111726 75%, #080b14 100%)',
+    accent: '#6c87c4',
+    image: '/studyroom/starry-lake.jpg',
+    video: '/studyroom/video/starry-lake.mp4?v=2',
+    ambient: 'waves',
   },
 ];
 
@@ -173,9 +204,10 @@ export function getScene(id: string | null | undefined): StudyScene {
 export const DURATION_PRESETS = [15, 25, 45, 50, 90];
 
 /**
- * 【背景音乐曲目】Lo-fi / 轻音乐，独立于场景环境音的一条音轨。
- * 素材来自 Pixabay（Pixabay Content License，免费可商用、无需署名），
- * 放在 /studyroom/music/ 下。可继续往这里加曲目。
+ * 【背景音乐曲目】Lo-fi / 轻音乐 / 氛围，独立于场景环境音的一条音轨。
+ * lofi-* 来自 Pixabay（Pixabay Content License）；chill/light/ambient-* 来自
+ * Mixkit（Mixkit License，免费可商用、无需署名），放在 /studyroom/music/ 下。
+ * 命名沿用情绪标签而非原曲名。可继续往这里加曲目。
  */
 export interface MusicTrack {
   id: string;
@@ -186,6 +218,11 @@ export interface MusicTrack {
 export const MUSIC_TRACKS: MusicTrack[] = [
   { id: 'lofi-1', name: 'Lo-fi · 慢拍', src: '/studyroom/music/lofi-1.mp3' },
   { id: 'lofi-2', name: 'Lo-fi · 暖意', src: '/studyroom/music/lofi-2.mp3' },
+  { id: 'chill-serene', name: '氛围 · 静谧', src: '/studyroom/music/chill-serene.mp3' },
+  { id: 'light-calm', name: '轻音乐 · 舒缓', src: '/studyroom/music/light-calm.mp3' },
+  { id: 'ambient-meditation', name: '环境 · 冥想', src: '/studyroom/music/ambient-meditation.mp3' },
+  { id: 'light-night', name: '轻音乐 · 夜阑', src: '/studyroom/music/light-night.mp3' },
+  { id: 'ambient-evening', name: '氛围 · 晚风', src: '/studyroom/music/ambient-evening.mp3' },
 ];
 
 /** 【默认曲目 ID】 */

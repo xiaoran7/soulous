@@ -198,26 +198,6 @@ public class PetService {
         return pet;
     }
 
-    /**
-     * 【重命名宠物：名称为空或空白时恢复为用户名，名称超过32字符自动截断。】
-     *
-     * @param user 【当前登录用户】
-     * @param newName 【新名称】
-     * @return 【更新后的宠物实体】
-     */
-    @Transactional
-    public Pet rename(UserAccount user, String newName) {
-        var pet = getActiveOrNull(user);
-        if (pet == null) return null;
-        var trimmed = newName == null ? "" : newName.trim();
-        if (trimmed.isBlank()) {
-            pet.name = user.username;
-        } else {
-            pet.name = trimmed.length() > 32 ? trimmed.substring(0, 32) : trimmed;
-        }
-        pet.updatedAt = LocalDateTime.now();
-        return pets.save(pet);
-    }
 
     /**
      * 【设置宠物头像 URL：空白字符串视为 null（清除头像）。】
@@ -384,6 +364,11 @@ public class PetService {
         var m = new java.util.LinkedHashMap<String, Object>();
         m.put("id", pet.id);
         m.put("name", pet.name);
+        // 【伴侣昵称：全局跨宠物共享，随 pet 视图一并下发，省去前端再额外查 user。
+        //  pet.user 为 @ManyToOne(EAGER) 必加载；为空时回退用户名】
+        m.put("companionNickname",
+                pet.user == null ? null
+                        : (pet.user.companionNickname == null ? pet.user.username : pet.user.companionNickname));
         m.put("avatarUrl", pet.avatarUrl == null ? "" : pet.avatarUrl);
         m.put("level", pet.level);
         m.put("currentExp", pet.currentExp);

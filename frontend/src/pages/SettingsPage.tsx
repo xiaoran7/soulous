@@ -9,10 +9,11 @@
  * 设计思路：单列堆叠多个 panel，敏感/低频操作（改密、危险操作）下沉。
  */
 import React, { useEffect, useRef, useState } from 'react';
-import { KeyRound, ShieldAlert, Save, LogOut, Upload, UserCog, ChevronDown, ChevronUp, Cat } from 'lucide-react';
+import { KeyRound, ShieldAlert, Save, LogOut, Upload, UserCog, ChevronDown, ChevronUp, Cat,
+  Activity, HardDrive, Brain, Info, Trash2, ShieldCheck, Check, X } from 'lucide-react';
 import { api } from '../api';
-import type { Pet, User } from '../types';
-import { ClickableAvatar, animationForPet, petStatusLabel } from '../components/shared';
+import type { AiMemory, Pet, SecurityActivity, StorageAsset, User } from '../types';
+import { ClickableAvatar, animationForPet, petStatusLabel, petNick, petSpeciesName } from '../components/shared';
 import { PetSprite } from '../PetSprite';
 import { downscaleImage } from '../imageResize';
 
@@ -71,7 +72,7 @@ export function SettingsPage({ user, onUpdated, onPetUpdated, onSessionEnded }: 
     void (async () => {
       try {
         const p = await api.pet();
-        if (!cancelled) { setPet(p); setPetName(p?.name ?? ''); }
+        if (!cancelled) { setPet(p); setPetName(p?.companionNickname ?? user.companionNickname ?? ''); }
       } catch { /* pet may not be ready yet */ }
     })();
     return () => { cancelled = true; };
@@ -84,11 +85,13 @@ export function SettingsPage({ user, onUpdated, onPetUpdated, onSessionEnded }: 
     try {
       const updated = await api.setPetName(petName);
       setPet(updated);
-      setPetName(updated.name ?? '');
+      setPetName(updated.companionNickname ?? '');
       onPetUpdated?.(updated);
-      setPetMessage('宠物名称已更新。');
+      // 伴侣昵称是 user 级属性，同步回全局 user，确保其他读 user.companionNickname 的位置不留旧值
+      if (updated.companionNickname) onUpdated?.({ ...user, companionNickname: updated.companionNickname });
+      setPetMessage('伴侣昵称已更新。');
     } catch (err) {
-      setPetMessage(err instanceof Error ? err.message : '宠物改名失败');
+      setPetMessage(err instanceof Error ? err.message : '昵称更新失败');
     } finally {
       setPetBusy(false);
     }
@@ -212,26 +215,27 @@ export function SettingsPage({ user, onUpdated, onPetUpdated, onSessionEnded }: 
             <div className="settings-subhead"><Cat size={15} /> 宠物</div>
             <div className="pet-name-preview" style={{ margin: '0 0 14px' }}>
               <div className="pet-name-frame">
-                <PetSprite state={animationForPet(pet)} size={40} />
+                <PetSprite state={animationForPet(pet)} size={40} sheet={pet?.species?.spritePath} />
               </div>
               <div>
-                <strong>{petName || pet?.name || 'Soul'}</strong>
+                <strong>{petName || petNick(pet)}{petSpeciesName(pet) && <em className="pet-species-tag"> · {petSpeciesName(pet)}</em>}</strong>
                 <span>Lv.{pet?.level ?? 1} · {petStatusLabel[pet?.status ?? 'NORMAL'] ?? '安静陪伴'}</span>
               </div>
             </div>
             <form className="stack-form" onSubmit={savePetName}>
               <label className="field-label">
-                <span>宠物名称</span>
+                <span>伴侣昵称</span>
                 <input
                   value={petName}
                   onChange={(e) => setPetName(e.target.value)}
                   placeholder={`留空则使用「${user.username}」`}
                   maxLength={32}
                 />
+                <small className="field-hint">全局共享、跨宠物固定的称呼，换宠物也不变。{petSpeciesName(pet) && `当前宠物的品种名「${petSpeciesName(pet)}」由品种决定，不可更改。`}</small>
               </label>
               {petMessage && <div className="form-hint">{petMessage}</div>}
               <button className="primary-button" disabled={petBusy || !pet}>
-                <Save size={16} />{petBusy ? '保存中' : '保存宠物名称'}
+                <Save size={16} />{petBusy ? '保存中' : '保存伴侣昵称'}
               </button>
             </form>
           </div>
@@ -277,6 +281,18 @@ export function SettingsPage({ user, onUpdated, onPetUpdated, onSessionEnded }: 
         )}
       </section>
 
+      {/* ===== 安全与设备活动 ===== */}
+      <SecurityActivityPanel />
+
+      {/* ===== 自定义资产与存储空间 ===== */}
+      <StorageAssetsPanel user={user} onUpdated={onUpdated} />
+
+      {/* ===== AI 隐私与长期记忆 ===== */}
+      <AiMemoryPanel user={user} onUpdated={onUpdated} />
+
+      {/* ===== 关于与登出 ===== */}
+      <AboutPanel onSessionEnded={onSessionEnded} />
+
       {/* ===== 危险操作 ===== */}
       <section className="panel danger-zone">
         <div className="panel-title"><h2>危险操作</h2><ShieldAlert size={18} /></div>
@@ -299,5 +315,305 @@ export function SettingsPage({ user, onUpdated, onPetUpdated, onSessionEnded }: 
         </div>
       </section>
     </div>
+  );
+}
+
+/** 【字节数 → 人类可读】 */
+function formatBytes(n: number): string {
+  if (!n || n <= 0) return '0 B';
+  const u = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.min(u.length - 1, Math.floor(Math.log(n) / Math.log(1024)));
+  return `${(n / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1)} ${u[i]}`;
+}
+
+/** 【时间戳 → 本地短格式】 */
+function fmtTime(iso: string): string {
+  try { return new Date(iso).toLocaleString('zh-CN', { hour12: false }); }
+  catch { return iso; }
+}
+
+/** 【User-Agent 提炼浏览器/系统关键词，过长则截断】 */
+function shortUa(ua: string): string {
+  if (!ua) return '未知设备';
+  const m = ua.match(/(Edg|OPR|Chrome|Firefox|Safari)[/ ]?[\d.]*/);
+  const os = /Windows/.test(ua) ? 'Windows' : /Mac/.test(ua) ? 'macOS' : /Android/.test(ua) ? 'Android' : /iPhone|iPad/.test(ua) ? 'iOS' : /Linux/.test(ua) ? 'Linux' : '';
+  const browser = m ? m[0].replace('Edg', 'Edge').replace('OPR', 'Opera') : '';
+  const label = [os, browser].filter(Boolean).join(' · ');
+  return label || (ua.length > 40 ? ua.slice(0, 40) + '…' : ua);
+}
+
+/** 【记忆来源类型 → 中文标签】 */
+const MEMORY_SOURCE_LABEL: Record<string, string> = {
+  GOAL_MEMORY: '目标记忆',
+  SESSION_SUMMARY: '会话摘要',
+  COMPLETED_TASK: '已完成任务',
+  DAILY_REVIEW: '每日复盘'
+};
+
+/** 【安全与设备活动面板】展开后拉取本人最近审计事件（登录/登出/改密等）。 */
+function SecurityActivityPanel() {
+  const [open, setOpen] = useState(false);
+  const [items, setItems] = useState<SecurityActivity[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    if (!open || items !== null) return;
+    setLoading(true); setError('');
+    void api.securityActivity()
+      .then(setItems)
+      .catch((e) => setError(e instanceof Error ? e.message : '加载失败'))
+      .finally(() => setLoading(false));
+  }, [open, items]);
+  return (
+    <section className="panel">
+      <div className="panel-title">
+        <h2>安全与设备活动</h2>
+        <button type="button" className="secondary-button" onClick={() => setOpen((v) => !v)}>
+          <Activity size={14} />{open ? '收起' : '查看活动'}{open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+        </button>
+      </div>
+      {open && (
+        <>
+          {loading && <p className="muted small">加载中…</p>}
+          {error && <div className="form-error">{error}</div>}
+          {items && items.length === 0 && <p className="muted small">暂无活动记录。</p>}
+          {items && items.length > 0 && (
+            <ul className="activity-list">
+              {items.map((a, i) => (
+                <li key={i} className="activity-row">
+                  <span className={`activity-badge${a.success ? ' ok' : ' bad'}`}>
+                    {a.success ? <Check size={12} /> : <X size={12} />}
+                  </span>
+                  <div className="activity-main">
+                    <strong>{a.label}</strong>
+                    <span className="activity-meta">{a.ip || '未知 IP'} · {shortUa(a.userAgent)}</span>
+                  </div>
+                  <time className="activity-time">{fmtTime(a.createdAt)}</time>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="field-hint">如需立即踢出其它设备，见下方「危险操作 · 退出所有设备」。</p>
+        </>
+      )}
+    </section>
+  );
+}
+
+/** 【自定义资产与存储空间面板】轻量聚合：账号/宠物头像 + 任务凭证图，可预览、头像类可删。 */
+function StorageAssetsPanel({ user, onUpdated }: { user: User; onUpdated: (u: User) => void }) {
+  const [open, setOpen] = useState(false);
+  const [data, setData] = useState<{ items: StorageAsset[]; totalBytes: number } | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [busyUrl, setBusyUrl] = useState('');
+  function load() {
+    setLoading(true); setError('');
+    void api.storageAssets()
+      .then(setData)
+      .catch((e) => setError(e instanceof Error ? e.message : '加载失败'))
+      .finally(() => setLoading(false));
+  }
+  useEffect(() => { if (open && data === null) load(); /* eslint-disable-next-line */ }, [open]);
+  async function remove(asset: StorageAsset) {
+    setBusyUrl(asset.url); setError('');
+    try {
+      await api.deleteAsset(asset.url);
+      if (asset.kind === 'ACCOUNT_AVATAR') onUpdated({ ...user, avatarUrl: '' });
+      load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '删除失败');
+    } finally {
+      setBusyUrl('');
+    }
+  }
+  return (
+    <section className="panel">
+      <div className="panel-title">
+        <h2>自定义资产与存储空间</h2>
+        <button type="button" className="secondary-button" onClick={() => setOpen((v) => !v)}>
+          <HardDrive size={14} />{open ? '收起' : '查看资产'}{open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+        </button>
+      </div>
+      {open && (
+        <>
+          {loading && <p className="muted small">加载中…</p>}
+          {error && <div className="form-error">{error}</div>}
+          {data && (
+            <>
+              <p className="muted small" style={{ margin: '0 0 12px' }}>
+                共 {data.items.length} 项 · 占用约 <strong>{formatBytes(data.totalBytes)}</strong>
+              </p>
+              {data.items.length === 0
+                ? <p className="muted small">还没有上传任何图片资产。</p>
+                : (
+                  <div className="asset-grid">
+                    {data.items.map((a) => (
+                      <div className="asset-card" key={a.url}>
+                        <img className="asset-thumb" src={a.url} alt={a.label} loading="lazy" />
+                        <div className="asset-info">
+                          <strong>{a.label}</strong>
+                          <span className="muted small">{formatBytes(a.sizeBytes)}</span>
+                        </div>
+                        {a.deletable
+                          ? <button type="button" className="icon-button danger-text" title="删除"
+                              disabled={busyUrl === a.url} onClick={() => void remove(a)}>
+                              <Trash2 size={14} />
+                            </button>
+                          : <span className="asset-locked muted small" title="受任务引用，不可单独删除">受引用</span>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              <p className="field-hint">任务凭证图受任务记录引用，不能在此单独删除；如需清理请从对应任务处理。</p>
+            </>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
+/** 【AI 隐私与长期记忆面板】开关「允许 AI 记住我」+ 查看/逐条删除/清空已存记忆。 */
+function AiMemoryPanel({ user, onUpdated }: { user: User; onUpdated: (u: User) => void }) {
+  const [open, setOpen] = useState(false);
+  const [status, setStatus] = useState<{ enabled: boolean; memoryEnabled: boolean } | null>(null);
+  const [memories, setMemories] = useState<AiMemory[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [confirmClear, setConfirmClear] = useState(false);
+  function load() {
+    setLoading(true); setError('');
+    void Promise.all([api.ragStatus(), api.ragMemories()])
+      .then(([s, m]) => { setStatus(s); setMemories(m); })
+      .catch((e) => setError(e instanceof Error ? e.message : '加载失败'))
+      .finally(() => setLoading(false));
+  }
+  useEffect(() => { if (open && status === null) load(); /* eslint-disable-next-line */ }, [open]);
+  async function toggle() {
+    if (!status) return;
+    setBusy(true); setError('');
+    try {
+      const r = await api.setMemoryEnabled(!status.memoryEnabled);
+      setStatus({ ...status, memoryEnabled: r.memoryEnabled });
+      onUpdated({ ...user, aiMemoryEnabled: r.memoryEnabled });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '设置失败');
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function removeOne(id: number) {
+    setError('');
+    try {
+      await api.deleteMemory(id);
+      setMemories((prev) => prev?.filter((m) => m.id !== id) ?? null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '删除失败');
+    }
+  }
+  async function clearAll() {
+    setBusy(true); setError('');
+    try {
+      await api.clearMemories();
+      setMemories([]);
+      setConfirmClear(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '清空失败');
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <section className="panel">
+      <div className="panel-title">
+        <h2>AI 隐私与长期记忆</h2>
+        <button type="button" className="secondary-button" onClick={() => setOpen((v) => !v)}>
+          <Brain size={14} />{open ? '收起' : '管理记忆'}{open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+        </button>
+      </div>
+      {open && (
+        <>
+          {loading && <p className="muted small">加载中…</p>}
+          {error && <div className="form-error">{error}</div>}
+          {status && (
+            <>
+              <label className="toggle-row">
+                <span>
+                  <strong>允许 AI 记住我</strong>
+                  <small className="muted">关闭后，AI 不再记录新的学习记忆，也不会用历史记忆为你做个性化（已存记忆可在下方清空）。</small>
+                </span>
+                <button type="button" role="switch" aria-checked={status.memoryEnabled} disabled={busy}
+                  className={`switch${status.memoryEnabled ? ' on' : ''}`} onClick={() => void toggle()}>
+                  <span className="switch-knob" />
+                </button>
+              </label>
+              {!status.enabled && (
+                <p className="field-hint">提示：服务端 RAG 当前未启用（mock/未配置嵌入），记忆可能为空，但开关仍会被记住。</p>
+              )}
+              <div className="memory-head">
+                <span className="muted small">已存记忆 {memories?.length ?? 0} 条</span>
+                {(memories?.length ?? 0) > 0 && (
+                  confirmClear ? (
+                    <span className="row-actions">
+                      <button className="secondary-button danger-text" disabled={busy} onClick={() => void clearAll()}>
+                        <Trash2 size={13} />{busy ? '清空中…' : '确认清空'}
+                      </button>
+                      <button className="secondary-button" disabled={busy} onClick={() => setConfirmClear(false)}>取消</button>
+                    </span>
+                  ) : (
+                    <button className="secondary-button danger-text" onClick={() => setConfirmClear(true)}>
+                      <Trash2 size={13} /> 清空全部
+                    </button>
+                  )
+                )}
+              </div>
+              {memories && memories.length > 0 && (
+                <ul className="memory-list">
+                  {memories.map((m) => (
+                    <li key={m.id} className="memory-row">
+                      <div className="memory-main">
+                        <span className="memory-tag">{MEMORY_SOURCE_LABEL[m.sourceType] ?? m.sourceType}</span>
+                        <p>{m.content}</p>
+                        <time className="muted small">{fmtTime(m.updatedAt)}</time>
+                      </div>
+                      <button type="button" className="icon-button danger-text" title="删除这条记忆"
+                        onClick={() => void removeOne(m.id)}>
+                        <Trash2 size={14} />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
+/** 【关于与登出面板】应用信息 + 普通退出登录（仅当前设备）。 */
+function AboutPanel({ onSessionEnded }: { onSessionEnded: () => void }) {
+  const [busy, setBusy] = useState(false);
+  async function logout() {
+    setBusy(true);
+    try { await api.logout(); } catch { /* 即便失败也按已退出处理 */ }
+    onSessionEnded();
+  }
+  return (
+    <section className="panel">
+      <div className="panel-title"><h2>关于</h2><Info size={18} /></div>
+      <div className="about-rows">
+        <div className="about-row"><span>应用</span><strong>Soulous 灵魂</strong></div>
+        <div className="about-row"><span>版本</span><strong>v0.1.0</strong></div>
+        <div className="about-row"><span>简介</span><span className="muted small">学习打卡 · 宠物成长 · AI 陪伴自习室</span></div>
+        <div className="about-row"><span>安全</span><span className="muted small"><ShieldCheck size={13} /> 密码 BCrypt 加密 · 令牌可一键全设备失效</span></div>
+      </div>
+      <button className="secondary-button" disabled={busy} onClick={() => void logout()}>
+        <LogOut size={14} />{busy ? '退出中…' : '退出登录（当前设备）'}
+      </button>
+    </section>
   );
 }

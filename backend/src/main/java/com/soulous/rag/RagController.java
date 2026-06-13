@@ -3,11 +3,16 @@ package com.soulous.rag;
 import com.soulous.auth.UserService;
 import com.soulous.common.web.BaseController;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -53,8 +58,76 @@ class RagController extends BaseController {
      */
     @GetMapping("/status")
     Map<String, Object> status(HttpServletRequest request) {
-        current(request); // require auth
-        return Map.of("enabled", retrieval.isEnabled());
+        var user = current(request); // require auth
+        return Map.of(
+                "enabled", retrieval.isEnabled(),
+                "memoryEnabled", user.aiMemoryEnabled
+        );
+    }
+
+    /**
+     * 【列出当前用户的全部长期记忆】供设置页「AI 隐私与记忆」面板展示。
+     * 只回传可读字段（内容截断到 240 字），不回传向量本体。
+     *
+     * @param request HTTP 请求
+     * @return 记忆条目列表，按更新时间倒序
+     */
+    @GetMapping("/memories")
+    List<Map<String, Object>> memories(HttpServletRequest request) {
+        var user = current(request);
+        return retrieval.listForUser(user).stream()
+                .sorted((a, b) -> b.updatedAt.compareTo(a.updatedAt))
+                .map(m -> {
+                    var content = m.content == null ? "" : m.content;
+                    return Map.<String, Object>of(
+                            "id", m.id,
+                            "sourceType", m.sourceType.name(),
+                            "content", content.length() > 240 ? content.substring(0, 240) + "…" : content,
+                            "createdAt", m.createdAt,
+                            "updatedAt", m.updatedAt
+                    );
+                })
+                .toList();
+    }
+
+    /**
+     * 【删除当前用户的单条记忆】校验归属；本地与 agent 向量库一并删。
+     *
+     * @param id      memory_embedding 主键
+     * @param request HTTP 请求
+     * @return {ok:true/false}
+     */
+    @DeleteMapping("/memories/{id}")
+    Map<String, Object> deleteMemory(@PathVariable Long id, HttpServletRequest request) {
+        var user = current(request);
+        return Map.of("ok", retrieval.removeById(user, id));
+    }
+
+    /**
+     * 【清空当前用户的全部长期记忆】返回清除条数。
+     *
+     * @param request HTTP 请求
+     * @return {cleared:N}
+     */
+    @DeleteMapping("/memories")
+    Map<String, Object> clearMemories(HttpServletRequest request) {
+        var user = current(request);
+        return Map.of("cleared", retrieval.clearUser(user));
+    }
+
+    /**
+     * 【设置 AI 长期记忆开关】关闭后该用户不再被索引/检索（已存记忆保留，需另行清空）。
+     *
+     * @param body    {enabled:boolean}
+     * @param request HTTP 请求
+     * @return {memoryEnabled:boolean}
+     */
+    @PutMapping("/settings")
+    Map<String, Object> updateSettings(@RequestBody Map<String, Object> body, HttpServletRequest request) {
+        var user = current(request);
+        var enabled = body != null && Boolean.TRUE.equals(body.get("enabled"));
+        var updated = users.setAiMemoryEnabled(user, enabled);
+        return Map.of("memoryEnabled", updated.aiMemoryEnabled);
     }
 
     /**

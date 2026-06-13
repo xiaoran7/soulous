@@ -147,6 +147,10 @@ public class RetrievalService {
             return;
         }
 
+        // 用户关闭了 AI 长期记忆：不再记住任何新内容（本地 RAG 与 agent 向量库都跳过）。
+        // 已存记忆保留，清空需用户在设置页另行触发。
+        if (!user.aiMemoryEnabled) return;
+
         // agent 向量库推送与本地 RAG 开关解耦：agent 侧用自己的 embedding 模型重新向量化，
         // 本地 embedding 不可用（mock）时 agent 记忆仍持续累积
         if (agent != null) agent.ragUpsertAsync(user.id, type.name(), sourceId, content);
@@ -211,6 +215,43 @@ public class RetrievalService {
         if (agent != null) agent.ragDeleteAsync(user.id, type.name(), sourceId);
     }
 
+    /**
+     * 【删除用户的单条记忆（按 embedding 主键，校验归属）】
+     * 经 {@link #remove} 走删除，确保本地行与 agent 向量库同步。
+     *
+     * @param user 当前用户（仅能删自己的）
+     * @param id   memory_embedding 主键
+     * @return 是否删除（不存在或不归属本人返回 false）
+     */
+    @Transactional
+    public boolean removeById(UserAccount user, Long id) {
+        if (user == null || id == null) return false;
+        var row = repo.findById(id).orElse(null);
+        if (row == null || row.user == null || !row.user.id.equals(user.id)) return false;
+        remove(user, row.sourceType, row.sourceId);
+        return true;
+    }
+
+    /**
+     * 【清空用户的全部长期记忆】逐条经 {@link #remove} 删除，本地与 agent 向量库一并清。
+     *
+     * @param user 当前用户
+     * @return 清除的条目数
+     */
+    @Transactional
+    public int clearUser(UserAccount user) {
+        if (user == null) return 0;
+        var rows = repo.findByUser(user);
+        for (var r : rows) remove(user, r.sourceType, r.sourceId);
+        return rows.size();
+    }
+
+    /** 【列出用户的全部记忆行（含向量，调用方自行裁剪为轻量视图）】 */
+    public List<MemoryEmbedding> listForUser(UserAccount user) {
+        if (user == null) return List.of();
+        return repo.findByUser(user);
+    }
+
     // ----- 检索操作 ----------------------------------------------------
 
     /**
@@ -229,7 +270,8 @@ public class RetrievalService {
      * list when disabled / no corpus / embedding failure — callers must tolerate empty.</p>
      */
     public List<RetrievalHit> retrieve(UserAccount user, String query, int topK, double minSimilarity) {
-        if (!isEnabled() || user == null || query == null || query.isBlank()) return List.of();
+        // 用户关闭 AI 记忆 → 不参与检索（即便库里仍有旧记忆）
+        if (!isEnabled() || user == null || !user.aiMemoryEnabled || query == null || query.isBlank()) return List.of();
 
         var k = topK > 0 ? topK : props.getTopK();
         var threshold = Double.isNaN(minSimilarity) ? props.getMinSimilarity() : minSimilarity;

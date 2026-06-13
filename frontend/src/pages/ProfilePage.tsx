@@ -7,7 +7,7 @@ import React, { useEffect, useState } from 'react';
 import { Cat, Coins, Flame, PawPrint, Sparkles } from 'lucide-react';
 import { api } from '../api';
 import type { Pet, User } from '../types';
-import { ClickableAvatar, StatBar, animationForPet, petStatusLabel } from '../components/shared';
+import { ClickableAvatar, StatBar, animationForPet, petStatusLabel, petNick, petSpeciesName } from '../components/shared';
 import { PetSprite } from '../PetSprite';
 
 type LedgerRow = { id: number; amount: number; balanceAfter: number; source: string; reason: string; createdAt: string };
@@ -130,7 +130,7 @@ export function ProfilePage({ user }: { user: User }) {
             <PetSprite state={animationForPet(pet)} size={40} sheet={pet?.species?.spritePath} />
           </div>
           <div>
-            <strong>{pet?.name || '未领养'}</strong>
+            <strong>{pet ? <>{petNick(pet)}{petSpeciesName(pet) && <em className="pet-species-tag"> · {petSpeciesName(pet)}</em>}</> : '未领养'}</strong>
             <span>{pet ? `Lv.${pet.level} · ${petStatusLabel[pet.status ?? 'NORMAL'] ?? '安静陪伴'}` : '去宠物页领养第一只'}</span>
           </div>
         </div>

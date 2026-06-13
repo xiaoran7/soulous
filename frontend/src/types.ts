@@ -16,11 +16,15 @@ export interface User {
   id: number;
   username: string;
   nickname: string;
+  /** 【伴侣昵称】全局、跨宠物共享的称呼，换出战宠物/换品种都用这一个名字（与品种名形成「昵称 · 名称」双段） */
+  companionNickname?: string;
   email: string;
   avatarUrl: string;
   role: UserRole;
   /** 【金币余额】账号级共享，完成任务/打卡/专注赚取，用于宠物市场购买 */
   coinBalance?: number;
+  /** 【AI 长期记忆开关】是否允许 AI 记住自己（关闭后不再回填/检索个人语料） */
+  aiMemoryEnabled?: boolean;
 }
 
 /**
@@ -188,6 +192,35 @@ export interface RoomDetail {
 }
 
 /** 【宠物品种（市场目录项）】 */
+/** 【安全与设备活动】当前用户的一条审计事件（登录/登出/改密等） */
+export interface SecurityActivity {
+  action: string;
+  label: string;
+  ip: string;
+  userAgent: string;
+  success: boolean;
+  createdAt: string;
+}
+
+/** 【存储资产】聚合视图里的一项：账号头像 / 宠物头像 / 任务凭证图 */
+export interface StorageAsset {
+  kind: 'ACCOUNT_AVATAR' | 'PET_AVATAR' | 'TASK_PROOF';
+  label: string;
+  url: string;
+  sizeBytes: number;
+  /** 是否允许在设置页删除（头像类可删，凭证图受任务引用不可删） */
+  deletable: boolean;
+}
+
+/** 【AI 长期记忆】一条可读记忆条目 */
+export interface AiMemory {
+  id: number;
+  sourceType: string;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface PetSpecies {
   id: number;
   slug: string;
@@ -201,7 +234,10 @@ export interface PetSpecies {
 
 export interface Pet {
   id: number;
+  /** 【品种名】每只宠物自带、固定不可改（如 Clawd、飞雪）；展示时作「名称」段 */
   name: string;
+  /** 【伴侣昵称】跟随用户、跨宠物共享的称呼，随宠物视图一并下发；展示时作主名「昵称」段 */
+  companionNickname?: string;
   avatarUrl?: string;
   level: number;
   currentExp: number;

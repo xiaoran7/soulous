@@ -14,7 +14,7 @@ import { api } from '../api';
 import { PetSprite } from '../PetSprite';
 import type { PetAnimationState } from '../PetSprite';
 import type { Pet } from '../types';
-import { StatBar, animationForPet, clampAnimation, PET_ACTION_UNLOCK_LEVEL } from '../components/shared';
+import { StatBar, animationForPet, clampAnimation, PET_ACTION_UNLOCK_LEVEL, petNick, petSpeciesName } from '../components/shared';
 import { PetMarket } from '../components/PetMarket';
 
 /** 【成长日志缓存占位】本页不再展示事件日志，保留空实现供登出清理调用（main.tsx resetAllCaches）。 */
@@ -120,7 +120,7 @@ export function PetPage({ pet: initialPet, onFed, onRefresh }: { pet: Pet | null
 
         <div className="pet-stats-card panel">
           <div className="pet-stats-head">
-            <strong>{pet.name ?? 'Soul'}</strong>
+            <strong>{petNick(pet)}{petSpeciesName(pet) && <em className="pet-species-tag"> · {petSpeciesName(pet)}</em>}</strong>
             <span className="lvl-pill">Lv.{petLevel}</span>
             <span className="pet-stats-stage">{pet.growthStage ?? 'EGG'}</span>
           </div>

@@ -1,14 +1,23 @@
 /**
  * 【落地页】LandingPage
  * 未登录访问时展示的营销首页：高保真还原 design/stitch/soulous_1。
- * 结构 = 悬浮玻璃胶囊导航（品牌 + 场景/音乐/计划/会员 + 语言 + 登录）
- *      + 单屏 Hero 玻璃卡（一个 CTA）+ 右侧散点装饰玻璃片
+ * 结构 = 悬浮玻璃胶囊导航（品牌 + 产品真实板块锚点 + 语言 + 登录）
+ *      + 单屏双栏 Hero（左侧文案玻璃卡 + 右侧功能预览玻璃列，填满视口不留空）
  *      + 简化玻璃页脚（品牌句 + 版权，弃用链接列）
- *      + 右下角悬浮宠物。无功能网格、无内部滚动区。
+ *      + 右下角「领养伙伴」提示胶囊（未登录无宠物，故不展示真实精灵）。
  */
 import React from 'react';
-import { ArrowRight, Coffee, Globe } from 'lucide-react';
-import { PetSprite } from '../PetSprite';
+import { ArrowRight, Egg, Globe, ListChecks, PawPrint, Sparkles, Target, Timer } from 'lucide-react';
+
+/** 导航锚点 = 产品真实板块；点击进入登录（功能需登录后使用，注册可在登录页切换） */
+const NAV_LINKS = ['自习室', '计划', '宠物', 'AI 伙伴'] as const;
+
+/** 右侧功能预览列：图标 + 标题 + 副文案，对应产品真实板块 */
+const FEATURES = [
+  { icon: Timer, title: '沉浸自习室', sub: '场景 · 白噪音 · 番茄钟' },
+  { icon: ListChecks, title: 'AI 拆解计划', sub: '把大目标拆成今日清单' },
+  { icon: PawPrint, title: '宠物成长', sub: '专注越久，伙伴越活跃' }
+] as const;
 
 export function LandingPage({ onStart }: { onStart: (mode: 'login' | 'register') => void }) {
   return (
@@ -18,11 +27,13 @@ export function LandingPage({ onStart }: { onStart: (mode: 'login' | 'register')
         <img src="/studyroom/morning-window.jpg" alt="" />
       </div>
 
-      {/* 悬浮玻璃胶囊导航：品牌 | 四个锚点 | 语言 + 登录（与设计稿一致，保持稀疏） */}
+      {/* 悬浮玻璃胶囊导航：品牌 | 产品真实板块 | 语言 + 登录（保持稀疏） */}
       <header className="landing-nav glass-card">
         <div className="landing-brand">Soulous</div>
-        <nav className="landing-links" aria-hidden="true">
-          <span>场景</span><span>音乐</span><span>计划</span><span>会员</span>
+        <nav className="landing-links">
+          {NAV_LINKS.map((label) => (
+            <button key={label} type="button" onClick={() => onStart('login')}>{label}</button>
+          ))}
         </nav>
         <div className="landing-nav-actions">
           <button className="landing-globe" aria-label="语言" title="语言">
@@ -46,15 +57,26 @@ export function LandingPage({ onStart }: { onStart: (mode: 'login' | 'register')
           </div>
         </div>
 
-        {/* 散点装饰玻璃片（仅宽屏，模拟书桌上随手摆放的物件） */}
-        <div className="landing-scatter" aria-hidden="true">
-          <div className="glass-card landing-chip landing-chip-coffee le-float">
-            <Coffee size={36} strokeWidth={1.6} />
-            <span>晨间咖啡已备好</span>
-          </div>
-          <div className="glass-card landing-chip landing-chip-goal">
-            <div><span>今日专注目标</span><strong>120 min</strong></div>
-            <div className="landing-goal-bar"><i style={{ width: '45%' }} /></div>
+        {/* 右侧功能预览玻璃列（仅宽屏）：三张功能卡 + 今日目标进度卡，填满右半屏 */}
+        <div className="landing-features" aria-hidden="true">
+          {FEATURES.map(({ icon: Icon, title, sub }) => (
+            <div key={title} className="glass-card landing-feature">
+              <span className="landing-chip-badge"><Icon size={18} strokeWidth={2.2} /></span>
+              <div className="landing-feature-body">
+                <strong>{title}</strong>
+                <span>{sub}</span>
+              </div>
+            </div>
+          ))}
+          <div className="glass-card landing-feature landing-feature-goal">
+            <div className="landing-chip-goal-top">
+              <span className="landing-chip-badge sm"><Target size={13} strokeWidth={2.4} /></span>
+              <span>今日专注目标</span>
+            </div>
+            <div className="landing-chip-goal-meter">
+              <div className="landing-goal-bar"><i style={{ width: '45%' }} /></div>
+              <span className="landing-chip-goal-num"><strong>54</strong>/120</span>
+            </div>
           </div>
         </div>
       </section>
@@ -68,9 +90,10 @@ export function LandingPage({ onStart }: { onStart: (mode: 'login' | 'register')
         <div className="landing-footer-copy">© 2026 Soulous. All rights reserved.</div>
       </footer>
 
-      {/* 右下角漂浮宠物 */}
-      <button className="landing-pet glass-card amber-glow le-float" onClick={() => onStart('register')} title="和飞雪一起开始">
-        <PetSprite state="waving" size={64} />
+      {/* 右下角「领养伙伴」提示：未登录尚无宠物，用引导胶囊替代真实精灵 */}
+      <button className="landing-adopt glass-card amber-glow le-float" onClick={() => onStart('register')} title="注册领养你的学习伙伴">
+        <span className="landing-adopt-egg"><Egg size={20} strokeWidth={1.8} /><Sparkles className="landing-adopt-spark" size={11} /></span>
+        <span className="landing-adopt-text">领养你的<br />学习伙伴</span>
       </button>
     </div>
   );

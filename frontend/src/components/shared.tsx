@@ -14,7 +14,7 @@
  * 以及状态标签映射表（petStatusLabel、statusLabel）和动画状态映射函数（animationForPet）。
  */
 import React, { useEffect, useRef, useState } from 'react';
-import { ChevronDown, GraduationCap, PawPrint } from 'lucide-react';
+import { ChevronDown, GraduationCap, PawPrint, Bell, Utensils, HeartPulse, ClipboardCheck } from 'lucide-react';
 import { PetSprite } from '../PetSprite';
 import type { PetAnimationState } from '../PetSprite';
 import type { Pet, StudyTask } from '../types';
@@ -133,6 +133,19 @@ export function animationForPet(pet: Pet | null): PetAnimationState {
     default:
       return 'idle';
   }
+}
+
+/**
+ * 【伴侣昵称（主名）】全局、跨宠物共享的称呼——所有展示位的主名都用它，
+ * 这样换出战宠物/换品种时名字不变。空则回退品种名，再回退 'Soul'。
+ */
+export function petNick(pet: Pet | null | undefined): string {
+  return pet?.companionNickname?.trim() || pet?.name || 'Soul';
+}
+
+/** 【品种名（副名）】每只宠物自带、固定不可改（Clawd、飞雪）。展示作「昵称 · 名称」的名称段。 */
+export function petSpeciesName(pet: Pet | null | undefined): string {
+  return pet?.species?.name || pet?.name || '';
 }
 
 /**
@@ -332,9 +345,9 @@ export function PetCard({ pet, activeTaskCount = 0, reviewTaskCount = 0 }: {
       <div className="pet-visual">
         {pet?.avatarUrl
           ? <ClickableAvatar url={pet.avatarUrl} alt={`${pet.name ?? '宠物'} 头像`} imgStyle={{ width: 132, height: 132, objectFit: 'cover', borderRadius: '50%' }} />
-          : <PetSprite state={petState} size={132} />}
+          : <PetSprite state={petState} size={132} sheet={pet?.species?.spritePath} />}
       </div>
-      <h3>{pet?.name ?? 'Soul'}</h3>
+      <h3>{petNick(pet)}{petSpeciesName(pet) && <em className="pet-species-tag"> · {petSpeciesName(pet)}</em>}</h3>
       <p className="muted">Lv.{pet?.level ?? 1} · {pet?.growthStage ?? 'EGG'} · {pet?.status ?? 'NORMAL'}</p>
       <div className="progress"><span style={{ width: `${percent}%` }} /></div>
       <div className="status-line"><span>经验</span><strong>{pet?.currentExp ?? 0}<small style={{ fontFamily: 'var(--mono)', color: 'var(--ink-3)', fontSize: 11, marginLeft: 4 }}>/{pet?.nextLevelExp ?? 100}</small></strong></div>
@@ -447,17 +460,126 @@ export function NavPet({ pet, onOpen }: { pet: Pet | null; onOpen: () => void })
   const mood = petStatusLabel[pet?.status ?? 'NORMAL'] ?? '安静陪伴';
   const animState = clampAnimation(animationForPet(pet), pet?.level ?? 1);
   return (
-    <button className="top-nav-pet" onClick={onOpen} title={`${pet?.name ?? 'Soul'} · ${mood}`}>
+    <button className="top-nav-pet" onClick={onOpen} title={`${petNick(pet)} · ${petSpeciesName(pet) || mood} · ${mood}`}>
       <div className="top-nav-pet-frame">
-        <PetSprite state={animState} size={26} />
+        <PetSprite state={animState} size={26} sheet={pet?.species?.spritePath} />
       </div>
       <div className="top-nav-pet-meta">
         <strong>
-          {pet?.name ?? 'Soul'}
+          {petNick(pet)}
           <span className="lvl-pill" style={{ marginLeft: 6 }}>Lv.{pet?.level ?? 1}</span>
         </strong>
         <div className="top-nav-pet-bar"><span style={{ width: `${percent}%` }} /></div>
       </div>
     </button>
+  );
+}
+
+/** 【通知项】轻量铃铛的一条提醒：图标 + 文案 + 点击去向。 */
+export type NavNotice = {
+  key: string;
+  icon: React.ReactNode;
+  text: string;
+  tone?: 'amber' | 'rose';
+  onClick: () => void;
+};
+
+/**
+ * 【从现有数据现算通知列表】不落库、不推送：宠物饿/心情低、任务待审核/被驳回，
+ * 全部来自 App 已加载的 pet / tasks 状态。新增提醒源往这里加即可。
+ */
+export function computeNotices(
+  pet: Pet | null,
+  tasks: StudyTask[],
+  onNavigate: (page: string) => void
+): NavNotice[] {
+  const notices: NavNotice[] = [];
+  const nick = petNick(pet);
+  if (pet && (pet.satiety ?? 100) <= 30) {
+    notices.push({ key: 'hungry', icon: <Utensils size={15} />, tone: 'amber',
+      text: `${nick} 有点饿了（饱腹 ${pet.satiety}），去喂喂它`, onClick: () => onNavigate('pet') });
+  }
+  if (pet && (pet.mood ?? 100) <= 30) {
+    notices.push({ key: 'mood', icon: <HeartPulse size={15} />, tone: 'rose',
+      text: `${nick} 心情低落（${pet.mood}），陪它专注一会儿`, onClick: () => onNavigate('pet') });
+  }
+  const reviewing = tasks.filter(t => t.status === 'AI_REVIEWING').length;
+  if (reviewing > 0) {
+    notices.push({ key: 'reviewing', icon: <ClipboardCheck size={15} />, tone: 'amber',
+      text: `${reviewing} 个任务正在 AI 审核中`, onClick: () => onNavigate('tasks') });
+  }
+  const needAttention = tasks.filter(t =>
+    t.status === 'AI_REJECTED' || t.status === 'NEED_MORE' || t.status === 'MANUAL_REJECTED').length;
+  if (needAttention > 0) {
+    notices.push({ key: 'attention', icon: <ClipboardCheck size={15} />, tone: 'rose',
+      text: `${needAttention} 个任务被驳回或需补充凭证`, onClick: () => onNavigate('tasks') });
+  }
+  return notices;
+}
+
+/**
+ * 【顶部导航通知铃铛（轻量版）】
+ * 红点数字 = 当前通知条数，全部从 pet / tasks 现算；点开下拉小面板列出提醒，
+ * 点条目即跳转到对应页。不落库、不推送——只是把已有状态聚合到一处。
+ * 交互（点击外部 / Esc 收起）与 NavCluster 一致。
+ *
+ * @param pet - 出战宠物
+ * @param tasks - 当前任务列表
+ * @param onNavigate - 跳转回调（'pet' | 'tasks' 等页面键）
+ */
+export function NavBell({ pet, tasks, onNavigate }: {
+  pet: Pet | null;
+  tasks: StudyTask[];
+  onNavigate: (page: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const notices = computeNotices(pet, tasks, onNavigate);
+  const count = notices.length;
+  useEffect(() => {
+    if (!open) return;
+    function onPointerDown(e: MouseEvent) {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    function onKeyDown(e: KeyboardEvent) { if (e.key === 'Escape') setOpen(false); }
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open]);
+  return (
+    <div className="nav-bell" ref={rootRef}>
+      <button
+        className="nav-bell-btn"
+        onClick={() => setOpen(o => !o)}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        aria-label={count > 0 ? `${count} 条通知` : '通知'}
+        title={count > 0 ? `${count} 条通知` : '暂无新通知'}
+      >
+        <Bell size={17} />
+        {count > 0 && <span className="nav-bell-dot">{count > 9 ? '9+' : count}</span>}
+      </button>
+      {open && (
+        <div className="nav-bell-menu" role="menu">
+          <div className="nav-bell-head">通知</div>
+          {count === 0
+            ? <div className="nav-bell-empty">暂无新通知，安心专注 🌿</div>
+            : notices.map((n) => (
+              <button
+                key={n.key}
+                role="menuitem"
+                className={`nav-bell-item${n.tone ? ' ' + n.tone : ''}`}
+                onClick={() => { setOpen(false); n.onClick(); }}
+              >
+                <span className="nav-bell-item-ic">{n.icon}</span>
+                <span className="nav-bell-item-tx">{n.text}</span>
+              </button>
+            ))}
+        </div>
+      )}
+    </div>
   );
 }

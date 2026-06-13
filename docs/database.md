@@ -64,7 +64,7 @@ prod（MySQL）同样会中招——换成 mysql 的 url / 凭据和 `db/migrati
 
 ## 实体
 
-- `UserAccount`：账号、昵称、邮箱、角色、token、金币余额（`coin_balance`，h2 V12 / mysql V13）。
+- `UserAccount`：账号、昵称、邮箱、角色、token、金币余额（`coin_balance`，h2 V12 / mysql V13）、伴侣昵称（`companion_nickname`，全局跨宠物共享，经 `PATCH /api/pet` 设置，h2 V17 / mysql V18）、AI 记忆开关（`ai_memory_enabled`，默认 true，h2 V18 / mysql V19）。
 - `StudyTask`：任务标题、描述、类型、难度、课程、经验、状态、时间戳。
 - `TaskSubmission`：文字凭证、截图 URL、代码片段、链接、学习时长、提交状态。截图文件保存在本地上传目录，表内只记录 URL。
 - `AiReview`：审核结果、总分、相关性、完整度、质量分、原因、建议、推荐经验。

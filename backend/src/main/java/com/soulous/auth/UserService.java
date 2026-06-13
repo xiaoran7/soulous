@@ -154,6 +154,8 @@ public class UserService {
         user.username = name;
         user.password = encoder.encode(request.password());
         user.nickname = request.nickname() == null || request.nickname().isBlank() ? name : request.nickname().trim();
+        // 【伴侣昵称默认用用户名：注册即给灵魂伴侣一个默认称呼，之后可在设置页自定义】
+        user.companionNickname = name;
         user.email = normalizeEmail(request.email());
         users.save(user);
         return new AuthResponse(jwt.issue(user), view(user));
@@ -292,6 +294,43 @@ public class UserService {
     }
 
     /**
+     * 【设置伴侣昵称：全局、跨宠物共享的称呼。空白则回退为用户名，最长 32 字符。
+     *  从库中重新加载实体以确保数据最新（与 setAvatar 一致）。】
+     *
+     * @param user 【当前已认证的用户】
+     * @param nickname 【新伴侣昵称，空白视为重置为用户名】
+     * @return 【更新后的用户账户实体】
+     */
+    @Transactional
+    public UserAccount setCompanionNickname(UserAccount user, String nickname) {
+        var fresh = users.findById(user.id).orElseThrow(() -> new UnauthorizedException("Invalid user"));
+        var trimmed = nickname == null ? "" : nickname.trim();
+        if (trimmed.isBlank()) {
+            fresh.companionNickname = fresh.username;
+        } else {
+            fresh.companionNickname = trimmed.length() > 32 ? trimmed.substring(0, 32) : trimmed;
+        }
+        fresh.updatedAt = LocalDateTime.now();
+        return users.save(fresh);
+    }
+
+    /**
+     * 【设置 AI 长期记忆开关：关闭后该用户的索引/检索一律空操作（见 RetrievalService 拦截）。
+     *  从库重新加载实体以确保数据最新。】
+     *
+     * @param user    【当前已认证的用户】
+     * @param enabled 【是否允许 AI 记住该用户】
+     * @return 【更新后的用户账户实体】
+     */
+    @Transactional
+    public UserAccount setAiMemoryEnabled(UserAccount user, boolean enabled) {
+        var fresh = users.findById(user.id).orElseThrow(() -> new UnauthorizedException("Invalid user"));
+        fresh.aiMemoryEnabled = enabled;
+        fresh.updatedAt = LocalDateTime.now();
+        return users.save(fresh);
+    }
+
+    /**
      * 设置用户头像 URL。
      * 从数据库重新加载用户实体以确保数据最新，然后更新头像地址。
      *
@@ -342,10 +381,12 @@ public class UserService {
                 "id", user.id,
                 "username", user.username,
                 "nickname", user.nickname == null ? user.username : user.nickname,
+                "companionNickname", user.companionNickname == null ? user.username : user.companionNickname,
                 "email", user.email == null ? "" : user.email,
                 "avatarUrl", user.avatarUrl == null ? "" : user.avatarUrl,
                 "role", user.role,
-                "coinBalance", user.coinBalance
+                "coinBalance", user.coinBalance,
+                "aiMemoryEnabled", user.aiMemoryEnabled
         );
     }
 }

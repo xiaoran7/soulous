@@ -13,7 +13,7 @@ import { CalendarCheck, Coins, Flame, Sparkles } from 'lucide-react';
 import { api } from '../api';
 import type { Pet, StudyTask, Summary } from '../types';
 import { PetSprite } from '../PetSprite';
-import { ProgressRing, animationForPet, petStatusLabel } from '../components/shared';
+import { ProgressRing, animationForPet, petStatusLabel, petNick } from '../components/shared';
 
 /** 【懒加载趋势图组件】 */
 const TrendChart = lazy(() => import('../components/TrendChart'));
@@ -144,10 +144,10 @@ export function Dashboard({ pet, summary, onPetSync, onOpenReview, onOpenPet }: 
         </div>
 
         {/* 出战宠物气泡：点击进宠物页 */}
-        <button className="wb-pet" onClick={onOpenPet} title={`${pet?.name ?? 'Soul'} · ${petMood}`}>
-          <PetSprite state={animationForPet(pet)} size={84} />
+        <button className="wb-pet" onClick={onOpenPet} title={`${petNick(pet)} · ${petMood}`}>
+          <PetSprite state={animationForPet(pet)} size={84} sheet={pet?.species?.spritePath} />
           <div className="wb-pet-meta">
-            <strong>{pet?.name ?? 'Soul'}</strong>
+            <strong>{petNick(pet)}</strong>
             <span>Lv.{pet?.level ?? 1} · {petMood}</span>
           </div>
         </button>

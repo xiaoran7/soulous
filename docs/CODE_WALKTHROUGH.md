@@ -74,14 +74,15 @@ flowchart LR
 | AI 审核 + 出题 + 拆解 | [`com.soulous.ai`](../backend/src/main/java/com/soulous/ai) | （透明调用） | `ai_review` |
 | LLM 抽象 + Provider 池 | `com.soulous.ai`、`com.soulous.ai.provider` | — | — |
 | 内容风控 | [`com.soulous.moderation`](../backend/src/main/java/com/soulous/moderation) | （透明调用） | `moderation_log` |
-| RAG 长时记忆 | [`com.soulous.rag`](../backend/src/main/java/com/soulous/rag) + `ai.embedding` | — | `memory_embedding` |
+| RAG 长时记忆（按 `user.ai_memory_enabled` 逐用户开关） | [`com.soulous.rag`](../backend/src/main/java/com/soulous/rag) + `ai.embedding` | `pages/SettingsPage.tsx`「AI 隐私与长期记忆」面板（查看/删除/清空/开关） | `memory_embedding`, `user_account.ai_memory_enabled` |
+| 账号设置（资料/伴侣昵称/改密/设备活动/存储资产/关于） | [`com.soulous.auth`](../backend/src/main/java/com/soulous/auth) + [`com.soulous.account`](../backend/src/main/java/com/soulous/account) | `pages/SettingsPage.tsx` | `user_account`, `audit_log`（活动）, `/uploads/**`（资产聚合） |
 | 宠物成长 + 市场（多宠/出战/领养/购买，每宠独立等级） | [`com.soulous.pet`](../backend/src/main/java/com/soulous/pet) | `pages/PetPage.tsx` + `components/PetMarket.tsx` + `PetSprite.tsx` | `owned_pet`, `pet_species`, `exp_log` |
 | 金币钱包 | [`com.soulous.wallet`](../backend/src/main/java/com/soulous/wallet) | 我的页 / 市场 | `user_account.coin_balance`, `coin_ledger` |
 | 每日打卡 | [`com.soulous.checkin`](../backend/src/main/java/com/soulous/checkin) | Dashboard 签到卡 | `daily_checkin` |
 | 每日邮件提醒（定时） | [`com.soulous.reminder`](../backend/src/main/java/com/soulous/reminder) | —（走通知→邮件） | （定时扫描，无独占表） |
 | 每日复盘 | [`com.soulous.review`](../backend/src/main/java/com/soulous/review) | `pages/DailyReviewPage.tsx` | （从已有表聚合） |
 | 数据看板 | [`com.soulous.stats`](../backend/src/main/java/com/soulous/stats) | `components/TrendChart.tsx`（趋势图已并入 `DailyReviewPage`，独立统计页已下线） | （从已有表聚合） |
-| 通知 | [`com.soulous.notification`](../backend/src/main/java/com/soulous/notification) | 后端保留；前端铃铛入口已移除 | `notification` |
+| 通知 | [`com.soulous.notification`](../backend/src/main/java/com/soulous/notification) | 后端保留；顶部 `NavBell` 是客户端轻量聚合（pet/tasks 现算，与本表无关） | `notification` |
 | 申诉 | [`com.soulous.appeal`](../backend/src/main/java/com/soulous/appeal) | `pages/AdminPage.tsx` | `appeal` |
 | 后台 / 审计 | `com.soulous.admin` + `com.soulous.audit` | `pages/AdminPage.tsx` | `admin_audit_log`, `audit_log` |
 | 文件存储 | [`com.soulous.storage`](../backend/src/main/java/com/soulous/storage) | `utils/imageCompress.ts` + `ProofUploader.tsx` | 磁盘 `/uploads/**` 或 S3 |

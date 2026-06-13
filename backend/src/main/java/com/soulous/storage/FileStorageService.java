@@ -114,6 +114,58 @@ public class FileStorageService {
     }
 
     /**
+     * 【从 /uploads/<key> 形式的 URL 提取存储 key】非本地上传 URL（外链、空）返回 null。
+     *
+     * @param url 资源 URL
+     * @return 存储 key，或 null
+     */
+    public static String keyFromUrl(String url) {
+        if (url == null) return null;
+        var prefix = "/uploads/";
+        var i = url.indexOf(prefix);
+        if (i < 0) return null;
+        var key = url.substring(i + prefix.length());
+        return isValidKey(key) ? key : null;
+    }
+
+    /**
+     * 【按 URL 查询对象字节大小】用于设置页「存储资产」占用估算；对象不存在或非本地上传返回 0。
+     * 注意：仅读取 contentLength 元信息后立即关闭流，不下载完整内容。
+     *
+     * @param url 资源 URL
+     * @return 字节数（未知/缺失为 0）
+     */
+    public long sizeOf(String url) {
+        var key = keyFromUrl(url);
+        if (key == null) return 0;
+        try {
+            var obj = storage.load(key).orElse(null);
+            if (obj == null) return 0;
+            try (var in = obj.content()) {
+                return obj.contentLength();
+            }
+        } catch (IOException ex) {
+            return 0;
+        }
+    }
+
+    /**
+     * 【按 URL 删除底层对象】仅作用于本地上传（/uploads/<key>）；外链/非法 key 为空操作。
+     * 调用方负责先清除引用该 URL 的业务字段（头像等），避免悬挂引用。
+     *
+     * @param url 资源 URL
+     */
+    public void deleteByUrl(String url) {
+        var key = keyFromUrl(url);
+        if (key == null) return;
+        try {
+            storage.delete(key);
+        } catch (IOException ignored) {
+            // 删除失败不致命：GC 任务后续会回收孤儿对象
+        }
+    }
+
+    /**
      * 【校验 key 格式是否合法：仅允许字母数字下划线连字符，1-80 字符，以合法图片扩展名结尾】
      *
      * @param key 【待校验的 key】

@@ -27,7 +27,7 @@ import {
   UserCog
 } from 'lucide-react';
 import { api, UnauthorizedError } from './api';
-import { NavButton, NavCluster, NavPet } from './components/shared';
+import { NavButton, NavCluster, NavPet, NavBell } from './components/shared';
 import type { DailyReview, Pet, StudyTask, Summary, User } from './types';
 import { AuthScreen } from './pages/AuthScreen';
 import { LandingPage } from './pages/LandingPage';
@@ -182,7 +182,7 @@ function App() {
     return (
       <>
         <SceneBackdrop userId={null} />
-        <AuthScreen initialMode={authMode} onAuthed={() => { resetAllCaches(); void bootstrap(); }} message={message} />
+        <AuthScreen initialMode={authMode} onAuthed={() => { resetAllCaches(); void bootstrap(); }} onBack={() => setShowAuth(false)} message={message} />
       </>
     );
   }
@@ -240,6 +240,7 @@ function App() {
         </nav>
 
         <div className="top-nav-side">
+          {!isAdmin && <NavBell pet={pet} tasks={tasks} onNavigate={(p) => go(p as Page)} />}
           {!isAdmin && <NavPet pet={pet} onOpen={() => go('pet')} />}
         </div>
       </header>

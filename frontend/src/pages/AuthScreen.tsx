@@ -16,6 +16,7 @@
  * - 表单提交时禁用按钮防止重复提交
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { ArrowLeft } from 'lucide-react';
 import { api } from '../api';
 
 /**
@@ -93,7 +94,7 @@ function passwordStrength(password: string): { score: number; label: string; col
  * - captchaId/captchaImage/captchaCode: 验证码相关状态
  * - inflight: 防止并发刷新验证码的标志
  */
-export function AuthScreen({ onAuthed, message, initialMode = 'login' }: { onAuthed: () => void; message: string; initialMode?: 'login' | 'register' }) {
+export function AuthScreen({ onAuthed, onBack, message, initialMode = 'login' }: { onAuthed: () => void; onBack?: () => void; message: string; initialMode?: 'login' | 'register' }) {
   const [mode, setMode] = useState<'login' | 'register'>(initialMode);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -222,6 +223,12 @@ export function AuthScreen({ onAuthed, message, initialMode = 'login' }: { onAut
   return (
     <div className="auth-page">
       <section className="auth-panel">
+        {/* 【返回首页】回到落地页（登录与注册共用） */}
+        {onBack && (
+          <button type="button" className="auth-back" onClick={onBack}>
+            <ArrowLeft size={16} /> 返回首页
+          </button>
+        )}
         {/* 【品牌标识】 */}
         <div className="brand large">
           <span className="brand-mark" aria-hidden="true" />
