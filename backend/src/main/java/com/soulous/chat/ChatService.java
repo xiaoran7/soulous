@@ -72,6 +72,14 @@ public class ChatService {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private com.soulous.agent.AgentClient agent;
 
+    /**
+     * 【后台收尾处理器（可空）。输出审核是 LLM 级调用（数秒），原先同步挡在
+     * 「流式结束 → done 返回」之间造成体感卡死；现先落库立即返回、审核后台跑，
+     * 命中违规时异步回写消息。为空时（裸构造的单测）回退原同步路径。】
+     */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private ChatTurnPostProcessor postProcessor;
+
     public ChatService(ChatCategoryRepository categories,
                        ChatConversationRepository conversations,
                        ChatMessageRepository messages,
@@ -197,6 +205,17 @@ public class ChatService {
     @Transactional
     public ChatDtos.ConversationView postMessageStream(UserAccount user, Long id, String content,
                                                        Consumer<String> onChunk) {
+        return postMessageStream(user, id, content, onChunk, null);
+    }
+
+    /**
+     * 【流式发送（带 status 透传）：onStatus 收到 agent 的工具调用状态 JSON
+     * （{"stage":"tool"|"tool_done","name":"query_timetable"}），由控制器转成 SSE status 事件，
+     * 前端据此显示「正在调用工具…」而不是流式停顿像卡死。本地 LLM 路径没有工具，不会触发。】
+     */
+    @Transactional
+    public ChatDtos.ConversationView postMessageStream(UserAccount user, Long id, String content,
+                                                       Consumer<String> onChunk, Consumer<JsonNode> onStatus) {
         var conv = loadOwned(user, id);
         var trimmed = validateMessage(content);
 
@@ -211,7 +230,7 @@ public class ChatService {
         conv.pendingPlanJson = null;
         appendMessage(conv, ChatRole.USER, trimmed);
         maybeAutoTitle(conv, trimmed);
-        runAssistantTurn(conv, onChunk);
+        runAssistantTurn(conv, onChunk, onStatus);
         return view(conv);
     }
 
@@ -238,28 +257,63 @@ public class ChatService {
         return view(conv);
     }
 
+    /** 【删除草案中的单个任务：删到零等价于弃用整份草案（用户对所有任务都不满意时必须有出口）】 */
     @Transactional
     public ChatDtos.ConversationView deletePlanTask(UserAccount user, Long id, int index) {
         var conv = loadOwned(user, id);
         var arr = pendingTasksArrayForEdit(conv);
         if (index < 0 || index >= arr.size()) throw new BadRequestException("Task index out of range");
-        if (arr.size() <= 1) throw new BadRequestException("Plan must keep at least one task");
         arr.remove(index);
-        savePendingPlan(conv, arr);
+        if (arr.isEmpty()) {
+            conv.pendingPlanJson = null;
+            conversations.save(conv);
+        } else {
+            savePendingPlan(conv, arr);
+        }
         return view(conv);
     }
 
-    /** 【确认计划：落地为 StudyTask（goalId 为空，不挂目标），清空待确认计划】 */
+    /** 【弃用整份计划草案：清空待确认计划，对话本身不受影响】 */
+    @Transactional
+    public ChatDtos.ConversationView dismissPlan(UserAccount user, Long id) {
+        var conv = loadOwned(user, id);
+        if (conv.pendingPlanJson == null || conv.pendingPlanJson.isBlank()) {
+            throw new BadRequestException("No plan to dismiss");
+        }
+        conv.pendingPlanJson = null;
+        conversations.save(conv);
+        return view(conv);
+    }
+
+    /** 【确认计划：落地为 StudyTask（goalId 为空，不挂目标），清空待确认计划，
+     * 并追加一条「已创建 N 个任务」的助手消息——否则草案卡片消失后对话里无任何痕迹，用户无法追溯。】 */
     @Transactional
     public ChatDtos.ConversationView commitPlan(UserAccount user, Long id) {
         var conv = loadOwned(user, id);
         if (conv.pendingPlanJson == null || conv.pendingPlanJson.isBlank()) {
             throw new BadRequestException("No plan to commit");
         }
-        materializePlan(conv);
+        var created = materializePlan(conv);
         conv.pendingPlanJson = null;
         conversations.save(conv);
+        appendMessage(conv, ChatRole.ASSISTANT, commitReceipt(created));
         return view(conv);
+    }
+
+    /** 【落地回执文案：成为对话里的永久记录，含任务清单与归类】 */
+    private String commitReceipt(List<StudyTask> created) {
+        var sb = new StringBuilder("✅ 计划已确认，创建了 ").append(created.size()).append(" 个任务：\n");
+        for (var t : created) {
+            sb.append("- ").append(t.title)
+              .append("（").append(t.estimatedMinutes).append(" 分钟 · ").append(t.difficulty).append("）\n");
+        }
+        var category = created.get(0).category;
+        if (category != null && !category.isBlank()) {
+            sb.append("\n已归入大类「").append(category).append("」，可在「任务」页查看和开始。");
+        } else {
+            sb.append("\n可在「任务」页查看和开始。");
+        }
+        return sb.toString();
     }
 
     // ----- turn runner --------------------------------------------------
@@ -269,6 +323,10 @@ public class ChatService {
      * 复用旧版的兜底/输出审核/PLAN_JSON 抽取/持久化逻辑。】
      */
     private void runAssistantTurn(ChatConversation conv, Consumer<String> onChunk) {
+        runAssistantTurn(conv, onChunk, null);
+    }
+
+    private void runAssistantTurn(ChatConversation conv, Consumer<String> onChunk, Consumer<JsonNode> onStatus) {
         if (conv.turnCount >= MAX_TURNS) {
             var forced = "（本对话已很长，建议新开一个对话继续。）";
             appendMessage(conv, ChatRole.ASSISTANT, forced);
@@ -278,7 +336,7 @@ public class ChatService {
 
         // agent-service 优先：多通道状态 / 摘要 / RAG / 工具全在 agent 内完成，
         // Java 只负责消息落库与 PLAN_JSON → pendingPlanJson。失败时落回本地路径。
-        if (agent != null && agent.enabled() && tryAgentTurn(conv, onChunk)) return;
+        if (agent != null && agent.enabled() && tryAgentTurn(conv, onChunk, onStatus)) return;
 
         var system = systemPrompt();
         maybeUpdateRunningSummary(conv);
@@ -316,18 +374,6 @@ public class ChatService {
             }
         }
 
-        var history = messages.findByConversationOrderByIdxAsc(conv);
-        var lastUserContent = history.stream()
-                .filter(m -> m.role == ChatRole.USER)
-                .reduce((a, b) -> b)
-                .map(m -> m.content)
-                .orElse("");
-        var outputCheck = moderation.moderateOutput(conv.user, reply, lastUserContent, List.of(), conv.id);
-        if (outputCheck.blocked()) {
-            log.warn("Output blocked for conversation {}: {}", conv.id, outputCheck.reason());
-            reply = OUTPUT_BLOCKED_REPLY;
-        }
-
         var plan = extractPlanEnvelope(reply);
         if (plan != null && hasUsablePlanTasks(plan)) {
             conv.pendingPlanJson = plan.toString();
@@ -348,7 +394,32 @@ public class ChatService {
                 }
             }
         }
-        appendMessage(conv, ChatRole.ASSISTANT, reply);
+        var saved = appendMessage(conv, ChatRole.ASSISTANT, reply);
+        scheduleOutputModeration(conv, saved, reply);
+    }
+
+    /**
+     * 【输出审核调度：默认甩给后台处理器（先返回、后审核、违规异步回写）；
+     * 处理器缺席时回退同步审核，语义与旧版一致。】
+     */
+    private void scheduleOutputModeration(ChatConversation conv, ChatMessage saved, String reply) {
+        var lastUserContent = messages.findByConversationOrderByIdxAsc(conv).stream()
+                .filter(m -> m.role == ChatRole.USER)
+                .reduce((a, b) -> b)
+                .map(m -> m.content)
+                .orElse("");
+        if (postProcessor != null) {
+            postProcessor.moderateOutputAsync(conv.user, conv.id, saved.id, reply, lastUserContent, OUTPUT_BLOCKED_REPLY);
+            return;
+        }
+        var outputCheck = moderation.moderateOutput(conv.user, reply, lastUserContent, List.of(), conv.id);
+        if (outputCheck.blocked()) {
+            log.warn("Output blocked for conversation {}: {}", conv.id, outputCheck.reason());
+            saved.content = OUTPUT_BLOCKED_REPLY;
+            messages.save(saved);
+            conv.pendingPlanJson = null;
+            conversations.save(conv);
+        }
     }
 
     /**
@@ -359,7 +430,7 @@ public class ChatService {
      * 这里只传当前这条用户消息；PLAN/CLARIFY 信封在 agent 内已过 Pydantic 校验与修复重抽，
      * done 载荷中的 plan 字段可直接落 pendingPlanJson。】
      */
-    private boolean tryAgentTurn(ChatConversation conv, Consumer<String> onChunk) {
+    private boolean tryAgentTurn(ChatConversation conv, Consumer<String> onChunk, Consumer<JsonNode> onStatus) {
         var lastUser = messages.findByConversationOrderByIdxAsc(conv).stream()
                 .filter(m -> m.role == ChatRole.USER)
                 .reduce((a, b) -> b)
@@ -368,7 +439,7 @@ public class ChatService {
         if (lastUser.isBlank()) return false;
 
         var done = onChunk != null
-                ? agent.chatStream(conv.user.id, conv.id, lastUser, onChunk)
+                ? agent.chatStream(conv.user.id, conv.id, lastUser, onChunk, onStatus)
                 : agent.chat(conv.user.id, conv.id, lastUser);
         if (done.isEmpty()) {
             log.warn("agent-service 不可用，对话 {} 回退本地 LLM 路径。", conv.id);
@@ -378,15 +449,12 @@ public class ChatService {
         var reply = node.path("reply").asText("");
         if (reply.isBlank()) return false;
 
-        // 输出审核与本地路径保持同一闸门
-        var outputCheck = moderation.moderateOutput(conv.user, reply, lastUser, List.of(), conv.id);
-        if (outputCheck.blocked()) {
-            log.warn("Output blocked for conversation {}: {}", conv.id, outputCheck.reason());
-            reply = OUTPUT_BLOCKED_REPLY;
-        } else if (node.has("plan") && hasUsablePlanTasks(node.path("plan"))) {
+        if (node.has("plan") && hasUsablePlanTasks(node.path("plan"))) {
             conv.pendingPlanJson = node.path("plan").toString();
         }
-        appendMessage(conv, ChatRole.ASSISTANT, reply);
+        var saved = appendMessage(conv, ChatRole.ASSISTANT, reply);
+        // 输出审核与本地路径保持同一闸门（后台异步，违规时回写消息并作废草案）
+        scheduleOutputModeration(conv, saved, reply);
         return true;
     }
 
@@ -673,16 +741,17 @@ public class ChatService {
         return null;
     }
 
-    private void appendMessage(ChatConversation conv, ChatRole role, String content) {
+    private ChatMessage appendMessage(ChatConversation conv, ChatRole role, String content) {
         var msg = new ChatMessage();
         msg.conversation = conv;
         msg.idx = conv.turnCount;
         msg.role = role;
         msg.content = content;
-        messages.save(msg);
+        msg = messages.save(msg);
         conv.turnCount += 1;
         conv.lastActivityAt = LocalDateTime.now();
         conversations.save(conv);
+        return msg;
     }
 
     /** 【首条用户消息后自动命名：去掉附件信封，取前 30 字】 */

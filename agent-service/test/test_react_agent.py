@@ -45,7 +45,7 @@ async def test_stream_chat_tokens_and_done(loop):
     async for evt in loop.stream_chat(req):
         if evt["type"] == "token":
             tokens.append(evt["text"])
-        else:
+        elif evt["type"] == "done":
             done = evt["result"]
     assert tokens, "应有增量 token"
     assert done is not None and done.plan is not None
@@ -64,6 +64,8 @@ async def test_thread_isolation(loop, tmp_path):
 
 async def test_interaction_logged_to_dal(loop, tmp_path):
     await loop.run_chat(ChatRequest(user_id="u1", conversation_id="c5", message="链表是什么？"))
+    # 记忆持久化已异步化（fire-and-forget），断言前先等后台任务收尾
+    await loop.flush_memory_tasks()
     with sqlite3.connect(str(tmp_path / "dal.db")) as conn:
         rows = conn.execute("SELECT session_id, query FROM interaction_logs").fetchall()
     assert ("u1:c5", "链表是什么？") in rows

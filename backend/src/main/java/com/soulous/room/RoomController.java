@@ -28,11 +28,17 @@ class RoomController extends BaseController {
         this.rooms = rooms;
     }
 
-    /** 【房间广场：列出全部房间 + 在线人数】 */
+    /** 【房间广场：列出全部房间 + 在线人数 + 是否本人房（用于显示删除入口）】 */
     @GetMapping
     List<Map<String, Object>> list(HttpServletRequest request) {
-        current(request);
-        return rooms.listRooms();
+        return rooms.listRooms(current(request));
+    }
+
+    /** 【房主删房】 */
+    @DeleteMapping("/{id}")
+    Map<String, Object> delete(HttpServletRequest request, @PathVariable Long id) {
+        rooms.deleteRoom(current(request), id);
+        return Map.of("deleted", true, "id", id);
     }
 
     /** 【创建并进入房间】 */

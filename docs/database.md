@@ -60,7 +60,7 @@ mvn org.flywaydb:flyway-maven-plugin:repair \
 repair 会把历史表 `flyway_schema_history` 里的 checksum 刷成当前文件的值。实在不在乎本地数据，也可直接删 `backend/data/soulous*.db` 让迁移全新重跑。
 prod（MySQL）同样会中招——换成 mysql 的 url / 凭据和 `db/migration/mysql` 目录跑 repair，**别直接删生产库**。
 
-> 另一类启动失败是「漏写迁移」：prod `ddl-auto=validate` 下新增实体字段没写 `V{n}__*.sql` → Hibernate 校验失败，见 `DEPLOY.md` / `docs/deployment.md`。
+> 另一类启动失败是「漏写迁移」：prod `ddl-auto=validate` 下新增实体字段没写 `V{n}__*.sql` → Hibernate 校验失败，补列方法见 `DEPLOY.md` §9。
 
 ## 实体
 

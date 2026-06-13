@@ -1,0 +1,7 @@
+{
+  "id": "yume-boundary",
+  "displayName": "Yume",
+  "description": "An elegant, curious boundary-exploring research companion with calm confidence.",
+  "spritesheetPath": "spritesheet.webp",
+  "kind": "person"
+}

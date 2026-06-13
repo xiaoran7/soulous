@@ -91,6 +91,15 @@ public class AgentClient {
      * error 事件或传输异常返回 empty（调用方走降级）。】
      */
     public Optional<JsonNode> postStream(String path, ObjectNode payload, Consumer<String> onChunk) {
+        return postStream(path, payload, onChunk, null);
+    }
+
+    /**
+     * 【SSE 流式 POST（带 status 透传）：status 事件（如 {"stage":"tool","name":"query_timetable"}）
+     * 回调 onStatus，供上层把「正在调用工具」实时透给前端，避免流式停顿被误以为卡死。】
+     */
+    public Optional<JsonNode> postStream(String path, ObjectNode payload,
+                                         Consumer<String> onChunk, Consumer<JsonNode> onStatus) {
         if (!enabled()) return Optional.empty();
         try {
             var req = request(path)
@@ -119,6 +128,9 @@ public class AgentClient {
                                 var text = node.path("text").asText("");
                                 if (!text.isEmpty() && onChunk != null) onChunk.accept(text);
                             }
+                            case "status" -> {
+                                if (onStatus != null) onStatus.accept(node);
+                            }
                             case "done" -> done = node;
                             case "error" -> {
                                 log.warn("agent {} 流内错误: {}", path, node.path("message").asText());
@@ -140,9 +152,10 @@ public class AgentClient {
 
     // ----- 业务封装 -------------------------------------------------------
 
-    /** 【AI 拆解对话（流式）：返回 done 载荷 {reply, plan?, clarify?}】 */
-    public Optional<JsonNode> chatStream(Long userId, Long conversationId, String message, Consumer<String> onChunk) {
-        return postStream("/agent/chat/stream", chatPayload(userId, conversationId, message), onChunk);
+    /** 【AI 拆解对话（流式）：返回 done 载荷 {reply, plan?, clarify?}；onStatus 透传工具调用状态（可空）】 */
+    public Optional<JsonNode> chatStream(Long userId, Long conversationId, String message,
+                                         Consumer<String> onChunk, Consumer<JsonNode> onStatus) {
+        return postStream("/agent/chat/stream", chatPayload(userId, conversationId, message), onChunk, onStatus);
     }
 
     /** 【AI 拆解对话（非流式）】 */

@@ -4715,3 +4715,128 @@ button.room-tile:hover { box-shadow: var(--glow-amber); background: var(--le-gla
 .shared-member .shared-member-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-4, #bbb); flex: 0 0 auto; }
 .shared-member.focusing .shared-member-dot { background: var(--sage, #4b7); }
 .shared-member > span.muted { margin-left: auto; }
+.shared-room-actions { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+
+/* 沉浸态 · 共享房成员面板：左上深色半透明（无 backdrop-filter——内含每秒跳字的计时，
+   挂玻璃会逼整块面板逐秒重栅格化，复现毛玻璃闪烁事故） */
+.immersive-members {
+  position: absolute; left: 18px; top: 64px; z-index: 2;
+  display: flex; flex-direction: column; gap: 6px;
+  min-width: 190px; max-width: 250px; max-height: 50vh; overflow-y: auto;
+  padding: 10px 12px; border-radius: 14px;
+  background: rgba(0, 0, 0, 0.32);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: rgba(255, 255, 255, 0.92);
+  transform: translateZ(0);
+}
+.immersive-members-head {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12.5px; font-weight: 700;
+  padding-bottom: 6px; border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.immersive-member { display: flex; align-items: center; gap: 7px; font-size: 12.5px; min-width: 0; }
+.immersive-member-dot { width: 7px; height: 7px; border-radius: 50%; background: rgba(255, 255, 255, 0.45); flex: 0 0 auto; }
+.immersive-member.focusing .immersive-member-dot { background: #6dd58c; }
+.immersive-member-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.immersive-member em {
+  margin-left: auto; font-style: normal; font-family: var(--mono);
+  font-size: 11px; color: rgba(255, 255, 255, 0.6); flex: 0 0 auto;
+}
+.immersive-member.focusing em { color: #8fe3a8; }
+
+/* ===== AI 聊天 Markdown 正文（react-markdown + GFM） =====
+   气泡本体是 pre-wrap（为纯文本时代保留），markdown 渲染后由段落标签接管换行，
+   必须重置回 normal，否则源码里的换行符与 <p> 边距叠加出双倍空行。 */
+.md-body { white-space: normal; }
+.md-body > :first-child { margin-top: 0; }
+.md-body > :last-child { margin-bottom: 0; }
+.md-body p { margin: 0.45em 0; }
+.md-body h1, .md-body h2, .md-body h3, .md-body h4 {
+  margin: 0.8em 0 0.35em;
+  font-size: 1.05em;
+  line-height: 1.4;
+  color: var(--ink);
+}
+.md-body h1 { font-size: 1.2em; }
+.md-body h2 { font-size: 1.12em; }
+.md-body ul, .md-body ol { margin: 0.4em 0; padding-left: 1.4em; }
+.md-body li { margin: 0.18em 0; }
+.md-body blockquote {
+  margin: 0.5em 0;
+  padding: 4px 12px;
+  border-left: 3px solid rgba(255, 191, 0, 0.55);
+  background: rgba(255, 191, 0, 0.08);
+  border-radius: 0 8px 8px 0;
+  color: var(--ink-2);
+}
+.md-body code {
+  font-family: var(--mono);
+  font-size: 0.88em;
+  background: rgba(60, 50, 30, 0.08);
+  border: 1px solid rgba(60, 50, 30, 0.1);
+  border-radius: 5px;
+  padding: 1px 5px;
+  word-break: break-all;
+}
+.md-body pre {
+  margin: 0.55em 0;
+  padding: 10px 12px;
+  background: rgba(42, 36, 26, 0.92);
+  color: #f3ead8;
+  border-radius: 10px;
+  overflow-x: auto;
+  white-space: pre;
+  line-height: 1.5;
+}
+.md-body pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  font-size: 12.5px;
+  word-break: normal;
+}
+.md-body table {
+  border-collapse: collapse;
+  margin: 0.55em 0;
+  width: 100%;
+  max-width: 100%;
+  display: block;
+  overflow-x: auto;
+  font-size: 13px;
+}
+.md-body th, .md-body td {
+  border: 1px solid rgba(60, 50, 30, 0.16);
+  padding: 5px 10px;
+  text-align: left;
+  white-space: nowrap;
+}
+.md-body th {
+  background: rgba(255, 191, 0, 0.12);
+  font-weight: 600;
+}
+.md-body tr:nth-child(even) td { background: rgba(255, 255, 255, 0.35); }
+.md-body hr {
+  border: none;
+  border-top: 1px solid rgba(60, 50, 30, 0.14);
+  margin: 0.8em 0;
+}
+.md-body a { color: var(--accent, #b8860b); text-decoration: underline; }
+.md-body img { max-width: 100%; border-radius: 8px; }
+
+/* 工具调用状态指示：流式停顿期间显式告知「在干活」，配合既有 typing 点点点 */
+.chat-tool-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(255, 191, 0, 0.14);
+  border: 1px solid rgba(255, 191, 0, 0.28);
+  color: var(--ink-2);
+  font-size: 12px;
+}
+.chat-tool-status .planner-chat-typing { min-height: 0; }
+.chat-tool-status .planner-chat-typing span { width: 4px; height: 4px; }

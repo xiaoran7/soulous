@@ -13,10 +13,10 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Activity, ArrowRight, BookOpen, Bot, Building2, CalendarCheck, CalendarRange, CheckCircle2, ClipboardList,
   CloudRain, Coffee, Maximize2, Minimize2, Music, Pause, Play, Plus,
-  Snowflake, Sunrise, Target, Trees, Volume2, VolumeX, Waves, Wind, X,
+  Snowflake, Sunrise, Target, Trees, Users, Volume2, VolumeX, Waves, Wind, X,
 } from 'lucide-react';
-import { api } from '../api';
-import type { FocusSession, Pet, StudyTask, Summary } from '../types';
+import { api, ApiError } from '../api';
+import type { FocusSession, Pet, RoomDetail, StudyTask, Summary } from '../types';
 import { animationForPet, clampAnimation } from '../components/shared';
 import {
   AMBIENT_KINDS, CUSTOM_SCENE_GRADIENT, DURATION_PRESETS, getMusicTrack, getScene, MUSIC_TRACKS, SCENES,
@@ -134,7 +134,7 @@ function VolumeRow({ icon, label, hint, value, enabled, onValue, onToggle }: {
  * 布局（按需求重排）：计时器**透明**居中（无玻璃卡）、顶部两枚深色半透明小胶囊、
  * 底部深色半透明控制坞（音量 | 声音/暂停/继续/结束——「放弃」已移除，只留结束）。
  */
-function ImmersiveRoom({ session, scene, scenes, prefs, audio, audioControls, onUpdate, onPrefsPatch, onNavigate }: {
+function ImmersiveRoom({ session, scene, scenes, prefs, audio, audioControls, onUpdate, onPrefsPatch, onNavigate, sharedRoom }: {
   session: FocusSession;
   scene: StudyScene;
   scenes: StudyScene[];
@@ -144,6 +144,8 @@ function ImmersiveRoom({ session, scene, scenes, prefs, audio, audioControls, on
   onUpdate: (s: FocusSession) => void;
   onPrefsPatch: (p: Partial<ReturnType<typeof useStudyRoomPrefs>['prefs']>) => void;
   onNavigate?: (page: RoomNavTarget) => void;
+  /** 【共享自习室】非空 = 这是共享房里的专注：左侧浮出房间名与在线成员（含各自专注计时） */
+  sharedRoom?: RoomDetail | null;
 }) {
   const [elapsed, setElapsed] = useState(() => currentElapsed(session));
   const [busy, setBusy] = useState(false);
@@ -228,6 +230,22 @@ function ImmersiveRoom({ session, scene, scenes, prefs, audio, audioControls, on
           <span>{fullscreen ? '退出沉浸' : '沉浸式'}</span>
         </button>
       </div>
+
+      {/* 共享自习室成员面板：深色半透明（不用 backdrop-filter——内部计时每秒跳字会逼整块玻璃重栅格化） */}
+      {sharedRoom && (
+        <div className="immersive-members">
+          <div className="immersive-members-head">
+            <Users size={13} /> {sharedRoom.name} · 在线 {sharedRoom.onlineCount}
+          </div>
+          {sharedRoom.members.map(m => (
+            <div key={m.userId} className={`immersive-member${m.focusing ? ' focusing' : ''}`}>
+              <span className="immersive-member-dot" />
+              <span className="immersive-member-name">{m.name}{m.self ? '（我）' : ''}</span>
+              <em>{m.focusing ? fmt(m.focusSeconds) : '在线'}</em>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* 换场景条：点场景名胶囊唤出，选中即换背景并收起 */}
       {scenePick && (
@@ -355,6 +373,8 @@ export function FocusPage({ userId, pet, summary, onImmersiveChange, onNavigate 
   /** 【共享面板懒挂载】首次切到共享才挂载（避免一进页面就拉房间列表），之后保持挂载让滑动过渡平滑 */
   const [sharedMounted, setSharedMounted] = useState(false);
   useEffect(() => { if (roomMode === 'shared') setSharedMounted(true); }, [roomMode]);
+  /** 【共享自习室】非空 = 当前专注发生在共享房里；建房/加入即开真实专注会话进沉浸态 */
+  const [sharedRoom, setSharedRoom] = useState<RoomDetail | null>(null);
 
   // 自定义素材（IndexedDB）
   const [customItems, setCustomItems] = useState<CustomItem[]>([]);
@@ -467,11 +487,70 @@ export function FocusPage({ userId, pet, summary, onImmersiveChange, onNavigate 
       audio.stop();
       setActive(null);
       writeActiveHint(false);
+      if (sharedRoom) {
+        // 共享房里的专注结束 = 同时退出房间（空房由后端自动回收）
+        void api.leaveRoom(sharedRoom.id).catch(() => { /* 房间可能已被删 */ });
+        setSharedRoom(null);
+      }
       void load(); // 刷新会话/任务状态
     } else {
       setActive(session);
     }
   }
+
+  /** 【共享自习室：进房即开专注】建房/加入拿到房间详情后，启动真实专注会话并进入沉浸态。
+   *  会话失败时向上抛错，由广场组件退房回滚。 */
+  async function enterSharedRoom(room: RoomDetail) {
+    audio.start(); // 点击手势内开声，规避自动播放拦截
+    try {
+      const minutes = prefs.timerMode === 'down' ? prefs.plannedMinutes : PLACEHOLDER_MINUTES;
+      const title = `${room.name} · 共享自习`.slice(0, 128);
+      const session = await api.startFocus(title, minutes, null);
+      setSharedRoom(room);
+      setActive(session);
+      writeActiveHint(true);
+    } catch (err) {
+      audio.stop();
+      throw err;
+    }
+  }
+
+  // 【共享房心跳】每 15s 上报在线 + 专注状态/秒数（来自真实会话），并刷新房内成员。
+  // 404/400 = 房间已删或成员被回收 → 退出共享视图（专注会话本身不受影响，继续独享计时）。
+  const activeRef = useRef(active);
+  activeRef.current = active;
+  useEffect(() => {
+    if (!sharedRoom) return;
+    const id = sharedRoom.id;
+    const beat = async () => {
+      const s = activeRef.current;
+      try {
+        const d = await api.roomHeartbeat(id, s?.status === 'RUNNING', s ? currentElapsed(s) : 0);
+        setSharedRoom(d);
+      } catch (err) {
+        if (err instanceof ApiError && (err.status === 404 || err.status === 400)) setSharedRoom(null);
+        // 其他错误（网络抖动）忽略，下次心跳重试
+      }
+    };
+    void beat(); // 进房立即上报一次，房内他人尽快看到
+    const t = window.setInterval(() => void beat(), 15000);
+    return () => window.clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sharedRoom?.id]);
+
+  // 【关页/刷新/离开页面时退房】keepalive 保证请求在页面销毁后仍能发出，避免留下僵尸成员
+  useEffect(() => {
+    if (!sharedRoom) return;
+    const id = sharedRoom.id;
+    const bye = () => api.leaveRoomBeacon(id);
+    window.addEventListener('beforeunload', bye);
+    return () => {
+      window.removeEventListener('beforeunload', bye);
+      // 组件卸载（切到其他功能页）也退房：心跳已停，留着只会变僵尸成员
+      bye();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sharedRoom?.id]);
 
   const ACTIVE_STATUSES: StudyTask['status'][] = ['TODO', 'DOING', 'PAUSED', 'NEED_MORE', 'AI_REJECTED'];
   const linkable = tasks.filter(t => ACTIVE_STATUSES.includes(t.status));
@@ -554,13 +633,14 @@ export function FocusPage({ userId, pet, summary, onImmersiveChange, onNavigate 
     return <div className="room-home room-home-center"><div className="notice error-notice">{loadError}</div></div>;
   }
 
-  // ===== 沉浸态（全屏，仅独享）=====
+  // ===== 沉浸态（全屏；独享与共享房共用，共享房多一块成员面板）=====
   if (active) {
     return (
       <ImmersiveRoom
         session={active} scene={scene} scenes={allScenes} prefs={prefs}
         audio={audio} audioControls={audioControls}
         onUpdate={handleUpdate} onPrefsPatch={update} onNavigate={onNavigate}
+        sharedRoom={sharedRoom}
       />
     );
   }
@@ -629,7 +709,7 @@ export function FocusPage({ userId, pet, summary, onImmersiveChange, onNavigate 
             </button>
             </div>
             <div className="room-hero-pane room-shared-body" aria-hidden={roomMode !== 'shared'}>
-              {sharedMounted && <SharedRooms />}
+              {sharedMounted && <SharedRooms onEnter={enterSharedRoom} />}
             </div>
           </div>
         </div>

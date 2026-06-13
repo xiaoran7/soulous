@@ -261,7 +261,7 @@ function App() {
         {page === 'dashboard' && <Dashboard tasks={tasks} pet={pet} summary={summary} onRefresh={bootstrap} onPetSync={setPet} onOpenTasks={() => setPage('tasks')} onOpenReview={() => setPage('review')} onOpenPet={() => setPage('pet')} />}
         {page === 'tasks' && <TasksPage tasks={tasks} onRefresh={bootstrap} />}
         {page === 'timetable' && <TimetablePage onRefresh={bootstrap} importState={timetableImport} setImportState={setTimetableImport} />}
-        {page === 'chat' && <ChatPage />}
+        {page === 'chat' && <ChatPage onTasksCommitted={bootstrap} />}
         {page === 'review' && <DailyReviewPage summary={summary} review={dailyReview} onReviewChange={setDailyReview} />}
         {page === 'pet' && <PetPage pet={pet} onRefresh={bootstrap} onFed={setPet} />}
         {page === 'profile' && <ProfilePage user={user} />}

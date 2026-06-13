@@ -18,7 +18,9 @@
     "pdfjs-dist": "^6.0.227",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
+    "react-markdown": "^10.1.0",
     "recharts": "^2.15.3",
+    "remark-gfm": "^4.0.1",
     "typescript": "^5.8.3",
     "vite": "^6.3.5",
     "xlsx": "^0.18.5"

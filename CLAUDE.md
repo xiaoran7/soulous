@@ -47,12 +47,11 @@ cd backend && mvn test
 
 | 主题 | 文档 |
 |---|---|
-| agent-service 架构 / API / 骨架改造记录 | agent-service/README.md |
-| agent 集成决策与实施偏差 | docs/agent-service-integration-plan.md |
-| 交接总览 / 关键文件 / 约定 | docs/handoff-to-claude.md |
-| 架构 / 模块表 / 数据流 | docs/architecture.md |
+| agent-service 架构 / API / 骨架改造记录 / 集成偏差 | agent-service/README.md |
+| 架构 / 模块表 / 数据流 / 认证 | docs/architecture.md |
 | 代码导览（功能→包→页面→表） | docs/CODE_WALKTHROUGH.md |
 | API 参考 | docs/api.md |
-| 数据库 / Flyway | docs/database.md |
-| 生产部署 / VPS | DEPLOY.md、docs/deployment.md |
+| 数据库 / Flyway / checksum repair | docs/database.md |
+| AI 审核两级链与规则评分 | docs/ai-review-rules.md |
+| 生产部署 / VPS 实例 | DEPLOY.md |
 | 用户视角功能说明 | docs/user-guide.md |

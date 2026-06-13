@@ -65,7 +65,7 @@ nginx（端口 80/443）
 | `pet` | 宠物成长、经验、心情；心情+streak 加权 EXP；**宠物市场**（品种目录 `PetSpecies` + 用户拥有多只 `owned_pet`，每宠独立等级、免费领养首只/金币购买/切换出战）；满级 Lv30、动作按等级解锁；断签衰减定时任务 |
 | `wallet` | 金币系统：`user_account.coin_balance` + `coin_ledger` 流水；任务/专注/打卡赚币，购买宠物花币 |
 | `checkin` | 每日打卡：发金币+给出战宠物经验，连续 streak 放大奖励 |
-| `room` | 共享自习室（轻量在线状态，心跳轮询判在线，非 WebSocket）：建房/进房/退房/心跳 |
+| `room` | 共享自习室（轻量在线状态，心跳轮询判在线，非 WebSocket）：建房/进房/退房/心跳/房主删房；广场列表惰性回收全员 30 分钟无心跳的僵尸房。前端建房/加入即启动真实专注会话进沉浸态 |
 | `reminder` | 每日未打卡邮件提醒（`@Scheduled`，走通知→`EmailNotificationSink` 管道） |
 | `stats` | 今日指标、近 7 天趋势、课程占比 |
 | `review` | 管理员提交队列、人工复核 |
@@ -76,7 +76,7 @@ nginx（端口 80/443）
 | `rag` | 历史打卡 RAG（embedding + cosine + 时间衰减，默认关） |
 | `storage` | 本地 / S3 兼容双后端，上传压缩 + 夜间 GC |
 | `ai` | 可插拔 LlmService：mock / anthropic / openai-compatible；LRU+TTL 缓存；失败遥测（现为 agent 不可用时的降级路径） |
-| `agent` | **agent-service 边车对接**（2026-06-11）：`AgentClient`（HTTP/1.1 + SSE）把聊天/审核/复盘路由到 Python LangGraph 认知服务（仓库 `agent-service/`）；`/internal/**` 供 agent 回调（工具+moderation fast-path，service token 鉴权）；RAG 写入点异步推送 agent 向量库；`soulous.agent.enabled=false` 或 agent 故障时全部链路自动回退本地。详见 `agent-service/README.md` 与 `docs/agent-service-integration-plan.md` |
+| `agent` | **agent-service 边车对接**（2026-06-11）：`AgentClient`（HTTP/1.1 + SSE）把聊天/审核/复盘路由到 Python LangGraph 认知服务（仓库 `agent-service/`）；`/internal/**` 供 agent 回调（工具+moderation fast-path，service token 鉴权）；RAG 写入点异步推送 agent 向量库；`soulous.agent.enabled=false` 或 agent 故障时全部链路自动回退本地。详见 `agent-service/README.md` |
 
 ---
 

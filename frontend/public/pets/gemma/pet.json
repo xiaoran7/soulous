@@ -1,0 +1,7 @@
+{
+  "id": "gemma",
+  "displayName": "Gemma",
+  "description": "A sleepy lavender nun-cat digital pet with a pink forehead gem, navy veil, cross headband, gold charm, big ears, and a curled tail.",
+  "spritesheetPath": "spritesheet.webp",
+  "kind": "animal"
+}

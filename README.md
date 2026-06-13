@@ -186,16 +186,14 @@ location ~ ^/api/(notifications/stream|chat/conversations/[0-9]+/messages/stream
 
 ---
 
-## 🗺️ Future Roadmap
+## 🗺️ Roadmap
 
-To support advanced learning scenarios and maintain rigorous engineering quality, we are actively implementing the following milestones:
+### Shipped — AI Cognitive Sidecar
+A standalone Python/FastAPI + LangGraph service (`agent-service/`) now backs the chat decompose, credential review, and daily-review chains, with entity-grounded sqlite-vec RAG. Spring calls it via `com.soulous.agent.AgentClient` and auto-falls back to the local `LlmService` / rule path when it is disabled or unavailable. See [agent-service/README.md](agent-service/README.md).
 
-### 1. AI Agent Ecosystem
-- **Multi-Agent Collaboration**: Establishing specialized agents (e.g., a "Planning Coach Agent" and a "Reviewer Agent") to collaborate on task management and course validation.
-
-### 2. Evaluation & Testing Harness
-- **Harness Benchmark Suite**: Building a programmatic benchmarking harness to evaluate LLM output accuracy, response consistency, and latency across multiple LLM providers.
-- **Prompt Regression Testing**: Implementing automatic validation tasks inside our CI/CD pipeline to evaluate task decomposition feasibility and safety rules against new prompt designs.
+### Next
+- **Multi-Agent Collaboration**: specialized agents (e.g. a Planning Coach and a Reviewer) collaborating on task management and credential validation.
+- **Evaluation & Prompt-Regression Harness**: a programmatic benchmark suite scoring LLM output accuracy, consistency, and latency across providers, wired into CI to guard prompt changes.
 
 ---
 
@@ -206,5 +204,5 @@ To support advanced learning scenarios and maintain rigorous engineering quality
 - [Database Schema](docs/database.md)
 - [AI Review Guidelines](docs/ai-review-rules.md)
 - [User Manual](docs/user-guide.md)
-- [Deployment Checklist](docs/deployment.md) / [DEPLOY.md](DEPLOY.md)
-- [AI Agent & Evaluation Harness Architecture](docs/agent-and-harness-design.md)
+- [Deployment Manual](DEPLOY.md)
+- [Agent Service (AI cognitive sidecar)](agent-service/README.md)

@@ -17,8 +17,9 @@ import { Dashboard, resetCheckinCache } from '../pages/Dashboard';
 const noop = () => {};
 
 /**
- * 【Dashboard 每日签到卡片测试】未签到可领取，领取后调用接口、展示奖励，
- * 并用响应里的宠物快照局部刷新（onPetSync），不再整页重拉。
+ * 【Dashboard 每日签到测试】签到已并入问候卡（独立签到卡按 stitch 设计弃用）：
+ * 未签到可领取，领取后调用接口、展示奖励文案，并用响应里的宠物快照局部刷新（onPetSync），
+ * 不再整页重拉。
  */
 describe('Dashboard 每日签到', () => {
   beforeEach(() => {
@@ -38,8 +39,8 @@ describe('Dashboard 每日签到', () => {
         onRefresh={noop} onPetSync={onPetSync} onOpenTasks={noop} onOpenReview={noop} onOpenPet={noop} />
     );
 
-    // 签到卡渲染、显示连续天数
-    await waitFor(() => expect(screen.getByText('每日签到')).toBeInTheDocument());
+    // 问候卡内签到状态加载完成：奖励行显示连续天数
+    await waitFor(() => expect(screen.getByText('连续打卡 2 天')).toBeInTheDocument());
     const claimBtn = screen.getByRole('button', { name: '签到领取' });
 
     await userEvent.click(claimBtn);
@@ -58,8 +59,8 @@ describe('Dashboard 每日签到', () => {
       <Dashboard tasks={[]} pet={null} summary={null}
         onRefresh={noop} onPetSync={noop} onOpenTasks={noop} onOpenReview={noop} onOpenPet={noop} />
     );
-    await waitFor(() => expect(screen.getByText('今日已签到')).toBeInTheDocument());
-    expect(screen.getByRole('button', { name: '已签到 ✓' })).toBeDisabled();
+    await waitFor(() => expect(screen.getByRole('button', { name: '已签到 ✓' })).toBeDisabled());
+    expect(screen.getByText('连续打卡 5 天')).toBeInTheDocument();
     expect(api.checkin).not.toHaveBeenCalled();
   });
 });

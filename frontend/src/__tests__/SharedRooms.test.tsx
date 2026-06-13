@@ -8,8 +8,8 @@ vi.mock('../api', () => ({
     rooms: vi.fn(),
     createRoom: vi.fn(),
     joinRoom: vi.fn(),
-    roomHeartbeat: vi.fn(),
-    leaveRoom: vi.fn()
+    deleteRoom: vi.fn(),
+    leaveRoomBeacon: vi.fn()
   }
 }));
 
@@ -23,27 +23,61 @@ const ROOM_DETAIL = {
 };
 
 /**
- * 【SharedRooms 测试】验证 item 8：房间广场列表→加入→展示成员→开始专注上报心跳。
+ * 【SharedRooms 广场测试】列出房间→加入交给 onEnter 进沉浸态；
+ * 自己的房显示删除入口，删除后刷新列表；onEnter 失败时退房回滚。
  */
-describe('SharedRooms 共享自习室', () => {
+describe('SharedRooms 共享自习室广场', () => {
   beforeEach(() => {
-    vi.mocked(api.rooms).mockReset().mockResolvedValue([{ id: 1, name: '图书馆三楼', ownerName: 'A', onlineCount: 2 }] as never);
+    vi.mocked(api.rooms).mockReset().mockResolvedValue([
+      { id: 1, name: '图书馆三楼', ownerName: 'A', onlineCount: 2, mine: false },
+      { id: 2, name: '我的房', ownerName: '我', onlineCount: 1, mine: true }
+    ] as never);
     vi.mocked(api.joinRoom).mockReset().mockResolvedValue(ROOM_DETAIL as never);
-    vi.mocked(api.roomHeartbeat).mockReset().mockResolvedValue({ ...ROOM_DETAIL, members: [{ userId: 1, name: '我', focusing: true, focusSeconds: 0, self: true }] } as never);
+    vi.mocked(api.createRoom).mockReset().mockResolvedValue(ROOM_DETAIL as never);
+    vi.mocked(api.deleteRoom).mockReset().mockResolvedValue({} as never);
+    vi.mocked(api.leaveRoomBeacon).mockReset();
   });
 
-  it('列出房间→加入→显示成员与「开始专注」，点击后上报心跳', async () => {
-    render(<SharedRooms />);
+  it('列出房间→加入后把房间详情交给 onEnter（由上层进入沉浸态）', async () => {
+    const onEnter = vi.fn().mockResolvedValue(undefined);
+    render(<SharedRooms onEnter={onEnter} />);
     await waitFor(() => expect(screen.getByText('图书馆三楼')).toBeInTheDocument());
 
-    await userEvent.click(screen.getByRole('button', { name: /加入/ }));
+    await userEvent.click(screen.getAllByRole('button', { name: /加入/ })[0]);
     await waitFor(() => expect(api.joinRoom).toHaveBeenCalledWith(1));
+    await waitFor(() => expect(onEnter).toHaveBeenCalledWith(ROOM_DETAIL));
+  });
 
-    // 进房后展示「开始专注」与成员
-    const focusBtn = await screen.findByRole('button', { name: '开始专注' });
-    expect(screen.getByText(/我（我）/)).toBeInTheDocument();
+  it('建房成功同样走 onEnter', async () => {
+    const onEnter = vi.fn().mockResolvedValue(undefined);
+    render(<SharedRooms onEnter={onEnter} />);
+    await waitFor(() => expect(screen.getByText('图书馆三楼')).toBeInTheDocument());
 
-    await userEvent.click(focusBtn);
-    await waitFor(() => expect(api.roomHeartbeat).toHaveBeenCalledWith(1, true, 0));
+    await userEvent.click(screen.getByRole('button', { name: /建房并进入/ }));
+    await waitFor(() => expect(api.createRoom).toHaveBeenCalled());
+    await waitFor(() => expect(onEnter).toHaveBeenCalledWith(ROOM_DETAIL));
+  });
+
+  it('onEnter 失败时退房回滚并展示错误，停留在广场', async () => {
+    const onEnter = vi.fn().mockRejectedValue(new Error('启动专注失败'));
+    render(<SharedRooms onEnter={onEnter} />);
+    await waitFor(() => expect(screen.getByText('图书馆三楼')).toBeInTheDocument());
+
+    await userEvent.click(screen.getAllByRole('button', { name: /加入/ })[0]);
+    await waitFor(() => expect(api.leaveRoomBeacon).toHaveBeenCalledWith(1));
+    expect(await screen.findByText('启动专注失败')).toBeInTheDocument();
+  });
+
+  it('只有自己的房显示删除入口，确认后删除并刷新列表', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    render(<SharedRooms onEnter={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText('我的房')).toBeInTheDocument());
+
+    const delButtons = screen.getAllByRole('button', { name: /删除自习室/ });
+    expect(delButtons).toHaveLength(1); // 只有 mine 的房有删除入口
+
+    await userEvent.click(delButtons[0]);
+    await waitFor(() => expect(api.deleteRoom).toHaveBeenCalledWith(2));
+    expect(api.rooms).toHaveBeenCalledTimes(2); // 初始 + 删除后刷新
   });
 });

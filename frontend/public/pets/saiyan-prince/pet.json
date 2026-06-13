@@ -1,0 +1,7 @@
+{
+  "id": "saiyan-prince",
+  "displayName": "Saiyan Prince",
+  "description": "A chibi battle-prince pet whose states trigger distinct Saiyan-inspired transformations.",
+  "spritesheetPath": "spritesheet.webp",
+  "kind": "person"
+}

@@ -47,7 +47,7 @@ app/
 | 端点 | 说明 |
 |---|---|
 | `POST /agent/chat` | 拆解对话（非流式）→ `{reply, plan?, clarify?}` |
-| `POST /agent/chat/stream` | SSE：`token`* → `done`（含结构化 plan/clarify）/ `error` |
+| `POST /agent/chat/stream` | SSE：`token`* + `status`（工具调用 `{stage: tool/tool_done, name}`）→ `done`（含结构化 plan/clarify）/ `error`；记忆持久化（蒸馏/提炼）已后台化，不阻塞 `done` |
 | `POST /agent/review` | 任务凭证审核 → ReviewVerdict（失败 502，Java 走规则兜底） |
 | `POST /agent/daily-review` | 每日复盘 → DailyReviewResult |
 | `POST /agent/daily-review/stream` | SSE：叙述 token（REVIEW_JSON 信封已拦下）→ `done` |
